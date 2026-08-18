@@ -19,8 +19,12 @@
 
 - OpenViking 作为上下文与记忆引擎，产品平台采用模块化单体。
 - 新建产品前端与管理界面；现有 `/studio` 保留为运维控制台。
-- 浏览器登录使用服务端 Session，不使用或持久化 Root/User API Key；用户主动创建 API Key 时只展示一次明文，随后由用户保存到集成客户端。
+- 浏览器登录使用服务端登录 Session，不使用或持久化 Root/User API Key；用户主动创建 API Key 时只展示一次明文，随后由用户保存到集成客户端。
 - 权限层级包含 Platform Super Admin、Account Admin 和 User。
+- 邮箱是必填且全局唯一的登录标识，一个 User 只属于一个 Account。
+- Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建本 Account 的普通 User，不提供注册、邀请或激活流程。
+- 创建用户或由上级重置密码时，系统生成可复制的初始密码并只展示一次；该密码可长期使用，用户不被强制修改，由管理员在线下自行交接。
+- 管理员只能重置严格低级别用户的密码，不能重置同级；重置后撤销目标用户全部登录 Session，但不删除 OpenViking 对话 Session，也不自动撤销 API Key。
 - 管理员跨用户读取必须同时保留 Actor（操作者）与 Subject（数据归属者）。
 - 高风险操作使用展示影响范围的确认弹窗，不要求重输密码、输入 Account 名称或双人审批。
 - Account、用户及其数据使用 30 天软删除与恢复窗口，期满后异步物理清理。
@@ -35,12 +39,10 @@
 | 2026-08-18 | Design v0.1 初稿 | 基于 OpenViking v0.4.12 建立产品化、IAM 与 RBAC 总体设计。 |
 | 2026-08-18 | Design v0.1 补充 | 明确三级数据范围、Actor/Subject 审计、弹窗确认与 30 天软删除。 |
 | 2026-08-18 | Design v0.1 凭证修订 | 明确插件/MCP 为用户委托型集成，用户 API Key 统一继承 RBAC；Service Account 和旧门禁兼容均不进入 v0.1。 |
+| 2026-08-18 | Design v0.1 用户创建与密码修订 | 取消注册和邀请流程；明确管理员直建用户、长期初始密码手工交接、禁止同级重置及登录 Session 撤销。 |
 
 ## 待继续讨论
 
-- 邮箱登录标识及邮箱唯一性范围。
-- 是否在 v0.1 开放自定义角色，或仅提供三个内置角色。
-- Account 和首位 Account Admin 的创建入口。
 - 共享资源的普通用户写权限。
 - OIDC/企业登录进入哪个设计版本。
 - Studio 的生产访问边界。

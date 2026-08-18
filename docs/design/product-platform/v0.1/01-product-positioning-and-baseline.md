@@ -22,11 +22,13 @@
 | 术语 | 专业含义 | 大白话解释 |
 | --- | --- | --- |
 | 产品前端 | 面向最终用户的业务 SPA | 用户真正使用产品的页面 |
-| 管理后台 | 面向租户管理员的用户、角色、审计管理页面 | 管理员管人和管权限的页面 |
+| 管理后台 | 面向租户管理员的用户、内置角色权限和审计页面 | 管理员管人并查看固定权限规则的页面 |
 | Studio | OpenViking 自带的底层操作与运维控制台 | 开发、排障、观察 OpenViking 的工具页 |
 | Platform API | 面向产品前端的业务 API / BFF | 前端只找这个后端，不直接裸连 OpenViking |
 | IAM | Identity and Access Management | 管“谁能登录、账号是否可用” |
 | RBAC | Role-Based Access Control | 把一组权限装进角色，再把角色分给用户 |
+| 登录 Session / 认证会话 | 用户登录后由服务端保存的登录状态 | 让浏览器保持登录；撤销后需要重新输入邮箱和密码 |
+| OpenViking Session / 对话 Session | OpenViking 保存的对话与上下文业务数据 | 聊天和记忆内容，不是登录状态 |
 | Permission | 一个原子操作能力 | 例如“能读记忆”“能删用户” |
 | Account / Tenant | OpenViking 中的数据与管理隔离单元 | 一个组织、团队或工作空间 |
 | User | Account 下的自然人或业务使用者 | 谁在使用系统 |
@@ -44,7 +46,7 @@
 | 页面入口 | 使用者 | 主要职责 | 是否新建 |
 | --- | --- | --- | --- |
 | `/app/*` | 普通用户 | 记忆、资源、检索、会话、个人设置 | 是 |
-| `/admin/*` | Account 管理员 | 用户、角色、权限、凭据、审计 | 是 |
+| `/admin/*` | Account 管理员 | 用户管理、内置角色与权限查看、凭据、审计 | 是 |
 | `/platform/*` | Platform Super Admin | 全部 Account、用户、数据和平台审计 | 是 |
 | `/studio/*` | 运维、开发、受控管理员 | OpenViking 底层功能、监控、任务、调试 | 否，保留现状 |
 
@@ -54,9 +56,9 @@
 
 ### 3.1 第一阶段目标
 
-1. 支持账号密码登录、退出、查看当前用户和撤销会话。
-2. 支持 Account、User、Role、Permission 和 UserRole 管理。
-3. 支持普通用户访问自己的 OpenViking 记忆、Session 和 User 资源。
+1. 支持账号密码登录、退出、查看当前用户和撤销登录会话。
+2. 支持 Platform Super Admin 创建 Account 和首位 Account Admin，支持 Account Admin 直接创建本 Account 普通 User。
+3. 支持普通用户访问自己的 OpenViking 记忆、对话 Session 和 User 资源。
 4. 支持 Account 共享资源的权限控制。
 5. 支持 Account Admin 管理并查看当前 Account 的用户和数据，支持 Platform Super Admin 查看全平台 Account、用户和数据。
 6. 支持用户创建、查看元数据和撤销个人 API Key，并用于 SDK、CLI、插件和 MCP。
@@ -68,12 +70,14 @@
 
 - 不做跨地域多活。
 - 不立即拆分 IAM、Platform API 和 OpenViking 为独立微服务。
-- 不替换 OpenViking 的 VikingFS、VectorDB、Session 和 QueueFS。
+- 不替换 OpenViking 的 VikingFS、VectorDB、对话 Session 和 QueueFS。
 - 不让产品前端直接编辑任意 `viking://` URI。
 - 不把 Root API Key 变成普通用户登录凭据。
 - 不在第一阶段实现复杂组织树、部门继承和 ABAC 策略语言。
 - 不在 v0.1 引入 Service Account、Service Account Key 或 Account 级共享机器身份。
 - 不导入或继续接受旧 Account/User/API Key registry 中的凭证；v0.1 从新的 IAM 数据开始。
+- 不提供开放注册、邀请码、邀请链接、邀请邮件、邮箱激活或用户自助找回密码。
+- 不在 v0.1 提供 Platform Super Admin 的网页紧急恢复或 Break-glass 通道；作为后续迭代处理。
 - 不在第一阶段实现双人审批或强制重新输入密码的高风险操作确认流程。
 - 不强制改造现有 Studio 为账号密码登录；Studio SSO 放在后续阶段。
 
@@ -108,13 +112,13 @@
 3. `Role.register()` 提供了自定义字符串和 rank 的扩展点，但账户用户校验和绝大多数 Router 仍按固定角色判断。
 4. 当前权限主要是“角色硬编码 + URI ACL”，缺少可持久化的 Permission、RolePermission 和 UserRole。
 5. Studio 使用 API Key 连接 OpenViking，不是产品登录会话。
-6. 现有 Admin API 适合 OpenViking 控制面，不足以表达邀请、禁用、密码重置、自定义角色和审计。
+6. 现有 Admin API 适合 OpenViking 控制面，不足以表达产品登录、管理员直建用户、分级密码重置、禁用和审计。
 7. 当前 API Key 与 Account/User registry、Base Role 绑定，尚未与产品 PostgreSQL RBAC 统一，也没有独立 Service Account 主体。
 
 ### 4.3 必须保留的底层不变量与产品约束
 
 - `account_id` 是 OpenViking 物理路径和向量数据隔离边界。
-- `user_id` 是 User URI、Session、Memory 和 Peer 数据归属边界。
+- `user_id` 是 User URI、OpenViking 对话 Session、Memory 和 Peer 数据归属边界。
 - User 只能访问自己的 User namespace，且不能切换 Account。
 - Account Admin 跨用户读取、Platform Super Admin 跨 Account/用户读取只能经过 Platform API 的数据范围授权，不改变 OpenViking 低层 API 的默认 ACL。
 - 管理员读取目标用户数据时必须同时保留 Actor 与 Subject，不能把管理员身份无痕替换成目标用户。
@@ -132,6 +136,6 @@
 4. **浏览器不持有长期服务密钥**：产品前端只持有 Cookie 和 CSRF Token。
 5. **Actor 与 Subject 分离**：管理员可按角色范围读取目标用户数据，但权限判断、数据归属和审计身份必须分别保存。
 6. **先模块化单体，后按压力拆分**：先减少分布式事务和部署复杂度。
-7. **多入口、同一身份与权限**：Session、用户 API Key 和 OAuth 只改变认证方式，不产生第二套角色和门禁。
+7. **多入口、同一身份与权限**：登录 Session、用户 API Key 和 OAuth 只改变认证方式，不产生第二套角色和门禁。
 8. **初版不背兼容债**：不导入旧用户凭证或维持双身份存储；协议入口是否沿用由首版客户端需求决定。
 9. **删除默认可恢复**：Account、用户和业务数据先软删除并保留 30 天，物理清理异步执行。

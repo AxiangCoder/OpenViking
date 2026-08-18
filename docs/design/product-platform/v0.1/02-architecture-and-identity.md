@@ -19,7 +19,7 @@ Caddy / Nginx
   v
 OpenViking Product Server (one FastAPI process in Phase 1)
   |-- IAM Module
-  |-- Session Authentication
+  |-- Login Session Authentication
   |-- RBAC Authorization
   |-- Platform/BFF API
   |-- Provisioning Bridge
@@ -38,10 +38,10 @@ OpenViking Product Server (one FastAPI process in Phase 1)
 | AuthService | 登录、密码校验、会话签发与撤销 | 不决定业务资源权限 |
 | ApiCredentialService | 签发、校验和撤销用户 API Key | 不保存角色，不创建机器身份 |
 | AuthorizationService | 计算 Permission 并授权 | 不读取或修改 OpenViking 数据 |
-| IdentityRepository | IAM 数据持久化 | 不保存记忆、资源、Session 正文 |
+| IdentityRepository | IAM 数据持久化 | 不保存记忆、资源、OpenViking 对话 Session 正文 |
 | ProductFacadeService | 将业务操作映射到 OpenViking Service | 不绕过 Permission 检查 |
 | ProvisioningService | 同步 Account/User 到 OpenViking 控制面 | 不负责用户登录 |
-| OpenVikingService | 存储、检索、Session、语义处理 | 不保存密码和网页登录会话 |
+| OpenVikingService | 存储、检索、对话 Session、语义处理 | 不保存密码和网页登录会话 |
 
 ### 6.2 为什么第一阶段不拆微服务
 
@@ -80,7 +80,7 @@ class AuthenticatedUserPrincipal:
 - Platform Super Admin 可使用独立的平台登录主体，其 `actor_account_id` 可为空；上例表示 Account 用户调用路径。
 - Account Admin 和 User 的 `actor_account_id` 在登录后固定，产品不提供 Account 切换。
 - `authentication_method` 只说明“通过什么方式证明身份”，不影响角色和数据范围。
-- `session_id` 仅 Session 认证时存在；`credential_id` 用于 API Key/OAuth 凭证审计，任何位置都不保存明文密钥。
+- `session_id` 仅登录 Session 认证时存在；`credential_id` 用于 API Key/OAuth 凭证审计，任何位置都不保存明文密钥。
 - `role_codes` 用于页面展示和审计，不直接作为授权判断。
 - `permissions` 按当前用户状态和角色实时计算；API Key 不保存独立角色，也不能扩大此集合。
 - Account Admin/User 的 `ov_base_role` 只允许 `Role.ADMIN` 或 `Role.USER`；Platform Super Admin 为 `None`，由平台策略决定每次目标操作的最小 OpenViking 上下文。
@@ -135,7 +135,7 @@ def to_ov_context(
 
 | 来源 | 是否可信 | 处理方式 |
 | --- | --- | --- |
-| Session Cookie | 需服务端查库验证 | 验证 token hash、状态、到期时间和用户状态 |
+| 登录 Session Cookie | 需服务端查库验证 | 验证 token hash、状态、到期时间和用户状态 |
 | URL 中的 account/user | 不作为 Actor 身份 | 只作为 Subject，校验角色、Permission 和数据范围后才能使用 |
 | `X-OpenViking-*` Header | 产品公网入口不可信 | 网关删除；仅内部 trusted 链路允许 |
 | Root API Key | 高敏内部密钥 | Secret Manager/环境变量注入，不进入浏览器和日志 |

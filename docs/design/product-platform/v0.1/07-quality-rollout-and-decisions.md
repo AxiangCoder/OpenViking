@@ -7,11 +7,13 @@
 ### 18.1 单元测试
 
 - 密码哈希和验证。
-- Session 签发、hash、到期、撤销和轮换。
+- 登录 Session 签发、hash、到期、撤销和轮换。
+- 全局唯一邮箱、随机初始密码生成及 Argon2id hash。
+- 严格角色等级密码重置判断，`actor_role_rank <= target_role_rank` 一律拒绝。
 - CSRF 校验。
 - Permission 并集和角色禁用。
 - `AuthenticatedUserPrincipal + DataAccessContext -> RequestContext` 映射。
-- Session、用户 API Key、OAuth 到同一用户 Principal 的解析。
+- 登录 Session、用户 API Key、OAuth 到同一用户 Principal 的解析。
 - API Key hash 校验、一次性明文、到期和撤销。
 - Actor/Subject Scope 授权矩阵。
 - 产品 ID 到 OpenViking URI 的安全映射。
@@ -22,11 +24,16 @@
 - 未登录请求返回 401。
 - 无 Permission 返回 403。
 - Account Admin 只能管理和查看当前 Account。
-- User A 不能读取 User B 的 Memory/Session。
+- Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建普通 User，不存在邀请流程。
+- 相同规范化邮箱不能在不同 Account 重复创建。
+- Account Admin 创建用户时不能指定 `account_admin`，也不能提升或重置同级 Account Admin。
+- Platform Super Admin 不能通过产品 API 创建或重置另一个 Platform Super Admin。
+- 上级管理员重置低级别用户密码后，目标用户全部登录 Session 立即失败，但 OpenViking 对话 Session 和 API Key 不受影响。
+- User A 不能读取 User B 的 Memory/OpenViking 对话 Session。
 - Account Admin 能读取当前 Account 成员数据，但不能修改、导出或删除他人数据。
 - Account Admin 不能访问其他 Account；Platform Super Admin 可以按平台权限读取任意 Account/User 数据。
 - 管理员跨用户读取的审计事件同时包含正确 Actor 与 Subject。
-- 禁用用户后已有 Session 立即失败。
+- 禁用用户后已有登录 Session 立即失败。
 - 权限变更后无需重新登录即可生效。
 - CSRF 缺失或错误时写请求失败。
 - 重复 `Idempotency-Key` 不创建重复用户。
@@ -34,7 +41,7 @@
 
 ### 18.3 凭证与集成测试
 
-- 同一 User 使用 Session、用户 API Key 和 OAuth 调用同一动作时，Permission 结果一致。
+- 同一 User 使用登录 Session、用户 API Key 和 OAuth 调用同一动作时，Permission 结果一致。
 - 用户角色变更、禁用或进入删除期后，所有 API Key 在下一次请求立即受影响。
 - 一个具名 Key 被撤销不影响同一用户的其他 Key；被撤销或到期的 Key 返回统一 401。
 - Key 创建响应只返回一次明文，列表、日志、审计和错误响应均不出现明文或完整 hash。
@@ -54,16 +61,19 @@
 - 普通用户没有 Account 切换入口。
 - 高风险操作弹窗展示影响范围，不要求输入密码或 Account 名称。
 - Role 变更后导航和按钮即时更新。
-- Session 过期后回到登录页且不丢失安全状态。
+- 登录 Session 过期后回到登录页且不丢失安全状态。
 - 用户可创建、复制一次、查看元数据和撤销自己的具名 API Key，页面刷新后不能再次获取明文。
+- 管理员创建或重置低级别用户时可复制一次系统生成的密码；该密码可长期登录，首次登录不强制修改。
+- 产品中不存在注册、邀请、激活和自助找回密码页面。
 
 ### 18.5 安全测试
 
 - 修改 URL/请求体中的 Account/User ID 不能越权。
 - Header spoofing 无效。
 - Cookie Secure/HttpOnly/SameSite 生效。
-- CSRF、登录爆破、Session fixation、Token replay 测试。
+- CSRF、登录爆破、登录 Session fixation、Token replay 测试。
 - 日志中不出现密码、Cookie、API Key 明文、完整凭证 hash 和 Token。
+- 创建/重置密码响应不会进入访问日志、前端埋点、错误上报或审计 metadata。
 - 删除/禁用最后一个 Account Admin 被拒绝。
 - 篡改 Subject Account/User、伪造角色或绕过确认弹窗均不能绕过后端授权。
 
@@ -80,7 +90,7 @@
 
 - PostgreSQL schema、migration。
 - Account/User/Role/Permission repository。
-- 密码登录、Session、CSRF、`auth/me`。
+- 全局唯一邮箱、管理员直建用户、密码登录、登录 Session、CSRF、`auth/me`。
 - `iam_api_credentials`、用户 API Key 创建/列表/撤销和统一 Principal Resolver。
 - 默认角色和权限种子。
 - 审计基础。
@@ -89,20 +99,20 @@
 
 - Provisioning outbox/worker/reconciler。
 - `AuthenticatedUserPrincipal -> RequestContext`。
-- Memory、Resource、Session 产品 Facade API。
+- Memory、Resource、OpenViking 对话 Session 产品 Facade API。
 - 跨 Account/User 隔离测试。
 
 ### Phase 3：产品前端
 
 - 新建 `web-platform`。
-- 登录、产品首页、记忆、资源、Session。
+- 登录、产品首页、记忆、资源、OpenViking 对话 Session。
 - 个人设置中的 API Key 管理与一次性明文展示。
 - 基于 Permission 的路由与按钮控制。
 
 ### Phase 4：管理后台
 
-- 用户、角色、权限、审计页面。
-- 邀请、禁用、角色分配与 30 天软删除恢复。
+- 用户、三个内置角色、权限和审计页面。
+- 直接创建用户、分级密码重置、禁用和 30 天软删除恢复。
 - Provisioning 状态与重试。
 
 ### Phase 5：初始部署与生产加固
@@ -117,6 +127,7 @@
 - OIDC/企业微信等外部登录。
 - 用户 API Key 的限制性 Scope，且只允许缩小用户有效权限。
 - Service Account；仅在出现 Account 级共享、独立生命周期的机器集成需求后另行设计。
+- Platform Super Admin 的部署侧紧急恢复/Break-glass 机制。
 - Studio SSO。
 - 多实例 Redis 限流和缓存。
 
@@ -144,7 +155,7 @@
 
 - `openviking/storage/viking_fs.py` 的路径规则。
 - `openviking/core/namespace.py` 的 User/Peer 隔离规则。
-- Session、Memory、Resource 的核心存储格式。
+- OpenViking 对话 Session、Memory、Resource 的核心存储格式。
 - VikingFS、VectorDB 与 OpenViking 业务数据布局。
 
 ## 21. 验收标准
@@ -152,13 +163,13 @@
 满足以下条件才允许进入生产：
 
 1. 普通用户可通过产品登录进入 `/app`，浏览器登录不依赖 API Key；除创建成功页的一次性明文外，浏览器不持久化 API Key。
-2. Account Admin 可在 `/admin` 管理本 Account 用户和角色。
+2. Account Admin 可在 `/admin` 管理本 Account 普通 User，并查看三个内置角色及权限；不能创建、编辑、删除角色或提升 Account Admin。
 3. Platform Super Admin、Account Admin 和 User 的 Permission 与数据范围在后端真实生效。
 4. Account Admin 可读取当前 Account 用户数据，Platform Super Admin 可读取全平台数据；审计同时记录 Actor 与 Subject。
-5. Account/User 身份完全由服务端从 Session、用户 API Key 或 OAuth 凭证解析，不能由客户端身份字段指定。
+5. Account/User 身份完全由服务端从登录 Session、用户 API Key 或 OAuth 凭证解析，不能由客户端身份字段指定。
 6. 跨 Account、跨 User、Header spoofing 和 IDOR 测试全部通过。
 7. `/studio` 可访问；SDK、CLI、插件和 MCP 可使用新签发的用户 API Key 或用户 OAuth Token。
-8. Session、用户 API Key 和 OAuth 对同一用户使用同一套实时 RBAC；任何渠道都不能切换到其他 Account/User。
+8. 登录 Session、用户 API Key 和 OAuth 对同一用户使用同一套实时 RBAC；任何渠道都不能切换到其他 Account/User。
 9. 用户禁用、密码修改和角色变更能立即影响会话与权限。
 10. 所有管理和高风险操作产生脱敏审计记录。
 11. Account/User Provisioning 失败可见、可重试、不会产生重复对象。
@@ -167,6 +178,9 @@
 14. 普通用户和 Account Admin 均不能切换到其他 Account。
 15. 用户可为不同插件创建并分别撤销具名 API Key，完整明文只展示一次，禁用用户会立即阻断全部 Key。
 16. v0.1 不存在 Service Account、Service Account Key 或可由外部使用的机器 Principal。
+17. Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建普通 User，系统没有注册、邀请和激活流程。
+18. 初始/重置密码可复制、可长期使用且不强制修改；后端不保存明文，页面关闭后不能再次获取。
+19. 密码重置只允许严格上级操作下级；同级重置被拒绝，成功后只撤销目标登录 Session，不删除 OpenViking 对话数据或自动撤销 API Key。
 
 ## 22. 关键架构决策记录
 
@@ -176,7 +190,12 @@
 | 产品 API | 新建 `/api/platform/v1` | 避免污染上游 `/api/v1` 契约 |
 | 产品前端 | 新建 `web-platform` | 与 Studio 生命周期和认证模型解耦 |
 | Studio | 保留 `/studio` | 复用现有运维和底层能力页面 |
-| 浏览器认证 | 不透明服务端 Session | 可立即撤销，权限变更即时生效 |
+| 浏览器认证 | 不透明服务端登录 Session | 可立即撤销，权限变更即时生效 |
+| 用户开通 | 管理员直接创建 | v0.1 不提供注册、邀请、邮件和激活流程 |
+| 登录标识 | 全局唯一邮箱 | 登录时无需客户端指定 Account，一个用户固定属于一个 Account |
+| 初始密码 | 系统生成、一次展示、可复制并长期使用 | 管理员自行线下交接，用户不被强制首次修改；接受管理员可能长期知晓密码的审计限制 |
+| 密码重置 | 只允许严格上级重置下级 | 禁止同级控制；成功后撤销目标全部登录 Session |
+| 最高管理员恢复 | v0.1 不提供网页恢复 | 部署侧 Break-glass 留待后续版本 |
 | IAM 存储 | PostgreSQL | 事务、约束、查询、审计和迁移能力适合账号系统 |
 | Redis | 第一阶段不强制 | 减少初期部署单元，需要多实例时再引入 |
 | OpenViking 调用 | 同进程直接 Service 调用 | 避免内部 HTTP 和重复鉴权 |
@@ -194,12 +213,8 @@
 
 这些问题不阻塞架构设计，但在编码前必须定稿：
 
-1. 邮箱是否作为登录标识，以及采用全局唯一还是 Account 内唯一。
-2. 用户注册是开放注册、邀请码，还是只允许管理员创建。
-3. Account 共享资源是否允许普通 User 写入。
-4. v0.1 是否开放自定义角色，或只开放三个内置角色。
-5. 是否需要第一阶段即支持企业微信/OIDC。
-6. Account 和首位 Account Admin 的创建入口。
-7. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理 SSO。
+1. Account 共享资源是否允许普通 User 写入。
+2. 是否需要第一阶段即支持企业微信/OIDC。
+3. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理 SSO。
 
-在这些决策确认前，可以先实现与产品策略无关的底座：PostgreSQL schema、Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约测试。
+在这些决策确认前，可以先实现与产品策略无关的底座：PostgreSQL schema、登录 Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约测试。

@@ -28,11 +28,11 @@
 | `account_id` | UUID | 外键 `iam_accounts.id`；Platform Super Admin 可空，其他用户必须且只能属于一个 Account |
 | `ov_user_id` | VARCHAR(64) | 映射 OpenViking `user_id`；Platform Super Admin 可空 |
 | `username` | VARCHAR(128) | Account 内唯一 |
-| `email` | VARCHAR(320) | 可空，规范化后按策略唯一 |
+| `email` | VARCHAR(320) | 必填，规范化后全局唯一，作为登录标识 |
 | `display_name` | VARCHAR(128) | 可空 |
-| `password_hash` | TEXT | 可空，纯 OIDC 用户可无密码 |
+| `password_hash` | TEXT | v0.1 必填，Argon2id；不保存或恢复明文 |
 | `password_changed_at` | TIMESTAMPTZ | 可空 |
-| `status` | VARCHAR(24) | `invited/provisioning/active/disabled/failed/pending_deletion/deleted` |
+| `status` | VARCHAR(24) | `provisioning/active/disabled/failed/pending_deletion/deleted` |
 | `permission_version` | BIGINT | 权限缓存失效版本 |
 | `last_login_at` | TIMESTAMPTZ | 可空 |
 | `deleted_at/purge_after/deleted_by` | TIMESTAMPTZ/TIMESTAMPTZ/UUID | 30 天回收期与删除 Actor |
@@ -42,7 +42,7 @@
 
 - `(account_id, ov_user_id)` 唯一。
 - `(account_id, normalized_username)` 唯一。
-- 邮箱唯一性采用全局唯一还是 Account 内唯一仍待产品确认；冻结前不能据此生成数据库唯一索引。
+- `normalized_email` 建全局唯一索引；规范化只做 Unicode/大小写和首尾空白处理，不使用邮箱服务商特有的点号或 `+tag` 折叠规则。
 - Account Admin 和 User 创建后固定归属一个 Account，不建立多 Account membership，也不提供 Account 切换。
 - `account_id IS NULL` 只允许 `platform_super_admin`，并由数据库约束或 service invariant 强制。
 
@@ -92,6 +92,8 @@
 
 ### 10.5 `iam_roles`
 
+v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色，不开放自定义 Role CRUD。
+
 | 字段 | 说明 |
 | --- | --- |
 | `id` | UUID 主键 |
@@ -132,7 +134,11 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 - `assigned_at`
 - 复合主键 `(user_id, role_id)`
 
+v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联形式只是为了权限查询和未来扩展，不在首版开放多角色叠加。
+
 ### 10.8 `iam_sessions`
+
+本表只保存网页登录的登录 Session/认证会话，不保存 OpenViking 对话 Session。管理员重置密码时批量填写目标用户未撤销记录的 `revoked_at/revoked_reason`，业务对话数据不受影响。
 
 | 字段 | 说明 |
 | --- | --- |
@@ -174,7 +180,9 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 | `reason` | 拒绝/失败原因 |
 | `metadata` | JSONB，必须脱敏 |
 
-审计日志与应用日志分开。管理员访问他人数据时，`actor_user_id` 与 `subject_user_id` 必须同时存在；系统不能只记录 Subject。内部 Worker 使用 `actor_type=system` 和 `actor_system_component`，不能伪装成用户。审计日志不记录密码、Session Token、API Key 明文、完整凭证 hash 或敏感正文。
+审计日志与应用日志分开。管理员访问他人数据时，`actor_user_id` 与 `subject_user_id` 必须同时存在；系统不能只记录 Subject。内部 Worker 使用 `actor_type=system` 和 `actor_system_component`，不能伪装成用户。审计日志不记录密码、登录 Session Token、API Key 明文、完整凭证 hash 或敏感正文。
+
+由于 v0.1 允许管理员复制并长期知道新建/重置后的用户密码，密码交接完成前后的 Actor 只表示“使用了哪个用户凭证”，不能提供自然人不可抵赖证明；这是已接受的产品限制。审计必须记录创建者/重置者、目标用户和时间，但绝不记录生成的密码。
 
 ### 10.10 `iam_outbox`
 
@@ -194,7 +202,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 
 ### 10.11 `iam_deletion_jobs`
 
-统一跟踪 Account、User、Memory、Session 和 Resource 的软删除、恢复和期满清理：
+统一跟踪 Account、User、Memory、OpenViking 对话 Session 和 Resource 的软删除、恢复和期满清理：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -211,7 +219,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 
 规则：
 
-- 软删除后对象从正常查询隐藏；Account/User 同时禁止登录并撤销相关 Session。
+- 软删除后对象从正常查询隐藏；Account/User 同时禁止登录并撤销相关登录 Session。
 - 回收期内按数据范围授权恢复；恢复动作必须写审计。
 - 到达 `purge_after` 后由后台 Worker 幂等清理 OpenViking 数据，再将状态置为 `purged`。
 - 审计事件不随业务数据物理清理。

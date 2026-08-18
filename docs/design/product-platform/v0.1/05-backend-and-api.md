@@ -114,7 +114,7 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 
 ### 11.3 Provisioning 与单一身份事实来源
 
-v0.1 没有旧门禁兼容要求，PostgreSQL 从第一天起就是 Account、User、Role、Permission、Session 和用户 API Key 的唯一身份事实来源。OpenViking accounts/users JSON 不作为产品鉴权来源，也不进行凭证双写。
+v0.1 没有旧门禁兼容要求，PostgreSQL 从第一天起就是 Account、User、Role、Permission、登录 Session 和用户 API Key 的唯一身份事实来源。OpenViking accounts/users JSON 不作为产品鉴权来源，也不进行凭证双写。
 
 创建流程：
 
@@ -172,7 +172,7 @@ v0.1 不定义 Service Account 的 repository、resolver 或 credential type。�
 ### 12.2 通用约定
 
 - 复用 OpenViking `{status, result, error}` 响应 envelope。
-- 写操作支持 `Idempotency-Key`，至少覆盖邀请、创建用户、创建 Account 和批量导入。
+- 写操作支持 `Idempotency-Key`，至少覆盖创建用户、创建 Account 和批量导入。
 - 分页统一使用 cursor，列表返回 `items` 和 `next_cursor`。
 - 时间统一 RFC 3339 UTC。
 - 资源使用内部 UUID/ULID；OpenViking URI 不作为产品页面主 ID。
@@ -191,6 +191,7 @@ LAST_ACCOUNT_ADMIN_REQUIRED
 PROVISIONING_PENDING
 PROVISIONING_FAILED
 PERMISSION_NOT_GRANTED
+PASSWORD_RESET_SAME_OR_HIGHER_ROLE_FORBIDDEN
 DELETION_PENDING
 RESTORE_WINDOW_EXPIRED
 ```
@@ -199,20 +200,17 @@ RESTORE_WINDOW_EXPIRED
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| POST | `/api/platform/v1/auth/login` | 无 | 登录并签发 Session Cookie |
-| POST | `/api/platform/v1/auth/logout` | Session | 撤销当前会话并清 Cookie |
-| POST | `/api/platform/v1/auth/logout-all` | Session | 撤销当前用户全部会话 |
-| GET | `/api/platform/v1/auth/me` | Session | 返回当前用户、角色、权限摘要 |
-| POST | `/api/platform/v1/auth/password/change` | Session | 修改密码并轮换会话 |
-| POST | `/api/platform/v1/auth/password/reset/request` | 无 | 申请重置，不泄露账号是否存在 |
-| POST | `/api/platform/v1/auth/password/reset/confirm` | Reset token | 完成重置 |
+| POST | `/api/platform/v1/auth/login` | 无 | 登录并签发登录 Session Cookie |
+| POST | `/api/platform/v1/auth/logout` | 登录 Session | 撤销当前登录会话并清 Cookie |
+| POST | `/api/platform/v1/auth/logout-all` | 登录 Session | 撤销当前用户全部登录会话 |
+| GET | `/api/platform/v1/auth/me` | 登录 Session | 返回当前用户、角色、权限摘要 |
+| POST | `/api/platform/v1/auth/password/change` | 登录 Session | 修改密码并轮换当前登录会话 |
 
-登录标识与邮箱唯一性仍待产品确认，以下请求体是 Account 范围登录方案的暂定形式；Platform Super Admin 不携带 Account。冻结认证设计后再固定 OpenAPI 契约：
+邮箱是全局唯一登录标识，登录请求不提交 Account；服务端根据规范化邮箱解析固定的 User/Account：
 
 ```json
 {
-  "account": "acme",
-  "login": "alice@example.com",
+  "email": "alice@example.com",
   "password": "***"
 }
 ```
@@ -241,9 +239,9 @@ RESTORE_WINDOW_EXPIRED
 
 | 方法 | 路径 | 鉴权 | Permission | 说明 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/platform/v1/me/api-keys` | Session | `credential.read.self` | 只返回 Key 元数据和掩码 |
-| POST | `/api/platform/v1/me/api-keys` | Session + CSRF | `credential.create.self` | 创建具名 Key，完整明文只返回一次 |
-| DELETE | `/api/platform/v1/me/api-keys/{id}` | Session + CSRF | `credential.revoke.self` | 撤销自己的 Key，幂等 |
+| GET | `/api/platform/v1/me/api-keys` | 登录 Session | `credential.read.self` | 只返回 Key 元数据和掩码 |
+| POST | `/api/platform/v1/me/api-keys` | 登录 Session + CSRF | `credential.create.self` | 创建具名 Key，完整明文只返回一次 |
+| DELETE | `/api/platform/v1/me/api-keys/{id}` | 登录 Session + CSRF | `credential.revoke.self` | 撤销自己的 Key，幂等 |
 
 创建请求：
 
@@ -273,7 +271,7 @@ RESTORE_WINDOW_EXPIRED
 
 - `/api/v1/*` 和 `/mcp` 接受用户 API Key 或用户 OAuth Token。
 - API Key/OAuth 解析出的 Account/User 是 Actor，客户端不得通过 Header 或请求体切换身份。
-- 每个低层 API/MCP Tool 必须映射到 Permission Code；同一用户通过 Session、API Key、OAuth 调用相同业务动作时授权结果一致。
+- 每个低层 API/MCP Tool 必须映射到 Permission Code；同一用户通过登录 Session、API Key、OAuth 调用相同业务动作时授权结果一致。
 - Codex、OpenClaw、OpenCode 等插件使用谁的 Key，就以谁的身份读写和审计。
 - v0.1 不接受 `principal_type=service_account`，也不签发 Service Account Key。
 
@@ -304,14 +302,13 @@ RESTORE_WINDOW_EXPIRED
 | 方法 | 路径 | Permission |
 | --- | --- | --- |
 | GET | `/api/platform/v1/admin/users` | `user.read` |
-| POST | `/api/platform/v1/admin/users` | `user.create` |
+| POST | `/api/platform/v1/admin/users` | `user.create`；只创建 `user` 角色 |
 | PATCH | `/api/platform/v1/admin/users/{id}` | `user.update` |
 | POST | `/api/platform/v1/admin/users/{id}/disable` | `user.disable` |
+| POST | `/api/platform/v1/admin/users/{id}/password/reset` | `user.password.reset.account`；目标必须是普通 User |
 | DELETE | `/api/platform/v1/admin/users/{id}` | `user.delete` |
 | GET | `/api/platform/v1/admin/users/{id}/deletion-preview` | `user.delete` |
-| GET/POST | `/api/platform/v1/admin/roles` | `role.read/role.create` |
-| PATCH/DELETE | `/api/platform/v1/admin/roles/{id}` | `role.update/role.delete` |
-| PUT | `/api/platform/v1/admin/users/{id}/roles` | `role.assign` |
+| GET | `/api/platform/v1/admin/roles` | `role.read`；只读三个内置角色 |
 | GET | `/api/platform/v1/admin/audit-events` | `audit.read` |
 | GET | `/api/platform/v1/admin/users/{id}/memories` | `memory.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/sessions` | `session.read.account` |
@@ -320,7 +317,9 @@ RESTORE_WINDOW_EXPIRED
 | GET | `/api/platform/v1/admin/recycle-bin` | Account 范围恢复权限 |
 | POST | `/api/platform/v1/admin/recycle-bin/{id}/restore` | Account 范围恢复权限 |
 
-Account Admin API 的 Account 固定来自当前 Session；路径中的用户只作为 Subject，且必须属于该 Account。读取其他用户数据不授予修改、导出或删除能力。管理员只能查看 API Key 的名称、掩码、状态和使用时间并执行撤销，不能获取明文，也不能代用户创建 Key。
+Account Admin API 的 Account 固定来自当前登录 Session；路径中的用户只作为 Subject，且必须属于该 Account。读取其他用户数据不授予修改、导出或删除能力。管理员只能查看 API Key 的名称、掩码、状态和使用时间并执行撤销，不能获取明文，也不能代用户创建 Key。
+
+`POST /admin/users` 由服务端生成长期有效的初始密码，响应中只返回一次 `initial_password`，前端提供复制按钮，不发送邀请。`POST /password/reset` 采用相同返回方式，且成功事务必须同时撤销目标用户全部登录 Session。两个接口都不能在后续查询中重新返回密码。
 
 Platform Super Admin 使用独立的平台级接口：
 
@@ -330,6 +329,8 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users` | `user.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/memories` | `memory.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` |
+| POST | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/password/reset` | `user.password.reset.platform`；禁止目标为 Platform Super Admin |
+| PUT | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/role` | `role.assign.platform`；仅 `user -> account_admin` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys` | `credential.read.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys/{credential_id}` | `credential.revoke.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
@@ -339,5 +340,7 @@ Platform Super Admin 使用独立的平台级接口：
 | POST | `/api/platform/v1/platform/recycle-bin/{id}/restore` | 平台范围恢复权限 |
 
 Platform Super Admin 选择目标 Account 是管理浏览行为，不是把登录用户切换成该 Account 成员。每个管理请求都保留原 Actor，并将目标 Account/User 记录为 Subject。
+
+创建 Account 的请求必须同时包含首位 Account Admin 的邮箱和展示信息；成功响应一次性返回该 Account Admin 的初始密码。产品页面不提供创建或重置另一个 Platform Super Admin 的接口。密码重置授权必须比较内置角色等级并满足 `actor_role_rank > target_role_rank`，不能只判断是否拥有通用管理 Permission。
 
 `deletion-preview` 返回目标名称、影响对象分类及数量、是否可恢复和 `purge_after`。DELETE 成功只进入回收期，并返回 deletion job ID 与恢复截止时间；弹窗不产生可绕过后端授权的“已确认”凭据。

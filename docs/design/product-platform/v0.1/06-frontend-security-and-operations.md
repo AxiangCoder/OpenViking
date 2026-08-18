@@ -54,7 +54,6 @@ web-platform/
 
 ```text
 /login
-/forgot-password
 
 /app
 /app/memories
@@ -99,7 +98,7 @@ web-platform/
 
 - Root API Key。
 - User API Key。
-- Session Token。
+- 登录 Session Token。
 - 密码。
 - 权限快照作为安全依据。
 
@@ -112,6 +111,19 @@ web-platform/
 - Studio 继续使用 API Key 连接模型，但用户凭证必须由新 IAM 签发；Root API Key 只允许受控运维人员在隔离环境使用。
 - Root 管理密钥不预置进公开静态资源。
 - 后续可用反向代理 SSO 给 `/studio` 再加一层访问保护。
+
+### 13.6 管理员直接创建用户与密码交接
+
+- Platform Super Admin 创建 Account 时填写首位 Account Admin 的邮箱和展示信息；成功页展示系统生成的初始密码。
+- Account Admin 在 `/admin/users` 直接创建本 Account 的普通 User，不提供邀请按钮、邀请状态、邀请邮件或激活页面。
+- 创建和重置成功弹窗显示用户、角色、所属 Account 和初始/新密码，并提供复制按钮；密码只在该次响应和当前弹窗中存在，关闭后不能重新查看。
+- 密码可长期使用，用户首次登录不强制修改；创建者负责通过系统之外的方式交给目标用户。
+- Account Admin 创建的账号固定为 `user`，不能在创建时选择 `account_admin`；Account Admin 的创建或提升只能由 Platform Super Admin 完成。
+- 密码重置按钮只对严格低级别目标显示，后端仍按 `actor_role_rank > target_role_rank` 强制校验；隐藏按钮不是安全边界。
+- 重置确认弹窗明确提示“将使该用户所有网页登录设备退出；不会删除 OpenViking 对话和记忆，也不会撤销 API Key”。
+- v0.1 不提供 Platform Super Admin 同级重置或网页紧急恢复入口。
+
+由于创建者可以复制并长期保留密码，系统无法从密码登录事件中绝对区分目标用户本人和持有该密码的创建者。管理页面必须明确提示这一限制；审计仍记录凭证对应 User，但不能宣称具备自然人不可抵赖性。
 
 ## 14. 数据隔离与安全
 
@@ -168,13 +180,13 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 确认弹窗必须展示操作对象、目标 Account/User、预计影响数量、是否可恢复和恢复截止时间。用户只需点击“确认”或“取消”，v0.1 不要求重新输入密码、输入 Account 名称或第二人审批。
 
-前端弹窗只用于防误触，不是安全边界。提交后后端仍需重新校验 Session、CSRF、Permission、Actor/Subject Scope 和目标当前状态；成功、失败与拒绝都写入审计。重复提交必须通过幂等键或资源状态检查避免重复执行。
+前端弹窗只用于防误触，不是安全边界。提交后后端仍需重新校验登录 Session、CSRF、Permission、Actor/Subject Scope 和目标当前状态；成功、失败与拒绝都写入审计。重复提交必须通过幂等键或资源状态检查避免重复执行。
 
 ### 14.6 软删除与回收站
 
-- Account、User、Memory、Session 和 Resource 默认先软删除。
+- Account、User、Memory、OpenViking 对话 Session 和 Resource 默认先软删除。
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
-- Account/User 进入回收期时立即禁止登录、撤销 Session，并停止新的业务写入。
+- Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
 - User 可恢复自己误删且仍在回收期内的数据；Account Admin 可恢复当前 Account 范围对象；Platform Super Admin 可恢复全平台范围对象。
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
 - 审计事件独立保留，不随业务对象物理清理。
@@ -185,7 +197,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 - v0.1 是产品系统第一次正式建立 IAM，不存在需要保留的旧产品用户门禁。
 - 不导入当前 OpenViking accounts/users/API Key registry，也不设置新旧鉴权并行期。
-- PostgreSQL 是 Account、User、Role、Permission、Session 和用户 API Key 的唯一身份事实来源。
+- PostgreSQL 是 Account、User、Role、Permission、登录 Session 和用户 API Key 的唯一身份事实来源。
 - `/api/v1/*`、`/mcp`、Bearer 和 `X-Api-Key` 可以作为 v0.1 的正式集成协议继续使用，但这属于首版接口选择，不代表接受旧凭证或旧权限结果。
 
 ### 15.2 首次初始化顺序
@@ -194,10 +206,10 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 2. 通过一次性部署命令创建首位 Platform Super Admin；不使用 Root API Key 代替人类管理员。
 3. 由 Platform Super Admin 创建 Account 和首位 Account Admin。
 4. Provisioning Worker 使用内部 `SystemPrincipal` 初始化对应 OpenViking namespace。
-5. Account Admin 创建或邀请用户并分配角色。
+5. Account Admin 直接创建普通 User，复制系统生成的长期初始密码并自行交接；不发送邀请。
 6. 用户登录 `/app/profile/api-keys`，按自己的插件或设备创建具名 API Key。
 7. 将一次性显示的 Key 配置到 Codex、OpenClaw、OpenCode、SDK、CLI 或 MCP 客户端。
-8. 验证 Session、API Key 和 OAuth 对同一用户产生一致的 Permission 和数据范围。
+8. 验证登录 Session、API Key 和 OAuth 对同一用户产生一致的 Permission 和数据范围。
 
 Root API Key 只保留为受控部署与底层运维能力，不写入产品用户、角色或凭证表，也不能作为插件的常规凭证。
 
@@ -275,7 +287,7 @@ postgresql（生产可使用托管 RDS）
 
 第一阶段不强制 Redis：
 
-- Session 存 PostgreSQL。
+- 登录 Session 存 PostgreSQL。
 - 权限缓存先使用进程内短 TTL，并以 `permission_version` 校验。
 - 登录限流先使用 PostgreSQL 或单实例内存实现，但多实例前必须迁移到共享限流后端。
 
@@ -287,9 +299,9 @@ postgresql（生产可使用托管 RDS）
 
 - 登录成功、登录失败、登出、会话撤销。
 - 用户 API Key 创建、撤销、到期拒绝和认证失败；成功业务请求在对应审计事件中记录认证方式与凭证 ID，不额外为每次调用生成重复 Key 事件。
-- 用户邀请、启用、禁用、删除。
+- 用户创建、启用、禁用、删除。
 - 密码重置、用户 API Key 撤销和 Root 凭据轮换。
-- Role 创建、修改、删除和分配。
+- 内置角色分配、用户角色提升和权限种子变更。
 - 高风险数据删除、批量导出和管理员跨范围数据访问。
 - Account Admin/Platform Super Admin 跨用户读取；记录 Actor 与 Subject，不记录数据正文。
 - Provisioning 成功、失败和人工重试。
@@ -315,5 +327,5 @@ postgresql（生产可使用托管 RDS）
 - PostgreSQL 连通性。
 - IAM migration 版本。
 - Provisioning backlog 和失败数量。
-- Session cleanup worker 状态。
+- 登录 Session cleanup worker 状态。
 - 软删除待清理数量、最早 `purge_after` 和 Purge Worker 状态。

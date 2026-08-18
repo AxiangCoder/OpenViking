@@ -4,9 +4,9 @@
 
 ## 8. 认证设计
 
-### 8.1 浏览器认证决策
+### 8.1 浏览器登录认证决策
 
-第一阶段使用“不透明服务端会话”，不使用浏览器长期 JWT：
+第一阶段使用“不透明服务端登录 Session”，不使用浏览器长期 JWT。本文的“登录 Session”只表示网页登录状态，不是 OpenViking 保存对话内容的业务 Session：
 
 - Cookie 名：`__Host-ov_session`
 - 属性：`HttpOnly; Secure; SameSite=Lax; Path=/`
@@ -14,10 +14,10 @@
 - 数据库仅保存 `SHA-256(token)`，不保存明文 token。
 - 默认空闲有效期：24 小时，可配置。
 - 默认绝对有效期：30 天，可配置。
-- 登录、提权、密码修改后轮换 Session。
-- 登出、禁用用户、修改密码后撤销相关 Session。
+- 登录、提权、用户主动修改密码后轮换当前登录 Session。
+- 登出、禁用用户后撤销相关登录 Session；管理员重置密码后撤销目标用户全部登录 Session。
 
-选择不透明 Session 的理由：
+选择不透明登录 Session 的理由：
 
 - 可立即撤销。
 - 不把角色和权限快照固化进长期 Token。
@@ -31,16 +31,41 @@
 1. Cookie `SameSite=Lax`。
 2. 校验 `Origin` 或 `Referer` 属于允许的产品源。
 3. 非 `GET/HEAD/OPTIONS` 请求要求 `X-CSRF-Token`。
-4. CSRF Token 与 Session 绑定，前端只能读取 CSRF Token，不能读取 Session Cookie。
+4. CSRF Token 与登录 Session 绑定，前端只能读取 CSRF Token，不能读取登录 Session Cookie。
 
-### 8.3 密码认证
+### 8.3 用户创建、密码交接与重置
 
-- 密码使用 Argon2id 哈希。
-- 数据库保存 hash、算法版本和最近修改时间，不保存明文或可逆密文。
-- 登录错误使用统一响应，避免枚举账号。
-- 按 IP、Account 和登录标识限流。
-- 连续失败进入递增冷却，不直接永久锁死账号。
-- 密码重置使用一次性、短期、哈希存储的 reset token。
+基础规则：
+
+- 邮箱是必填且全局唯一的登录标识；登录页面只提交邮箱和密码，由服务端解析所属 Account。
+- 密码使用 Argon2id 哈希；数据库保存 hash、算法版本和最近修改时间，不保存明文或可逆密文。
+- 登录错误使用统一响应，避免枚举账号；按 IP 和登录标识限流，连续失败进入递增冷却。
+- v0.1 不提供开放注册、邀请码、邀请链接、邀请邮件、邮箱激活或自助找回密码。
+
+管理员直接创建流程：
+
+1. Platform Super Admin 创建 Account 时同时创建首位 Account Admin。
+2. Account Admin 只能在自己的 Account 内直接创建普通 User；创建结果默认角色为 `user`。
+3. Account Admin 不能创建、提升或重置另一个 Account Admin；Account Admin 的创建、提升和密码重置只能由 Platform Super Admin 执行。
+4. 系统生成随机初始登录密码，创建成功页只展示一次并提供复制按钮；服务端只保存 Argon2id hash。
+5. 创建者通过系统之外的方式自行把密码交给目标用户，系统不负责邀请或发送密码。
+6. 初始密码没有单独到期时间，可以长期使用；首次登录不强制修改。用户登录后可以自愿修改自己的密码。
+
+管理员密码重置采用严格的角色层级：
+
+```text
+允许：actor_role_rank > target_role_rank
+拒绝：actor_role_rank <= target_role_rank
+```
+
+- Platform Super Admin 可以重置 Account Admin 和 User，不能重置另一个 Platform Super Admin。
+- Account Admin 只能重置本 Account 的普通 User，不能重置另一个 Account Admin。
+- User 只能主动修改自己的密码，不能重置他人密码。
+- 重置时系统生成新的可复制密码并只展示一次；旧密码立即失效，新密码同样可长期使用且不强制修改。
+- 重置成功后撤销目标用户全部登录 Session，迫使已登录浏览器重新认证；不删除 OpenViking 对话 Session、Memory 或 Resource，也不自动撤销用户 API Key。
+- Platform Super Admin 丢失密码后的网页紧急恢复或 Break-glass 机制不属于 v0.1，后续版本再设计。
+
+已接受的 v0.1 风险：创建者可能保存并长期知道目标用户的初始密码，因此审计中的 Actor 能证明“使用了哪个用户凭证”，不能绝对证明键盘前一定是该自然人。若用户主动修改密码，这一风险从修改成功后消除。
 
 ### 8.4 OIDC/企业登录
 
@@ -49,7 +74,7 @@
 - `password`、`oidc`、`wechat_work` 等 Provider 写入 `iam_identities`。
 - 外部 Provider 返回的 subject 映射到内部 `(account_id, user_id)`。
 - 外部登录不能直接指定 OpenViking Account/User。
-- 首次登录创建用户时走受控邀请或自动 Provisioning 策略。
+- v0.1 的用户必须先由管理员创建；外部登录是否允许自动 Provisioning 留到对应后续版本单独决定。
 
 当前 `openviking/server/oauth` 是 MCP 客户端授权服务，不应直接当成产品用户登录系统复用。
 
@@ -76,7 +101,7 @@
 - 客户端使用用户 API Key 时，属于“用户委托型集成”：服务端 Actor 始终是 Key 所属用户。
 - 交互式 MCP 客户端使用 OAuth 2.1 时，Access Token 代表完成授权的用户，权限同样实时受该用户 RBAC 限制。
 - OAuth Client ID 只标识客户端软件，不等于 Service Account，也不拥有业务数据权限。
-- 相同用户通过 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
+- 相同用户通过登录 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
 - 系统内部 Worker 使用内部 `SystemPrincipal`，不借用用户 API Key，也不对外暴露系统凭证。
 
 ### 8.7 Service Account 决策
@@ -105,13 +130,14 @@ account.read.platform
 account.manage.platform
 
 user.read
-user.invite
 user.create
 user.update
 user.disable
 user.delete
 user.read.account
 user.read.platform
+user.password.reset.account
+user.password.reset.platform
 
 credential.read.self
 credential.create.self
@@ -122,10 +148,7 @@ credential.read.platform
 credential.revoke.platform
 
 role.read
-role.create
-role.update
-role.delete
-role.assign
+role.assign.platform
 
 memory.read.self
 memory.write.self
@@ -168,11 +191,11 @@ system.task.read
 | --- | --- | --- | --- |
 | `platform_super_admin` | 不直接映射为 `root` | 全平台 | 管理并查看所有 Account、用户和数据 |
 | `account_admin` | `admin` | 当前 Account | 管理当前 Account 用户，并查看当前 Account 全部用户数据 |
-| `user` | `user` | 仅自己 | 使用和管理自己的记忆、Session 与允许的共享资源，不能切换 Account |
+| `user` | `user` | 仅自己 | 使用和管理自己的记忆、OpenViking 对话 Session 与允许的共享资源，不能切换 Account |
 
 `platform_super_admin` 是可登录的人类平台角色；`root` 是 OpenViking 机器控制身份。两者权限范围可以相近，但凭据、请求上下文和审计身份不能混用。产品登录不会签发 Root API Key，也不会生成 `Role.ROOT`。
 
-是否在 v0.1 开放 Account 自定义角色仍待产品确认；无论是否开放，以上三个内置角色及其数据范围不可删除或改 code。
+v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑或删除。普通 User 由 Account Admin 创建；Account Admin 只能由 Platform Super Admin 创建或提升；Platform Super Admin 不通过产品页面创建同级账号。
 
 ### 9.3 默认角色权限矩阵
 
@@ -181,8 +204,12 @@ system.task.read
 | 查看 Account | 全部 | 当前 Account |  |
 | 创建、停用、恢复 Account | ✓ |  |  |
 | 管理用户 | 全部 Account | 当前 Account |  |
-| 查看自己的记忆与 Session | ✓ | ✓ | ✓ |
-| 查看其他用户的记忆与 Session | 全部 Account | 当前 Account |  |
+| 创建普通 User | 可代管 | 当前 Account |  |
+| 创建、提升 Account Admin | ✓ |  |  |
+| 重置严格低级别用户密码 | Account Admin、User | 当前 Account 的 User |  |
+| 重置同级密码 | 禁止 | 禁止 | 禁止 |
+| 查看自己的记忆与对话 Session | ✓ | ✓ | ✓ |
+| 查看其他用户的记忆与对话 Session | 全部 Account | 当前 Account |  |
 | 修改其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 导出、删除其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 共享资源读取 | ✓ | ✓ | ✓ |
@@ -207,9 +234,9 @@ effective_permissions
 规则：
 
 - Account Admin/User 与 Role 必须属于同一 Account；Platform Super Admin 使用平台级 System Role。
-- System Role 不允许删除或改 code，可调整显示名和描述。
-- 若后续开放自定义 Role，必须指定 `ov_base_role=user|admin`，且不能获得平台级 Scope。
+- 三个内置 Role 由代码和 migration 固定，不允许通过 v0.1 产品 UI/API 创建、删除或修改。
+- v0.1 每个用户只绑定一个内置角色；自定义 Role 和多角色叠加属于后续版本。
 - `ov_base_role=admin` 只影响 OpenViking 控制面能力映射，不自动授予任何 Platform Permission。
-- Session、用户 API Key 和 OAuth 使用同一份有效权限；API Key 不参与 Permission 并集计算。
+- 登录 Session、用户 API Key 和 OAuth 使用同一份有效权限；API Key 不参与 Permission 并集计算。
 - 用户禁用后，有效权限为空且所有登录会话失效。
 - 权限结果可按 `(account_id, user_id, permission_version)` 短期缓存；角色变更递增 `permission_version`。
