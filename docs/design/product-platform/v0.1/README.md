@@ -12,19 +12,21 @@
 3. [认证与授权](03-authentication-and-authorization.md)
 4. [PostgreSQL 数据模型](04-data-model.md)
 5. [后端模块与 API](05-backend-and-api.md)
-6. [前端、安全、迁移与运维](06-frontend-security-and-operations.md)
+6. [前端、安全、初始部署与运维](06-frontend-security-and-operations.md)
 7. [测试、实施边界与架构决策](07-quality-rollout-and-decisions.md)
 
 ## 已确认设计决策
 
 - OpenViking 作为上下文与记忆引擎，产品平台采用模块化单体。
 - 新建产品前端与管理界面；现有 `/studio` 保留为运维控制台。
-- 浏览器使用服务端 Session，不保存 OpenViking Root/User API Key。
+- 浏览器登录使用服务端 Session，不使用或持久化 Root/User API Key；用户主动创建 API Key 时只展示一次明文，随后由用户保存到集成客户端。
 - 权限层级包含 Platform Super Admin、Account Admin 和 User。
 - 管理员跨用户读取必须同时保留 Actor（操作者）与 Subject（数据归属者）。
 - 高风险操作使用展示影响范围的确认弹窗，不要求重输密码、输入 Account 名称或双人审批。
 - Account、用户及其数据使用 30 天软删除与恢复窗口，期满后异步物理清理。
-- 现有 API Key、OAuth、SDK、CLI、MCP 和 `/api/v1/*` 保持兼容。
+- SDK、CLI、插件和 MCP 使用用户 API Key 或用户 OAuth Token，均代表授权用户本人，并实时继承同一套 RBAC 与数据范围。
+- v0.1 不提供 Service Account 或 Service Account Key；内部 Worker 使用不对外签发凭证的系统身份。
+- v0.1 是产品初版，不导入或兼容旧 Account/User/API Key 门禁；现有协议入口可被选为首版契约，但鉴权统一接入新 IAM。
 
 ## 变更记录
 
@@ -32,6 +34,7 @@
 | --- | --- | --- |
 | 2026-08-18 | Design v0.1 初稿 | 基于 OpenViking v0.4.12 建立产品化、IAM 与 RBAC 总体设计。 |
 | 2026-08-18 | Design v0.1 补充 | 明确三级数据范围、Actor/Subject 审计、弹窗确认与 30 天软删除。 |
+| 2026-08-18 | Design v0.1 凭证修订 | 明确插件/MCP 为用户委托型集成，用户 API Key 统一继承 RBAC；Service Account 和旧门禁兼容均不进入 v0.1。 |
 
 ## 待继续讨论
 

@@ -62,7 +62,35 @@
 
 唯一约束：`(provider, issuer, subject)`。
 
-### 10.4 `iam_roles`
+### 10.4 `iam_api_credentials`
+
+保存 Account User 为 SDK、CLI、插件和 MCP 创建的个人 API Key。v0.1 的每条记录必须归属于一个 `account_id` 非空的用户，不支持 Platform Super Admin Key、`service_account_id` 或其他机器主体。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID 主键，同时作为审计中的 `credential_id` |
+| `account_id` | Account 外键，必须与所属用户一致 |
+| `user_id` | `iam_users.id` 外键，不可空 |
+| `name` | 用户填写的用途名称，例如“Codex 笔记本” |
+| `public_id` | Key 内非敏感随机定位 ID，唯一索引；不包含 Account/User 信息 |
+| `key_hash` | `SHA-256(secret)`，唯一；secret 至少 256 bit 且不保存明文 |
+| `key_last_four` | 列表展示用末四位，不参与认证 |
+| `status` | `active/revoked` |
+| `expires_at` | 可空；到期后立即拒绝 |
+| `last_used_at` | 最近成功使用时间，可空，可异步更新 |
+| `created_by` | 创建该 Key 的用户；v0.1 只能为自己创建 |
+| `created_at` | 创建时间 |
+| `revoked_at/revoked_by` | 撤销时间和 Actor，可空 |
+
+规则：
+
+- 一个 User 可以有多个具名 Key，但所有 Key 共享该 User 当前角色、Permission 和数据范围。
+- Key 不保存 Role、Permission 快照或独立 Scope；用户禁用、删除、角色变化后无需轮换 Key 即刻生效。
+- 创建接口只返回一次完整明文；列表和审计仅返回 `name/public_id/key_last_four/status/expires_at/last_used_at`。
+- 删除用户进入回收期时立即撤销其全部 Key；恢复用户不自动恢复已撤销 Key。
+- v0.1 不建 `iam_service_accounts`、`service_account_roles` 或 Service Account Credential 表。
+
+### 10.5 `iam_roles`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -76,7 +104,7 @@
 | `status` | `active/disabled` |
 | `created_at/updated_at` | 时间 |
 
-### 10.5 `iam_permissions`
+### 10.6 `iam_permissions`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -88,7 +116,7 @@
 
 Permission 由代码和 migration 注册，不允许普通管理员任意创建未知 Permission Code。
 
-### 10.6 关联表
+### 10.7 关联表
 
 `iam_role_permissions`：
 
@@ -104,7 +132,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 - `assigned_at`
 - 复合主键 `(user_id, role_id)`
 
-### 10.7 `iam_sessions`
+### 10.8 `iam_sessions`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -122,7 +150,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 
 索引：`token_hash`、`(user_id, revoked_at)`、`absolute_expires_at`。
 
-### 10.8 `iam_audit_events`
+### 10.9 `iam_audit_events`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -130,9 +158,13 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 | `occurred_at` | 事件时间 |
 | `request_id` | 关联 HTTP Request ID |
 | `account_id` | 租户范围 |
+| `actor_type` | `user/system`；v0.1 不存在 `service_account` |
 | `actor_user_id` | 操作者，可空表示系统 |
 | `actor_account_id` | Actor 所属 Account；Platform Super Admin/系统可空 |
+| `actor_system_component` | 系统任务组件名，可空；`actor_type=system` 时必填 |
 | `actor_session_id` | 会话，可空 |
+| `authentication_method` | `session/api_key/oauth/system` |
+| `actor_credential_id` | API Key/OAuth 凭证 ID，可空；不记录 secret |
 | `subject_account_id` | 被访问数据所属 Account，可空 |
 | `subject_user_id` | 被访问数据所属 User，可空 |
 | `action` | 权限或业务动作 |
@@ -142,9 +174,9 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 | `reason` | 拒绝/失败原因 |
 | `metadata` | JSONB，必须脱敏 |
 
-审计日志与应用日志分开。管理员访问他人数据时，`actor_user_id` 与 `subject_user_id` 必须同时存在；系统不能只记录 Subject。审计日志不记录密码、Session Token、API Key 或完整敏感正文。
+审计日志与应用日志分开。管理员访问他人数据时，`actor_user_id` 与 `subject_user_id` 必须同时存在；系统不能只记录 Subject。内部 Worker 使用 `actor_type=system` 和 `actor_system_component`，不能伪装成用户。审计日志不记录密码、Session Token、API Key 明文、完整凭证 hash 或敏感正文。
 
-### 10.9 `iam_outbox`
+### 10.10 `iam_outbox`
 
 用于 PostgreSQL 与 OpenViking Provisioning 的可靠同步：
 
@@ -160,7 +192,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 | `last_error` | 脱敏错误 |
 | `created_at/completed_at` | 时间 |
 
-### 10.10 `iam_deletion_jobs`
+### 10.11 `iam_deletion_jobs`
 
 统一跟踪 Account、User、Memory、Session 和 Resource 的软删除、恢复和期满清理：
 

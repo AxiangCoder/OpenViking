@@ -17,6 +17,8 @@ openviking/server/platform/
   auth/
     password.py
     sessions.py
+    api_credentials.py
+    oauth_principal.py
     csrf.py
     service.py
 
@@ -48,6 +50,7 @@ openviking/server/platform/
   routers/
     auth.py
     me.py
+    api_credentials.py
     product_memories.py
     product_resources.py
     product_sessions.py
@@ -77,15 +80,22 @@ openviking/server/platform/migrations/
 ### 11.1 Platform 依赖链
 
 ```text
-Cookie
-  -> PlatformSessionDependency
-  -> PlatformPrincipal
-  -> require_permission(...)
-  -> resolve_data_access(actor, subject)
-  -> ProductFacadeService
-  -> to_ov_context(principal, access)
-  -> OpenVikingService
+Browser Cookie ----------> PlatformSessionDependency ---+
+User API Key ------------> ApiCredentialDependency -----+--> AuthenticatedUserPrincipal
+OAuth Access Token ------> OAuthPrincipalDependency ----+             |
+                                                                      v
+                                                        require_permission(...)
+                                                                      |
+                                                        resolve_data_access(actor, subject)
+                                                                      |
+                                                        ProductFacadeService
+                                                                      |
+                                                        to_ov_context(principal, access)
+                                                                      |
+                                                        OpenVikingService
 ```
+
+三个入口只负责证明“这个请求是谁发起的”。Role、Permission 和数据范围统一从 PostgreSQL IAM 计算，不在 API Key 或 OAuth Token 中维护另一套授权结果。
 
 ### 11.2 ProductFacadeService
 
@@ -102,12 +112,9 @@ Cookie
 
 示例：产品前端请求“我的记忆列表”，后端固定构造当前用户的 canonical User URI，不接受 `user_id` 参数；Account Admin 请求“查看成员记忆”时，路由中的 `user_id` 只作为 Subject，后端验证其属于当前 Account 后再构造 URI。
 
-### 11.3 Provisioning 与双存储一致性
+### 11.3 Provisioning 与单一身份事实来源
 
-第一阶段仍需让现有 OpenViking APIKeyManager 知道 Account/User，因此会短期存在两个身份存储：
-
-- PostgreSQL：产品 IAM 的事实来源。
-- OpenViking accounts/users JSON：现有 API Key 和底层 API 的兼容镜像。
+v0.1 没有旧门禁兼容要求，PostgreSQL 从第一天起就是 Account、User、Role、Permission、Session 和用户 API Key 的唯一身份事实来源。OpenViking accounts/users JSON 不作为产品鉴权来源，也不进行凭证双写。
 
 创建流程：
 
@@ -117,8 +124,8 @@ Cookie
    - 写 iam_outbox
 2. Commit
 3. Provisioning Worker
-   - 调用现有 APIKeyManager / OpenVikingService 初始化 account/user
-   - 初始化 OpenViking 目录
+   - 使用内部 SystemPrincipal 调用 OpenVikingService
+   - 使用 ov_account_id/ov_user_id 初始化 OpenViking namespace 与目录
 4. 成功：IAM status=active，outbox=completed
 5. 失败：记录错误并指数退避重试
 ```
@@ -133,15 +140,23 @@ Cookie
 - 期满后由幂等清理任务删除 OpenViking 数据；失败进入重试队列并对运维可见。
 - 不把“删除登录用户”与“立即物理删除全部记忆”绑定成一个不可恢复请求。
 
-### 11.4 中长期单一事实来源
+### 11.4 用户 API Key 生命周期与解析
 
-第二阶段把 APIKeyManager 持久层抽象为 `IdentityCredentialRepository`：
+`ApiCredentialService` 直接使用 PostgreSQL `iam_api_credentials`：
 
-- `VikingFsIdentityCredentialRepository`：兼容旧数据。
-- `PostgresIdentityCredentialRepository`：新事实来源。
-- APIKeyManager 继续提供现有方法和返回契约。
+1. 已登录用户显式创建具名 Key，服务端生成随机 secret。
+2. 事务中写入随机 `public_id`、`SHA-256(secret)`、末四位、到期时间和创建 Actor；Key 不编码 Account/User/Role。
+3. 完整 Key 只在成功响应中返回一次；后续接口无法重新取回。
+4. `/api/v1/*`、`/mcp` 和需要 API 鉴权的集成入口从 Bearer 或 `X-Api-Key` 提取 Key。
+5. 解析器按 `public_id` 定位凭证、常量时间校验 secret hash，再加载所属 User、Account、Role 和 Permission，生成 `AuthenticatedUserPrincipal(authentication_method="api_key")`。
+6. 业务 Router 使用同一 AuthorizationService 检查 Permission，并由 OpenViking namespace ACL 兜底。
+7. 撤销、到期、用户禁用或进入删除期后立即拒绝；`last_used_at` 可异步、限频更新。
 
-完成迁移后可停止双写，但这不属于第一阶段的必做项。
+API Key 不自动随用户创建而签发，Account Admin 也不能替用户创建并看到明文。管理员只能按权限查看 Key 元数据和撤销疑似泄露的 Key。
+
+OAuth Access Token 最终也映射到同一 `AuthenticatedUserPrincipal`。MCP middleware 与 REST auth dependency 必须复用同一个 Principal Resolver，避免 MCP 成为绕过 RBAC 的旁路。
+
+v0.1 不定义 Service Account 的 repository、resolver 或 credential type。内部 Worker 使用不可从公网提交、不可导出的 `SystemPrincipal`，不能拿 Root/User API Key 代替。
 
 ## 12. API 设计
 
@@ -218,7 +233,51 @@ RESTORE_WINDOW_EXPIRED
 }
 ```
 
-### 12.4 产品 API
+### 12.4 用户 API Key 与集成入口
+
+用户在产品设置页管理自己的 API Key：
+
+该组接口只面向 `account_id` 非空的 Account Admin/User；Platform Super Admin 不创建平台级个人 API Key。
+
+| 方法 | 路径 | 鉴权 | Permission | 说明 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/platform/v1/me/api-keys` | Session | `credential.read.self` | 只返回 Key 元数据和掩码 |
+| POST | `/api/platform/v1/me/api-keys` | Session + CSRF | `credential.create.self` | 创建具名 Key，完整明文只返回一次 |
+| DELETE | `/api/platform/v1/me/api-keys/{id}` | Session + CSRF | `credential.revoke.self` | 撤销自己的 Key，幂等 |
+
+创建请求：
+
+```json
+{
+  "name": "Codex on MacBook",
+  "expires_at": "2026-11-18T00:00:00Z"
+}
+```
+
+成功响应中的 `api_key` 只出现这一次；列表接口不得再次返回：
+
+```json
+{
+  "status": "ok",
+  "result": {
+    "id": "credential-id",
+    "name": "Codex on MacBook",
+    "api_key": "ovk_u.public-id.secret",
+    "key_last_four": "4f2a",
+    "expires_at": "2026-11-18T00:00:00Z"
+  }
+}
+```
+
+集成入口统一规则：
+
+- `/api/v1/*` 和 `/mcp` 接受用户 API Key 或用户 OAuth Token。
+- API Key/OAuth 解析出的 Account/User 是 Actor，客户端不得通过 Header 或请求体切换身份。
+- 每个低层 API/MCP Tool 必须映射到 Permission Code；同一用户通过 Session、API Key、OAuth 调用相同业务动作时授权结果一致。
+- Codex、OpenClaw、OpenCode 等插件使用谁的 Key，就以谁的身份读写和审计。
+- v0.1 不接受 `principal_type=service_account`，也不签发 Service Account Key。
+
+### 12.5 产品 API
 
 | 方法 | 路径 | Permission | OpenViking 映射 |
 | --- | --- | --- | --- |
@@ -240,7 +299,7 @@ RESTORE_WINDOW_EXPIRED
 
 产品 API 返回产品 DTO，不原样泄露内部绝对文件路径、系统目录和控制字段。普通用户请求永远不能切换 Account；`auth/me` 的 Account 是固定归属，不提供 Account 切换列表。
 
-### 12.5 管理 API
+### 12.6 管理 API
 
 | 方法 | 路径 | Permission |
 | --- | --- | --- |
@@ -256,10 +315,12 @@ RESTORE_WINDOW_EXPIRED
 | GET | `/api/platform/v1/admin/audit-events` | `audit.read` |
 | GET | `/api/platform/v1/admin/users/{id}/memories` | `memory.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/sessions` | `session.read.account` |
+| GET | `/api/platform/v1/admin/users/{id}/api-keys` | `credential.read.account` |
+| DELETE | `/api/platform/v1/admin/users/{id}/api-keys/{credential_id}` | `credential.revoke.account` |
 | GET | `/api/platform/v1/admin/recycle-bin` | Account 范围恢复权限 |
 | POST | `/api/platform/v1/admin/recycle-bin/{id}/restore` | Account 范围恢复权限 |
 
-Account Admin API 的 Account 固定来自当前 Session；路径中的用户只作为 Subject，且必须属于该 Account。读取其他用户数据不授予修改、导出或删除能力。
+Account Admin API 的 Account 固定来自当前 Session；路径中的用户只作为 Subject，且必须属于该 Account。读取其他用户数据不授予修改、导出或删除能力。管理员只能查看 API Key 的名称、掩码、状态和使用时间并执行撤销，不能获取明文，也不能代用户创建 Key。
 
 Platform Super Admin 使用独立的平台级接口：
 
@@ -269,6 +330,8 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users` | `user.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/memories` | `memory.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys` | `credential.read.platform` |
+| DELETE | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys/{credential_id}` | `credential.revoke.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/deletion-preview` | `account.delete` |
 | GET | `/api/platform/v1/platform/audit-events` | 平台审计读取权限 |

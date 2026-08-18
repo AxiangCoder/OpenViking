@@ -1,4 +1,4 @@
-# 06 前端、安全、迁移与运维
+# 06 前端、安全、初始部署与运维
 
 > Design v0.1 · [返回版本索引](README.md)
 
@@ -26,6 +26,7 @@ web-platform/
         resources/
         sessions/
         profile/
+          api-keys/
       admin/
         users/
         roles/
@@ -60,8 +61,10 @@ web-platform/
 /app/resources
 /app/sessions
 /app/profile
+/app/profile/api-keys
 
 /admin/users
+/admin/users/$userId/api-keys
 /admin/roles
 /admin/audit
 /admin/settings
@@ -69,6 +72,7 @@ web-platform/
 /platform/accounts
 /platform/accounts/$accountId/users
 /platform/accounts/$accountId/users/$userId/data
+/platform/accounts/$accountId/users/$userId/api-keys
 /platform/audit
 ```
 
@@ -99,11 +103,13 @@ web-platform/
 - 密码。
 - 权限快照作为安全依据。
 
+`/app/profile/api-keys` 允许用户显式创建个人 API Key。创建成功后通过专用一次性结果页展示完整 Key，并明确提示立即复制；离开页面后不能再次查看。前端只在当前内存状态中短暂持有明文，不写入任何 Web Storage、URL、错误上报、埋点或剪贴板历史管理逻辑。
+
 ### 13.5 Studio 处理
 
 - `/studio` 保持现有 bundle 和路由。
 - 第一阶段只允许受控网络、VPN 或管理员访问。
-- Studio 继续使用现有 API Key 连接模型。
+- Studio 继续使用 API Key 连接模型，但用户凭证必须由新 IAM 签发；Root API Key 只允许受控运维人员在隔离环境使用。
 - Root 管理密钥不预置进公开静态资源。
 - 后续可用反向代理 SSO 给 `/studio` 再加一层访问保护。
 
@@ -142,7 +148,9 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 ### 14.4 密钥与敏感数据
 
 - Root API Key 存 Secret Manager 或部署环境，不写进代码、镜像和前端环境变量。
-- 开启 `encryption.api_key_hashing.enabled=true`。
+- 用户 API Key 明文只返回一次；PostgreSQL 只保存 hash、前缀、末四位、状态和使用元数据。
+- 用户 API Key 的角色和 Permission 不写入凭证记录，每次请求从当前 IAM 用户实时计算。
+- 一个插件泄露时只撤销对应具名 Key；不要求用户同时替换其他设备和插件的 Key。
 - 生产全站 HTTPS。
 - 日志中统一脱敏 Authorization、Cookie、API Key、密码和 Token。
 - 数据库备份加密，恢复操作审计。
@@ -154,7 +162,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 - 删除 Account。
 - 删除用户全部 OpenViking 数据。
-- 重置其他用户凭据。
+- 发起其他用户密码重置，或撤销其他用户 API Key。
 - 修改、导出或删除其他用户数据。
 - 导出大量记忆或资源。
 
@@ -171,57 +179,40 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
 - 审计事件独立保留，不随业务对象物理清理。
 
-## 15. 迁移与兼容方案
+## 15. 初始部署与凭证启用
 
-### 15.1 迁移对象
+### 15.1 初版前提
 
-现有 OpenViking 数据分为两类：
+- v0.1 是产品系统第一次正式建立 IAM，不存在需要保留的旧产品用户门禁。
+- 不导入当前 OpenViking accounts/users/API Key registry，也不设置新旧鉴权并行期。
+- PostgreSQL 是 Account、User、Role、Permission、Session 和用户 API Key 的唯一身份事实来源。
+- `/api/v1/*`、`/mcp`、Bearer 和 `X-Api-Key` 可以作为 v0.1 的正式集成协议继续使用，但这属于首版接口选择，不代表接受旧凭证或旧权限结果。
 
-1. 控制元数据：Account、User、Role、API Key。
-2. 业务数据：VikingFS、VectorDB、Session、Memory、Resource、Skill。
+### 15.2 首次初始化顺序
 
-本次迁移只复制/映射控制元数据，不移动业务数据路径。保持 `ov_account_id` 和 `ov_user_id` 不变即可继续访问原数据。
+1. 部署 PostgreSQL 并执行全新的 Platform schema migration。
+2. 通过一次性部署命令创建首位 Platform Super Admin；不使用 Root API Key 代替人类管理员。
+3. 由 Platform Super Admin 创建 Account 和首位 Account Admin。
+4. Provisioning Worker 使用内部 `SystemPrincipal` 初始化对应 OpenViking namespace。
+5. Account Admin 创建或邀请用户并分配角色。
+6. 用户登录 `/app/profile/api-keys`，按自己的插件或设备创建具名 API Key。
+7. 将一次性显示的 Key 配置到 Codex、OpenClaw、OpenCode、SDK、CLI 或 MCP 客户端。
+8. 验证 Session、API Key 和 OAuth 对同一用户产生一致的 Permission 和数据范围。
 
-### 15.2 迁移步骤
+Root API Key 只保留为受控部署与底层运维能力，不写入产品用户、角色或凭证表，也不能作为插件的常规凭证。
 
-1. 冻结基线版本并备份当前 OpenViking 数据、配置和 API Key 元数据。
-2. 创建 PostgreSQL schema 和默认 Permission。
-3. 读取现有 accounts/users registry，写入：
-   - `iam_accounts`
-   - `iam_users`
-   - 默认 Role
-   - UserRole 绑定
-4. 角色映射：
-   - 原 `admin` -> `account_admin`
-   - 原 `user` -> `user`
-   - Root API Key 不导入用户表，也不自动生成 Platform Super Admin；首位平台管理员走独立初始化流程
-5. 现有用户没有密码：状态设为 `invited` 或 `active_without_login`，通过安全邀请设置密码。
-6. 保持现有 User API Key 有效，SDK/CLI 不受影响。
-7. 逐用户验证 Platform Session 转换后的 `RequestContext` 能读取原数据。
-8. 启用 Platform API 和 `/app`。
-9. 稳定后再决定是否把 APIKeyManager 持久层迁移到 PostgreSQL。
+### 15.3 开发数据处理
 
-### 15.3 兼容期规则
-
-- 产品登录与 API Key 登录可并行存在。
-- Password/Session 身份由 PostgreSQL 解析。
-- User API Key 身份继续由现有 APIKeyManager 解析。
-- 两者必须解析到相同 `(account_id, user_id)`。
-- 角色不一致时：
-  - Platform API 以 PostgreSQL RBAC 为准。
-  - OpenViking 低层 API 以现有 Base Role 为准。
-  - Provisioning Reconciler 报警并修复 Base Role 镜像。
+由于不存在生产旧门禁，开发阶段允许清空并重新生成 IAM 测试数据。若需要保留已有 OpenViking 业务样本，应通过明确的测试数据初始化脚本绑定到新建 Account/User；不能自动把旧 Key 当成新用户登录凭证。
 
 ### 15.4 回滚
 
-第一阶段不删除原 Account/User/API Key registry，因此可回滚：
+回滚以同一套 PostgreSQL IAM 为边界：
 
-1. 关闭 `/app` 和 `/api/platform/v1` 路由。
-2. 恢复原镜像或原进程版本。
-3. OpenViking 业务数据和原 API Key 继续可用。
-4. PostgreSQL IAM 数据保留但停止写入，供后续排查或重新迁移。
-
-回滚不能依赖从 PostgreSQL 反向重建所有 OpenViking 数据。
+1. 发布前备份 PostgreSQL 与 OpenViking 数据卷。
+2. 应用和 schema migration 必须提供对应的向下兼容发布顺序或可验证的 down migration。
+3. 回滚应用版本时仍使用 PostgreSQL 用户和凭证，不回退到旧 JSON registry 门禁。
+4. 若凭证 schema 已发生不可逆变化，先恢复备份到独立实例验证，再切换流量。
 
 ## 16. 部署设计
 
@@ -295,8 +286,9 @@ postgresql（生产可使用托管 RDS）
 ### 17.1 必须审计的事件
 
 - 登录成功、登录失败、登出、会话撤销。
+- 用户 API Key 创建、撤销、到期拒绝和认证失败；成功业务请求在对应审计事件中记录认证方式与凭证 ID，不额外为每次调用生成重复 Key 事件。
 - 用户邀请、启用、禁用、删除。
-- 密码重置和凭据轮换。
+- 密码重置、用户 API Key 撤销和 Root 凭据轮换。
 - Role 创建、修改、删除和分配。
 - 高风险数据删除、批量导出和管理员跨范围数据访问。
 - Account Admin/Platform Super Admin 跨用户读取；记录 Actor 与 Subject，不记录数据正文。
@@ -312,7 +304,7 @@ postgresql（生产可使用托管 RDS）
 - OpenTelemetry trace。
 - 后台 Provisioning Task。
 
-管理员跨用户或跨 Account 访问时，HTTP 日志只记录脱敏标识；Platform Audit Event 必须记录 `actor_user_id`、`actor_account_id`、`subject_account_id`、`subject_user_id`、`action`、`scope` 和结果。
+管理员跨用户或跨 Account 访问时，HTTP 日志只记录脱敏标识；Platform Audit Event 必须记录 `actor_user_id`、`actor_account_id`、`authentication_method`、脱敏的 `actor_credential_id`、`subject_account_id`、`subject_user_id`、`action`、`scope` 和结果。通过插件/MCP 使用用户 API Key 时，Actor 仍是该用户，`actor_credential_id` 用于区分具体设备或插件。
 
 不把 `user_id`、邮箱等高基数字段无条件放进 Prometheus Label。需要 Account 维度时沿用现有 allowlist 和数量上限思想。
 

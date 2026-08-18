@@ -36,6 +36,7 @@ OpenViking Product Server (one FastAPI process in Phase 1)
 | `web-platform` | 登录、产品 UI、租户管理 UI | 不保存 Root/User API Key |
 | Platform Router | 面向页面的稳定业务 API | 不直接信任客户端身份字段 |
 | AuthService | 登录、密码校验、会话签发与撤销 | 不决定业务资源权限 |
+| ApiCredentialService | 签发、校验和撤销用户 API Key | 不保存角色，不创建机器身份 |
 | AuthorizationService | 计算 Permission 并授权 | 不读取或修改 OpenViking 数据 |
 | IdentityRepository | IAM 数据持久化 | 不保存记忆、资源、Session 正文 |
 | ProductFacadeService | 将业务操作映射到 OpenViking Service | 不绕过 Permission 检查 |
@@ -55,17 +56,19 @@ OpenViking Product Server (one FastAPI process in Phase 1)
 
 ## 7. 身份上下文设计
 
-### 7.1 PlatformPrincipal
+### 7.1 AuthenticatedUserPrincipal
 
-产品请求经过 Session Authentication 后生成：
+网页登录 Session、用户 API Key 和用户 OAuth Token 最终统一生成同一种用户主体：
 
 ```python
 @dataclass(frozen=True)
-class PlatformPrincipal:
+class AuthenticatedUserPrincipal:
     actor_user_id: str
     actor_account_id: str | None
     user_status: str
-    session_id: str
+    authentication_method: Literal["session", "api_key", "oauth"]
+    session_id: str | None
+    credential_id: str | None
     role_codes: tuple[str, ...]
     permissions: frozenset[str]
     ov_base_role: Role | None
@@ -73,12 +76,19 @@ class PlatformPrincipal:
 
 字段说明：
 
-- `actor_user_id` 标识实际操作者；`actor_account_id` 对 Platform Super Admin 可为空。
+- `actor_user_id` 标识实际操作者；API Key 和 OAuth 不会把插件变成新的 Actor。
+- Platform Super Admin 可使用独立的平台登录主体，其 `actor_account_id` 可为空；上例表示 Account 用户调用路径。
 - Account Admin 和 User 的 `actor_account_id` 在登录后固定，产品不提供 Account 切换。
+- `authentication_method` 只说明“通过什么方式证明身份”，不影响角色和数据范围。
+- `session_id` 仅 Session 认证时存在；`credential_id` 用于 API Key/OAuth 凭证审计，任何位置都不保存明文密钥。
 - `role_codes` 用于页面展示和审计，不直接作为授权判断。
-- `permissions` 是本次请求计算后的有效权限集合。
+- `permissions` 按当前用户状态和角色实时计算；API Key 不保存独立角色，也不能扩大此集合。
 - Account Admin/User 的 `ov_base_role` 只允许 `Role.ADMIN` 或 `Role.USER`；Platform Super Admin 为 `None`，由平台策略决定每次目标操作的最小 OpenViking 上下文。
 - 产品登录永远不会生成 `Role.ROOT`。
+
+v0.1 不定义 `ServiceAccountPrincipal`。内部 Provisioning、清理等 Worker 使用仅限进程内部的 `SystemPrincipal`，不签发可供外部插件使用的 API Key。
+
+`SystemPrincipal` 不是 Service Account：它只能由受控 Worker 代码路径构造，没有登录入口、API Key 或 OAuth Token，也不能通过 HTTP/MCP 请求声明。它只允许执行代码中明确列出的系统动作，并在审计中记录组件名、任务 ID、Subject 和结果。
 
 ### 7.2 Actor、Subject 与数据访问上下文
 
@@ -106,7 +116,7 @@ class DataAccessContext:
 
 ```python
 def to_ov_context(
-    principal: PlatformPrincipal,
+    principal: AuthenticatedUserPrincipal,
     access: DataAccessContext,
 ) -> RequestContext:
     authorize_data_access(principal, access)
@@ -129,4 +139,6 @@ def to_ov_context(
 | URL 中的 account/user | 不作为 Actor 身份 | 只作为 Subject，校验角色、Permission 和数据范围后才能使用 |
 | `X-OpenViking-*` Header | 产品公网入口不可信 | 网关删除；仅内部 trusted 链路允许 |
 | Root API Key | 高敏内部密钥 | Secret Manager/环境变量注入，不进入浏览器和日志 |
-| User API Key | 集成客户端凭据 | 仅现有低层 API 使用，不用于产品网页登录 |
+| User API Key | 用户委托型集成凭据 | 解析到固定 Account/User，继承实时 RBAC；不用于产品网页登录 |
+| OAuth Token | 用户授权给 MCP 客户端的委托凭据 | 解析到授权 User，权限不超过该用户当前权限 |
+| 插件/MCP 传入的 Account/User | 不可信 | 不能覆盖凭证解析出的 Actor，只能在已授权管理 API 中作为 Subject |

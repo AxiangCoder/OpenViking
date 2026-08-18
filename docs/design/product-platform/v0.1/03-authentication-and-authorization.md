@@ -53,13 +53,43 @@
 
 当前 `openviking/server/oauth` 是 MCP 客户端授权服务，不应直接当成产品用户登录系统复用。
 
-### 8.5 API Key 与 OAuth 兼容
+### 8.5 用户 API Key
 
-- 现有 `api_key` auth mode 保持不变。
-- 现有 User API Key 继续用于 SDK、CLI、MCP 上游和自动化集成。
-- 现有 OAuth 2.1 继续叠加在 API Key 模式上。
-- 产品网页登录不把 User API Key 写入 `sessionStorage` 或 `localStorage`。
-- 若未来需要个人访问令牌 PAT，应单独支持多 Key、scope、到期和逐 Key 撤销，不复用单 Key 模型硬扩展。
+用户 API Key 是绑定到一个 Account User 的长期 API 访问凭证，也可称为个人访问凭证。它用于 SDK、CLI、Codex/OpenClaw/OpenCode 等插件和非交互式 MCP 连接，但不创建新的程序身份。Platform Super Admin 在 v0.1 不签发平台级个人 API Key，只使用网页登录 Session。
+
+规则：
+
+- 一个用户可以创建多个具名 API Key，便于按设备或插件单独撤销；每个 Key 仍代表同一个用户。
+- Key 使用 `ovk_u.<public_id>.<secret>` 形式：点号是分段符，`public_id` 是非敏感随机定位 ID，`secret` 至少 256 bit 并采用 base64url；客户端必须把完整字符串当作不透明值。
+- Key 字符串不编码 `account_id`、`user_id`、Role 或 Permission；身份与权限只能由服务端根据 `public_id` 查库得到。
+- 明文只在创建成功响应中展示一次；数据库保存 `public_id`、`SHA-256(secret)`、末尾掩码和使用元数据，不保存完整 Key。
+- API Key 固定绑定 `user_id` 和该用户所属 `account_id`，请求参数或 Header 不能改变其身份。
+- 每次请求根据当前用户状态和 Role 计算 Permission；Key 不保存独立角色，不复制权限快照，也不能扩大用户权限。
+- 用户禁用、进入删除期或 Key 被撤销/到期后，下一次请求立即失败。
+- v0.1 不提供独立 Key Scope，避免形成第二套权限系统；未来若增加限制性 Scope，最终权限只能是 `用户有效权限 ∩ Key Scope`。
+- 产品网页登录不使用 API Key。用户在设置页主动创建时可以看到一次明文，但前端不得写入 `localStorage`、`sessionStorage`、日志或埋点。
+- API 接受 `Authorization: Bearer <key>`；为适配 OpenViking 客户端也可接受 `X-Api-Key`，两者进入同一解析器。
+
+### 8.6 插件、MCP 与 OAuth 的身份语义
+
+- 插件、MCP、SDK 和 CLI 是调用渠道，不是 Principal 类型。
+- 客户端使用用户 API Key 时，属于“用户委托型集成”：服务端 Actor 始终是 Key 所属用户。
+- 交互式 MCP 客户端使用 OAuth 2.1 时，Access Token 代表完成授权的用户，权限同样实时受该用户 RBAC 限制。
+- OAuth Client ID 只标识客户端软件，不等于 Service Account，也不拥有业务数据权限。
+- 相同用户通过 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
+- 系统内部 Worker 使用内部 `SystemPrincipal`，不借用用户 API Key，也不对外暴露系统凭证。
+
+### 8.7 Service Account 决策
+
+v0.1 不提供 Service Account、Service Account Key、机器角色或相关管理页面。当前产品场景是每个用户为自己的插件/MCP 配置个人 API Key，没有已确认的 Account 级共享机器主体需求。
+
+只有出现以下明确业务需求时，才在后续版本单独设计 Service Account：
+
+- 一个集成服务由整个 Account 共用，不应归属于某个员工。
+- 程序需要在创建者离职、禁用或退出登录后继续运行。
+- 外部 CI、定时同步或公共 Gateway 需要独立授权、停用和审计身份。
+
+届时 Service Account 必须是独立 Principal，而不是给某个用户 API Key 改名；其角色、数据范围、密钥生命周期和审计字段需要单独设计。
 
 ## 9. RBAC 权限设计
 
@@ -80,9 +110,16 @@ user.create
 user.update
 user.disable
 user.delete
-user.credential.rotate
 user.read.account
 user.read.platform
+
+credential.read.self
+credential.create.self
+credential.revoke.self
+credential.read.account
+credential.revoke.account
+credential.read.platform
+credential.revoke.platform
 
 role.read
 role.create
@@ -150,6 +187,8 @@ system.task.read
 | 导出、删除其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 共享资源读取 | ✓ | ✓ | ✓ |
 | 共享资源写入 | ✓ | ✓ | 待确认 |
+| 管理自己的 API Key |  | ✓ | ✓ |
+| 查看并撤销其他用户的 API Key 元数据 | 全部 Account | 当前 Account |  |
 | 查看审计 | 全平台 | 当前 Account |  |
 | 系统监控 | ✓ | 当前 Account 视图 |  |
 
@@ -170,6 +209,7 @@ effective_permissions
 - Account Admin/User 与 Role 必须属于同一 Account；Platform Super Admin 使用平台级 System Role。
 - System Role 不允许删除或改 code，可调整显示名和描述。
 - 若后续开放自定义 Role，必须指定 `ov_base_role=user|admin`，且不能获得平台级 Scope。
-- `ov_base_role=admin` 只影响 OpenViking 控制面兼容，不自动授予任何 Platform Permission。
+- `ov_base_role=admin` 只影响 OpenViking 控制面能力映射，不自动授予任何 Platform Permission。
+- Session、用户 API Key 和 OAuth 使用同一份有效权限；API Key 不参与 Permission 并集计算。
 - 用户禁用后，有效权限为空且所有登录会话失效。
 - 权限结果可按 `(account_id, user_id, permission_version)` 短期缓存；角色变更递增 `permission_version`。
