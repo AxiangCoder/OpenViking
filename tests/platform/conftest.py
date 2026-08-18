@@ -12,6 +12,11 @@
 from __future__ import annotations
 
 import os
+
+# P1-E3：Cookie Secure 属性在集成测试中必须生效（03 §8.1）。
+# 必须在导入任何 platform 模块（config 单例）之前设置。
+os.environ.setdefault("OV_COOKIE_SECURE", "1")
+
 from collections.abc import AsyncGenerator
 
 import asyncpg
@@ -97,3 +102,46 @@ async def session(
 @pytest.fixture
 def repo() -> PostgresIamRepository:
     return PostgresIamRepository()
+
+
+@pytest_asyncio.fixture
+async def auth_app(session_factory: async_sessionmaker[AsyncSession]):
+    """P1-E3 集成测试 FastAPI app（auth router）。
+
+    app.state 注入 IAM repository/RBAC/AuthService（create_app 挂载时的
+    装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
+    """
+    from fastapi import FastAPI
+
+    from openviking.server.platform.auth.service import AuthService
+    from openviking.server.platform.db import get_session
+    from openviking.server.platform.iam import RbacService
+    from openviking.server.platform.routers import auth_router
+
+    app = FastAPI(title="ovp-platform-test")
+    repo = PostgresIamRepository()
+    rbac = RbacService(repo)
+    app.state.iam_repository = repo
+    app.state.iam_rbac_service = rbac
+    app.state.iam_auth_service = AuthService(repo, rbac)
+
+    async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _override_get_session
+    app.include_router(auth_router)
+    return app
+
+
+@pytest_asyncio.fixture
+async def auth_client(auth_app):
+    """httpx ASGITransport 客户端（同一事件循环，避免跨 loop 连接问题）。
+
+    base_url 使用 https（Cookie Secure 生效，03 §8.1）。
+    """
+    import httpx
+
+    transport = httpx.ASGITransport(app=auth_app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
+        yield client

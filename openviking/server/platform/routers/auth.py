@@ -69,8 +69,11 @@ async def login(
         )
     except LoginRateLimitedError as exc:
         await session.commit()
-        response.headers["Retry-After"] = str(exc.retry_after_seconds)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": "LOGIN_FAILED"}) from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "LOGIN_FAILED"},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     except LoginFailedError as exc:
         await session.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": exc.code}) from exc
@@ -191,8 +194,11 @@ async def password_change(
         )
     except LoginRateLimitedError as exc:
         await session.commit()
-        response.headers["Retry-After"] = str(exc.retry_after_seconds)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": "LOGIN_FAILED"}) from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "LOGIN_FAILED"},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     except LoginFailedError as exc:
         await session.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": exc.code}) from exc

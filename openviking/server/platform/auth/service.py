@@ -19,6 +19,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openviking.server.platform.auth.password import (
@@ -42,6 +43,7 @@ from openviking.server.platform.errors import (
 from openviking.server.platform.iam.permissions import PLATFORM_SUPER_ADMIN
 from openviking.server.platform.iam.repository import IamRepository
 from openviking.server.platform.iam.service import RbacService
+from openviking.server.platform.models import IamUser
 
 # 登录/改密失败审计中标识限流的稳定原因码
 RATE_LIMITED = "RATE_LIMITED"
@@ -398,11 +400,16 @@ class AuthService:
         幂等守卫：平台已存在 PSA（无 Account 用户）时拒绝重复初始化。
         """
         await self._rbac.seed_catalog(session, request_id=request_id)
+        # 幂等守卫：平台已存在 PSA（任意无 Account 用户，04 §10.4 部分唯一索引
+        # 保证至多一个）时拒绝重复初始化（DB 约束为兜底）。
+        existing_psa = (
+            await session.execute(select(IamUser.id).where(IamUser.account_id.is_(None)).limit(1))
+        ).first()
+        if existing_psa is not None:
+            raise PlatformError("PSA_ALREADY_BOOTSTRAPPED")
         normalized_email = normalize_email(email)
         existing = await self._repo.get_user_by_normalized_email(session, normalized_email)
         if existing is not None:
-            if existing.account_id is None:
-                raise PlatformError("PSA_ALREADY_BOOTSTRAPPED")
             raise ConstraintViolationError("EMAIL_ALREADY_EXISTS")
 
         initial_password = random_initial_password()

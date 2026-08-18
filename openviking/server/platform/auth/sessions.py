@@ -16,7 +16,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openviking.server.platform.auth.password import (
@@ -101,12 +100,17 @@ class SessionService:
         return await self.create_login_session(session, user=user, ip_hash=ip_hash)
 
     async def touch_session(self, session: AsyncSession, session_id: uuid.UUID) -> None:
-        """请求活动：顺延 `last_seen_at` 与空闲到期（repository 无此接口，
-        服务层直接 SQL，沿用 P1-E2 service.py 对冻结模块的处理约定）。"""
+        """请求活动：顺延 `last_seen_at` 与空闲到期。
+
+        使用表级 UPDATE（repository 无此接口，沿用 P1-E2 service.py 对冻结模块的
+        处理约定）。**必须用 `IamSession.__table__`**：ORM 实体 update 在目标行
+        已入 identity map（get_current_principal 先解析了该行）时不会下发 SQL，
+        空闲到期会被静默跳过。
+        """
         now = datetime.now(timezone.utc)
         await session.execute(
-            update(IamSession)
-            .where(IamSession.id == session_id)
+            IamSession.__table__.update()
+            .where(IamSession.__table__.c.id == session_id)
             .values(
                 last_seen_at=now,
                 idle_expires_at=now + timedelta(seconds=self._config.session_idle_ttl_seconds),
