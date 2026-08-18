@@ -73,6 +73,7 @@
 - `/api/v1` 的 `write/rm/mv/set_tags/add_resource` 及对应 MCP Tool 不能绕过共享区只读策略；`mv` 的源和目标都要授权。
 - `/api/v1`、SDK 和 CLI 的 `add_skill/update/delete` 不能绕过 Account 范围名称唯一、普通 User 共享写禁止、Account Admin 独立发布权限或 Platform Skill 只读策略。
 - 搜索只返回调用者自己的私有根与当前 Account 共享根，不返回同 Account 其他 User 私有数据或其他 Account 数据。
+- Search 页面只有类型、标签和时间筛选；结合会话检索只能选择当前 User 自己的 Session。伪造 `target_uri/filter/score_threshold/level/include_provenance/limit` 等字段必须被 Product API 拒绝，不能静默透传。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。
 

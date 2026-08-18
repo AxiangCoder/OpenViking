@@ -128,7 +128,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `server/routers/resources.py` | Resource/Skill 导入、临时上传、等待处理、Watch 参数 | Account/User Content Plane | 经 Content Registry 和 Target Policy；未指定目标的 Resource 强制进入 User 私有区；v0.1 产品页只开放文件、公开 HTTPS 页面和公开 HTTPS Git |
 | `server/routers/skills.py` | Skill 列表、查找、校验、读取、更新、删除 | User/Account Collaboration Plane | 按 `user_private` 与 `account_shared` 分流；共享 Skill 普通 User 只能读取和使用 |
 | `server/routers/sessions.py` | 创建 Session、消息、Tool Result、Context、Commit、Extract | User Experience Plane | 作为用户对话、归档、上下文和 Memory 提取能力；Session 归 User，不等同于登录 Session；不由该 Router 生成 AI 回复 |
-| `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | `/app/search` 只提供 `find/search` 两种模式并固定检索根；`recall` 供受控调用链；`grep/glob` 只留私网 Studio |
+| `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | `/app/search` 只提供 `find/search` 两种模式及类型、标签、时间筛选，并固定检索根与执行参数；`recall` 供受控调用链；`grep/glob` 只留私网 Studio |
 | `server/routers/relations.py` | 关系查询、链接、解除链接、构建图 | Engine + Product Facade | 关系两端的可见性和写权限都要分别检查；v0.1 不直接暴露任意 URI 图操作 |
 | `server/routers/privacy_configs.py` | 隐私配置版本、激活和读取 | User Experience | 作为用户敏感配置的受控子能力；原始类别和 target key 不直接开放给前端 |
 | `server/routers/stats.py` | Memory、Session 统计 | User/Account/Platform 视图 | 产品 API 根据 Actor/Subject 提供个人、Account 或平台聚合视图，不直接复用无范围统计接口 |

@@ -423,6 +423,16 @@ Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 Open
 
 产品 Search API 不暴露 `target_uri`、任意 `filter`、`level` 或 `include_provenance` 等调试参数，也不暴露 `grep/glob`。`recall` 保留给 VikingBot、MCP 等受控调用链，不作为 `/app/search` 页面动作。
 
+两个 Search Product API 只接受稳定产品字段：
+
+- `query`：必填检索文本。
+- `context_type`：可空；只允许 `memory/resource/skill`，为空表示全部。
+- `tags`：可空；作为“更多筛选”，只能缩小结果范围。
+- `since/until`：可空；作为“更多筛选”的时间范围，由后端固定使用受支持的时间字段。
+- `session_id`：只允许 `/search/search` 接受，且必须属于当前 User；`/search/find` 不接受。
+
+`target_uri`、原始 `filter`、`score_threshold`、`level`、`include_provenance`、`limit/node_limit` 和时间字段选择均不属于 Product API。后端根据部署配置控制结果数量、分数阈值、索引层级和来源信息；客户端不能通过参数改变安全范围或索引执行策略。
+
 ### 12.6 管理 API
 
 | 方法 | 路径 | Permission |
