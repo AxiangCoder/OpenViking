@@ -58,6 +58,8 @@
 拒绝：actor_role_rank <= target_role_rank
 ```
 
+`actor_role_rank/target_role_rank` 一律使用平台 `iam_roles.rank`（`platform_super_admin=3`、`account_admin=2`、`user=1`）。禁止使用或混用 OpenViking `Role` 的内置 rank（USER=0/ADMIN=1/ROOT=2，`openviking/server/identity.py`）——两者都是"越大越高级"且同名，但数值与角色集不同，混用会静默产生错误的等级比较结果。
+
 - Platform Super Admin 可以重置 Account Admin 和 User，不能重置另一个 Platform Super Admin。
 - Account Admin 只能重置本 Account 的普通 User，不能重置另一个 Account Admin。
 - User 只能主动修改自己的密码，不能重置他人密码。
@@ -294,6 +296,7 @@ effective_permissions
 - 三个内置 Role 由代码和 migration 固定，不允许通过 v0.1 产品 UI/API 创建、删除或修改。
 - v0.1 每个用户只绑定一个内置角色；自定义 Role 和多角色叠加属于后续版本。
 - `ov_base_role=admin` 只影响 OpenViking 控制面能力映射，不自动授予任何 Platform Permission。
+- **OpenViking 原始角色权限体系不改动**：源码 `Role`（root/admin/user）、namespace ACL 与现有 Router 的角色判断保持原样，仅作为执行上下文映射（`ov_base_role`）与数据隔离兜底；平台 PostgreSQL RBAC（`iam_roles/iam_permissions/iam_user_roles/iam_role_permissions`）是唯一业务授权来源，两套体系通过 `ov_base_role` 单点衔接，不引入任何其他映射。
 - 登录 Session、用户 API Key 和 OAuth 使用同一份有效权限；API Key 不参与 Permission 并集计算。
 - 用户禁用后，有效权限为空且所有登录会话失效。
 - 权限结果可按 `(account_id, user_id, permission_version, permission_schema_version)` 短期缓存；用户自身状态或角色变更递增用户级 `permission_version`；内置角色权限种子或 migration 变更递增全局 `permission_schema_version`（参与所有用户的缓存键），两者独立，避免全局权限变更后缓存继续返回旧权限。

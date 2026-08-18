@@ -86,6 +86,7 @@ v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色�
 | `name` | 展示名称 |
 | `description` | 描述 |
 | `ov_base_role` | `user` 或 `admin`；Platform Super Admin 为 `NULL` |
+| `rank` | 平台角色等级：`platform_super_admin=3`、`account_admin=2`、`user=1`，数值越大等级越高；供密码重置等严格等级比较（03 §8.3）使用。独立于 OpenViking `Role` 内置 rank（USER=0/ADMIN=1/ROOT=2，见 `openviking/server/identity.py`），两套体系禁止混用、不做数值映射 |
 | `is_system` | 是否内置角色 |
 | `status` | `active/disabled` |
 | `created_at/updated_at` | 时间 |
