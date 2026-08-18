@@ -43,7 +43,7 @@
 - v0.1 不建立独立 Memory 页面或 Memory CRUD API；Memory 继续由 OpenViking 在 Session Commit 后提取和更新，用户通过 `/app/search` 检索，并在 Session 中查看本次 Commit 的 Memory Impact。
 - VikingBot 是 v0.1 必选部署组件；`/app/sessions` 提供完整聊天能力，OpenViking Session 负责消息、归档、上下文和记忆提取，VikingBot 负责模型与工具执行并生成回复。
 - `/app/search` 提供“快速检索”和“结合会话检索”两个产品模式，分别复用源码 `find` 与 `search`；`recall` 只供 VikingBot/MCP 等调用链使用，`grep/glob` 只留私网 Studio。
-- Search 基础筛选只有内容类型；结合会话检索额外选择当前 User 自己的 Session。标签和时间范围放入“更多筛选”；分数阈值、索引层级、来源追踪、结果数量和自定义 URI 均由后端控制，不进入产品 UI。
+- Search 基础筛选只有内容类型；结合会话检索额外选择当前 User 自己的 Session。结构化标签和更新时间范围放入“更多筛选”；时间固定按 `updated_at`，分数阈值、索引层级、来源追踪、结果数量和自定义 URI 均由后端控制，不进入产品 UI。
 - Resource、Skill 与 Search 统一使用源码兼容的 `key=value` 结构化标签；标签规范化为小写并去重，多个检索标签采用 AND 关系，不建立普通标签到检索标签的转换层。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
@@ -73,3 +73,4 @@
 | 2026-08-18 | Design v0.1 Search 模式收敛 | 产品页保留快速检索与结合会话检索；Recall 留给调用链，Grep/Glob 留在私网 Studio。 |
 | 2026-08-18 | Design v0.1 Search 筛选收敛 | 类型作为基础筛选，标签与时间作为更多筛选；隐藏分数、层级、来源追踪、数量和 URI 等调试参数。 |
 | 2026-08-18 | Design v0.1 标签模型收敛 | Resource、Skill 与 Search 统一采用 `key=value` 结构化标签，多标签检索要求全部匹配。 |
+| 2026-08-18 | Design v0.1 Search 时间语义收敛 | 时间范围固定按 `updated_at` 筛选，页面不提供创建时间/更新时间切换。 |
