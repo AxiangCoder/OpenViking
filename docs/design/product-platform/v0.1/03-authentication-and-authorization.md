@@ -120,7 +120,7 @@ v0.1 不提供 Service Account、Service Account Key、机器角色或相关管�
 
 ### 9.1 权限命名规则
 
-数据类 Permission Code 采用 `<domain>.<action>.<scope>`；管理类 Permission 可采用 `<domain>.<action>`：
+一般数据类 Permission Code 采用 `<domain>.<action>.<scope>`；Resource/Skill 同时存在两种可见性，采用 `<domain>.<visibility>.<action>.<scope>` 避免把“可读取团队共享内容”误解成“可读取团队内所有用户私有内容”。管理类 Permission 可采用 `<domain>.<action>`：
 
 ```text
 account.read
@@ -163,9 +163,21 @@ memory.export.platform
 memory.delete.account
 memory.delete.platform
 
-resource.read.shared
-resource.write.shared
-resource.delete.shared
+resource.user_private.read.self
+resource.user_private.write.self
+resource.user_private.delete.self
+resource.user_private.read.account
+resource.user_private.write.account
+resource.user_private.delete.account
+resource.user_private.read.platform
+resource.user_private.write.platform
+resource.user_private.delete.platform
+resource.account_shared.read.account
+resource.account_shared.write.account
+resource.account_shared.delete.account
+resource.account_shared.read.platform
+resource.account_shared.write.platform
+resource.account_shared.delete.platform
 
 session.read.self
 session.write.self
@@ -174,9 +186,19 @@ session.commit.self
 session.read.account
 session.read.platform
 
-skill.read
-skill.use
-skill.manage
+skill.user_private.read.self
+skill.user_private.use.self
+skill.user_private.manage.self
+skill.user_private.read.account
+skill.user_private.manage.account
+skill.user_private.read.platform
+skill.user_private.manage.platform
+skill.account_shared.read.account
+skill.account_shared.use.account
+skill.account_shared.manage.account
+skill.account_shared.read.platform
+skill.account_shared.use.platform
+skill.account_shared.manage.platform
 
 audit.read
 monitoring.read
@@ -185,13 +207,20 @@ system.task.read
 
 不使用 `admin=true` 之类布尔值代替 Permission。角色只是 Permission 的集合。
 
+其中：
+
+- `user_private` 表示对象归属于一个 User；`self/account/platform` 表示 Actor 可以触达的 Subject 数据范围。
+- `account_shared` 表示对象归属于 Account；`account` 表示当前固定 Account，`platform` 表示由 Platform Super Admin 选择的目标 Account。
+- “共享”不是一个无限范围：`resource.account_shared.read.account` 只能读取 Actor 所属 Account 的共享 Resource，不能读取其他 Account。
+- Account 共享对象不授予创建者额外 Permission。`created_by` 只用于审计，不参与 v0.1 授权。
+
 ### 9.2 内置角色与数据范围
 
 | 角色 | OpenViking Base Role | 数据范围 | 用途 |
 | --- | --- | --- | --- |
 | `platform_super_admin` | 不直接映射为 `root` | 全平台 | 管理并查看所有 Account、用户和数据 |
-| `account_admin` | `admin` | 当前 Account | 管理当前 Account 用户，并查看当前 Account 全部用户数据 |
-| `user` | `user` | 仅自己 | 使用和管理自己的记忆、OpenViking 对话 Session 与允许的共享资源，不能切换 Account |
+| `account_admin` | `admin` | 当前 Account | 管理当前 Account 用户和 Account 共享 Resource/Skill，并查看当前 Account 全部用户数据 |
+| `user` | `user` | 自己 + 当前 Account 共享只读/使用 | 管理自己的私有数据，读取共享 Resource、读取和使用共享 Skill，不能切换 Account |
 
 `platform_super_admin` 是可登录的人类平台角色；`root` 是 OpenViking 机器控制身份。两者权限范围可以相近，但凭据、请求上下文和审计身份不能混用。产品登录不会签发 Root API Key，也不会生成 `Role.ROOT`。
 
@@ -212,8 +241,14 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | 查看其他用户的记忆与对话 Session | 全部 Account | 当前 Account |  |
 | 修改其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 导出、删除其他用户数据 | 独立高风险 Permission | 默认无 |  |
-| 共享资源读取 | ✓ | ✓ | ✓ |
-| 共享资源写入 | ✓ | ✓ | 待确认 |
+| 管理自己的 User 私有 Resource | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
+| 查看其他用户的私有 Resource/Skill | 全部 Account | 当前 Account |  |
+| 修改或删除其他用户的私有 Resource/Skill | 独立高风险 Permission | 默认无 |  |
+| Account 共享 Resource 读取 | 全部 Account | 当前 Account | 当前 Account |
+| Account 共享 Resource 写入、删除 | 全部 Account | 当前 Account |  |
+| 管理自己的 User 私有 Skill | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
+| Account 共享 Skill 读取、使用 | 全部 Account | 当前 Account | 当前 Account |
+| Account 共享 Skill 管理 | 全部 Account | 当前 Account |  |
 | 管理自己的 API Key |  | ✓ | ✓ |
 | 查看并撤销其他用户的 API Key 元数据 | 全部 Account | 当前 Account |  |
 | 查看审计 | 全平台 | 当前 Account |  |
@@ -222,6 +257,8 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 管理员查看他人数据属于授权的数据范围访问，不称为“冒充登录”。每次访问都必须记录 Actor、Subject、Action、Scope、Request ID 和结果；查看权限不能自动推导出写入、导出或删除权限。
 
 Platform Super Admin 的内置角色包含平台级修改、导出和删除 Permission；之所以仍拆成独立 Permission，是为了逐项校验、确认弹窗和审计，而不是降低其最高权限。Account Admin 默认不包含修改、导出或删除他人数据的 Permission。
+
+普通 User 的“只读共享 Resource”包括列表、详情、检索和在其自己的会话/工作流中引用，不包括新增、覆盖正文、改名、移动、打标签、归档、恢复或删除。“使用共享 Skill”表示在被允许的执行入口调用 Skill，不等于修改 Skill 定义。Account Admin 的共享管理权只在自己固定所属的 Account 生效。
 
 ### 9.4 有效权限计算
 

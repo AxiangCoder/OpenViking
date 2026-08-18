@@ -24,11 +24,14 @@ web-platform/
         home/
         memories/
         resources/
+        skills/
         sessions/
         profile/
           api-keys/
       admin/
         users/
+        shared-resources/
+        shared-skills/
         roles/
         audit/
         settings/
@@ -41,6 +44,7 @@ web-platform/
       auth/
       memories/
       resources/
+      skills/
       sessions/
       iam/
     lib/
@@ -58,18 +62,28 @@ web-platform/
 /app
 /app/memories
 /app/resources
+/app/resources/private
+/app/resources/shared
+/app/skills
+/app/skills/private
+/app/skills/shared
 /app/sessions
 /app/profile
 /app/profile/api-keys
 
 /admin/users
+/admin/users/$userId/data
 /admin/users/$userId/api-keys
+/admin/shared-resources
+/admin/shared-skills
 /admin/roles
 /admin/audit
 /admin/settings
 
 /platform/accounts
 /platform/accounts/$accountId/users
+/platform/accounts/$accountId/resources
+/platform/accounts/$accountId/skills
 /platform/accounts/$accountId/users/$userId/data
 /platform/accounts/$accountId/users/$userId/api-keys
 /platform/audit
@@ -77,7 +91,24 @@ web-platform/
 
 `/platform` 仅 Platform Super Admin 可进入。这里选择目标 Account 是查看管理对象，不会改变登录者的 Actor 身份，也不是普通用户意义上的“切换 Account”。Account Admin 和 User 的 Account 始终固定。
 
-### 13.3 前端权限策略
+### 13.3 Resource/Skill 信息架构
+
+产品页面使用“我的”和“Account 共享”两个清晰分区，不使用容易被误解为互联网公开的“公共”标签：
+
+| 页面 | 内容 | User 操作 | Account Admin 操作 |
+| --- | --- | --- | --- |
+| 我的 Resource | 当前用户 `viking://user/{ov_user_id}/resources/**` | 查看、新增、编辑、删除 | 管理自己的 |
+| Account 共享 Resource | 当前 Account `viking://resources/**` | 查看、检索、引用 | 查看、新增、编辑、删除 |
+| 我的 Skill | 当前用户 `viking://user/{ov_user_id}/skills/**` | 查看、使用、管理 | 管理自己的 |
+| Account 共享 Skill | 当前 Account `viking://agent/skills/**` | 查看、使用 | 查看、使用、管理 |
+
+普通 User 在共享页不显示“新建、上传、编辑、移动、标签、删除、恢复”入口，并显示“共享内容由 Account 管理员维护”。Account Admin 可在 `/admin/shared-resources`、`/admin/shared-skills` 集中管理，也可在 `/app` 对应共享页看到相同管理能力。
+
+“添加 Resource”默认进入“我的 Resource”，界面不得把默认目标设为 Account 共享。管理员想发布到共享区时必须从共享页发起明确动作并看到目标 Account；从私有区发布为共享对象采用复制/发布语义，原私有对象保留，新对象获得独立产品 ID 和审计记录。
+
+共享列表可展示创建者和更新时间帮助追溯，但不能显示“只有创建者可编辑”的暗示；v0.1 中共享对象归 Account，由有权限的管理员统一管理。
+
+### 13.4 前端权限策略
 
 - 应用启动调用 `/auth/me`。
 - 未登录访问 `/app`、`/admin` 或 `/platform` 跳转 `/login`。
@@ -88,7 +119,7 @@ web-platform/
 
 “路由 Guard”就是进入页面前的门卫；它能避免用户看到不该看的入口，但真正的锁必须在后端。
 
-### 13.4 前端本地存储规则
+### 13.5 前端本地存储规则
 
 允许保存：
 
@@ -104,7 +135,7 @@ web-platform/
 
 `/app/profile/api-keys` 允许用户显式创建个人 API Key。创建成功后通过专用一次性结果页展示完整 Key，并明确提示立即复制；离开页面后不能再次查看。前端只在当前内存状态中短暂持有明文，不写入任何 Web Storage、URL、错误上报、埋点或剪贴板历史管理逻辑。
 
-### 13.5 Studio 处理
+### 13.6 Studio 处理
 
 - `/studio` 保持现有 bundle 和路由。
 - 第一阶段只允许受控网络、VPN 或管理员访问。
@@ -112,7 +143,7 @@ web-platform/
 - Root 管理密钥不预置进公开静态资源。
 - 后续可用反向代理 SSO 给 `/studio` 再加一层访问保护。
 
-### 13.6 管理员直接创建用户与密码交接
+### 13.7 管理员直接创建用户与密码交接
 
 - Platform Super Admin 创建 Account 时填写首位 Account Admin 的邮箱和展示信息；成功页展示系统生成的初始密码。
 - Account Admin 在 `/admin/users` 直接创建本 Account 的普通 User，不提供邀请按钮、邀请状态、邀请邮件或激活页面。
@@ -137,7 +168,7 @@ web-platform/
   决定“这个身份能不能访问这份具体数据”
 ```
 
-两层之间由服务端根据已授权的 DataAccessContext 构造目标 Subject 的最小权限 `RequestContext`。任何一层拒绝都终止请求，原 Actor 只进入授权与审计上下文，不会被客户端 Header 覆盖。
+两层之间由服务端先将目标分类为 `user_private/account_shared/internal`，再根据已授权的 DataAccessContext 构造最小权限 `RequestContext`。任何一层拒绝都终止请求，原 Actor 只进入授权与审计上下文，不会被客户端 Header 覆盖。OpenViking 现有 Namespace ACL 对同 Account 的 `viking://resources/**` 可达，不等于普通 User 有共享写权限；共享写限制必须由 Platform AuthorizationService 强制执行。
 
 ### 14.2 防止 IDOR
 
@@ -154,6 +185,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 - `/api/platform/v1/*` 面向浏览器和产品用户。
 - `/api/v1/*`、`/mcp` 仅按需要公开，并继续要求 API Key/OAuth。
+- `/api/v1/*` 与 `/mcp` 不是“原生接口所以不受产品权限控制”；对外开放的每个 Router/Tool 都必须接入与 Platform API 相同的 URI 分类和 Permission 检查。
 - `/api/v1/admin/*` 限制在内网、VPN 或受控管理员凭据。
 - `trusted` auth mode 只用于受保护的内部网关链路，不能直接暴露给公网浏览器。
 
@@ -177,6 +209,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 - 发起其他用户密码重置，或撤销其他用户 API Key。
 - 修改、导出或删除其他用户数据。
 - 导出大量记忆或资源。
+- 删除或批量覆盖 Account 共享 Resource/Skill。
 
 确认弹窗必须展示操作对象、目标 Account/User、预计影响数量、是否可恢复和恢复截止时间。用户只需点击“确认”或“取消”，v0.1 不要求重新输入密码、输入 Account 名称或第二人审批。
 
@@ -184,10 +217,10 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 ### 14.6 软删除与回收站
 
-- Account、User、Memory、OpenViking 对话 Session 和 Resource 默认先软删除。
+- Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 默认先软删除。
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
 - Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
-- User 可恢复自己误删且仍在回收期内的数据；Account Admin 可恢复当前 Account 范围对象；Platform Super Admin 可恢复全平台范围对象。
+- User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但默认不能恢复、修改或删除其他用户的私有数据；Platform Super Admin 可按独立平台级高风险 Permission 恢复全平台范围对象。
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
 - 审计事件独立保留，不随业务对象物理清理。
 

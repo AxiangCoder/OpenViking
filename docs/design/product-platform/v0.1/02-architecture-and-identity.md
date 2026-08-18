@@ -65,6 +65,8 @@ OpenViking Product Server (one FastAPI process in Phase 1)
 class AuthenticatedUserPrincipal:
     actor_user_id: str
     actor_account_id: str | None
+    actor_ov_user_id: str | None
+    actor_ov_account_id: str | None
     user_status: str
     authentication_method: Literal["session", "api_key", "oauth"]
     session_id: str | None
@@ -77,7 +79,8 @@ class AuthenticatedUserPrincipal:
 字段说明：
 
 - `actor_user_id` 标识实际操作者；API Key 和 OAuth 不会把插件变成新的 Actor。
-- Platform Super Admin 可使用独立的平台登录主体，其 `actor_account_id` 可为空；上例表示 Account 用户调用路径。
+- `actor_user_id/actor_account_id` 是 PostgreSQL 产品 ID，用于授权和审计；`actor_ov_user_id/actor_ov_account_id` 是调用 OpenViking 时使用的映射 ID，不能混用。
+- Platform Super Admin 可使用独立的平台登录主体，其 `actor_account_id` 和两个 `actor_ov_*` 字段可为空；上例表示 Account 用户调用路径。
 - Account Admin 和 User 的 `actor_account_id` 在登录后固定，产品不提供 Account 切换。
 - `authentication_method` 只说明“通过什么方式证明身份”，不影响角色和数据范围。
 - `session_id` 仅登录 Session 认证时存在；`credential_id` 用于 API Key/OAuth 凭证审计，任何位置都不保存明文密钥。
@@ -100,17 +103,25 @@ class DataAccessContext:
     actor_user_id: str
     actor_account_id: str | None
     subject_account_id: str
-    subject_user_id: str
+    subject_user_id: str | None
+    subject_ov_account_id: str
+    subject_ov_user_id: str | None
+    visibility: Literal["user_private", "account_shared"]
+    canonical_ov_uri: str
     action: str
     request_id: str
 ```
 
+这里的 `Subject` 不总是 User：User 私有数据的 Subject 是数据所属用户；Account 共享数据的 Subject 是目标 Account，因此 `subject_user_id=None`。不能为了复用 User 私有逻辑，虚构一个“共享资源所属用户”。
+
 授权规则：
 
-- User：`actor_account_id == subject_account_id` 且 `actor_user_id == subject_user_id`。
-- Account Admin：`actor_account_id == subject_account_id`，允许读取该 Account 下任意 Subject。
-- Platform Super Admin：允许选择任意 Subject Account/User。
+- User 私有数据：User 只能访问 `actor_account_id == subject_account_id` 且 `actor_user_id == subject_user_id` 的对象；Account Admin 可读取本 Account 内任意 Subject，Platform Super Admin 可按平台范围读取任意 Subject。
+- Account 共享数据：User/Account Admin 只能访问 `actor_account_id == subject_account_id` 的共享对象；Platform Super Admin 可选择任意目标 Account。
+- 普通 User 对 Account 共享 Resource 只有读取权限，对 Account 共享 Skill 只有读取和使用权限；共享写入、删除和 Skill 管理由 Account Admin 或 Platform Super Admin 的独立 Permission 控制。
 - 对他人数据的写入、导出和删除不从“可读取”自动推导，必须检查独立 Permission。
+- `canonical_ov_uri` 必须由服务端构造或规范化，并与 `visibility`、Subject 做一致性校验；客户端提交的 `visibility/account_id/user_id` 不能单独成为授权依据。
+- `subject_*` 是 PostgreSQL 产品 ID，供 RBAC、数据范围和审计使用；`subject_ov_*` 只能由服务端通过 IAM 映射得到，供 OpenViking 执行使用。客户端不能提交 `ov_account_id/ov_user_id` 参与授权。
 
 ### 7.3 转换到 OpenViking RequestContext
 
@@ -120,14 +131,43 @@ def to_ov_context(
     access: DataAccessContext,
 ) -> RequestContext:
     authorize_data_access(principal, access)
+    assert access.visibility == "user_private"
+    assert access.subject_user_id is not None and access.subject_ov_user_id is not None
     return RequestContext(
-        user=UserIdentifier(access.subject_account_id, access.subject_user_id),
+        user=UserIdentifier(access.subject_ov_account_id, access.subject_ov_user_id),
         role=Role.USER,
         actor_peer_id=None,
     )
 ```
 
-对数据读取使用目标 Subject 的最小权限 OpenViking 上下文；Account/User 控制面操作仍走受控的管理服务。Platform Audit Event 始终记录原始 Actor、Subject 和 Request ID，因此不会把管理员误记成目标用户。
+上例只适用于 User 私有数据：对数据读取使用目标 Subject 的最小权限 OpenViking 上下文。Account 共享数据使用独立转换：
+
+```python
+def to_ov_account_context(
+    principal: AuthenticatedUserPrincipal,
+    access: DataAccessContext,
+) -> RequestContext:
+    authorize_data_access(principal, access)
+    assert access.visibility == "account_shared"
+    assert access.subject_user_id is None and access.subject_ov_user_id is None
+    execution_user_id = (
+        principal.actor_ov_user_id
+        if principal.actor_account_id == access.subject_account_id
+        else "platform-gateway"
+    )
+    assert execution_user_id is not None
+    return RequestContext(
+        user=UserIdentifier(access.subject_ov_account_id, execution_user_id),
+        role=Role.USER,
+        actor_peer_id=None,
+    )
+```
+
+同 Account 的 User/Account Admin 使用自己的 OpenViking User ID 作为执行载体；Platform Super Admin 跨 Account 时使用保留的 `platform-gateway` **执行占位标识**。它只是为了满足当前 `RequestContext` 必填 User 字段，不创建 IAM User、OpenViking 可登录用户、Role、API Key 或 OAuth Client，也不能从 HTTP/MCP 声明，因此不是 Service Account。该上下文只能由受控 Adapter 构造并操作已经授权的 Account 共享 URI，不能用于 User 私有根。
+
+两种转换都使用 `Role.USER` 作为最小 OpenViking Base Role；Account Admin/Platform Super Admin 的共享管理能力来自前置 Platform Permission，不依赖把执行上下文提升为 Root/Admin。Account/User 控制面操作仍走受控的管理服务。
+
+Platform Audit Event 始终记录原始 Actor、Subject Account、可空的 Subject User、Visibility、产品 Target ID 和 Request ID；必要时在受保护的内部字段记录 canonical URI，不向普通审计列表泄露路径。因此不会把管理员误记成目标用户，也不会把 Account 共享对象误记到创建者名下。
 
 若产品操作明确针对某个 Peer，可由服务端校验后设置 `actor_peer_id`。客户端不能通过任意 Header 覆盖它。
 
@@ -142,3 +182,25 @@ def to_ov_context(
 | User API Key | 用户委托型集成凭据 | 解析到固定 Account/User，继承实时 RBAC；不用于产品网页登录 |
 | OAuth Token | 用户授权给 MCP 客户端的委托凭据 | 解析到授权 User，权限不超过该用户当前权限 |
 | 插件/MCP 传入的 Account/User | 不可信 | 不能覆盖凭证解析出的 Actor，只能在已授权管理 API 中作为 Subject |
+
+### 7.5 URI 分类与统一授权门
+
+所有外部入口在调用 `OpenVikingService` 前执行同一条链路：
+
+```text
+认证凭证
+  -> Principal Resolver
+  -> URI Canonicalizer
+  -> Target Classifier（user_private / account_shared / internal）
+  -> AuthorizationService（Action + Visibility + Data Scope）
+  -> OpenViking RequestContext
+  -> OpenVikingService
+```
+
+分类规则至少覆盖：
+
+- `viking://user/{ov_user_id}/resources/**`、`.../skills/**`：`user_private`，Subject User 的 OpenViking 映射 ID 必须与 URI 中的 User 一致。
+- `viking://resources/**`、`viking://agent/skills/**`：`account_shared`，Subject User 必须为空，目标 Account 来自 Actor 固定 Account 或已授权的平台管理路径。
+- `viking://agent/endpoints/**`、`tools/**`、`payments/**` 以及内部文件系统根：`internal`，产品外部入口默认拒绝，除非另有显式控制面 Permission。
+
+该链路必须覆盖 `/api/platform/v1`、现有 `/api/v1` Router、MCP Tool 以及 SDK/CLI/插件最终调用的端点。当前 OpenViking `Namespace.is_accessible()` 只解决 Account/User 命名空间可达性，不能替代“普通 User 禁止写 Account 共享区”的产品授权。

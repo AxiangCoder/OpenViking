@@ -38,8 +38,10 @@ openviking/server/platform/
   product/
     memories.py
     resources.py
+    skills.py
     sessions.py
     search.py
+    target_policy.py
     data_access.py
     recycle_bin.py
 
@@ -53,6 +55,7 @@ openviking/server/platform/
     api_credentials.py
     product_memories.py
     product_resources.py
+    product_skills.py
     product_sessions.py
     admin_accounts.py
     admin_users.py
@@ -102,8 +105,10 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 该层负责：
 
 - 把产品 ID 转换成受控 OpenViking URI。
+- 把目标 URI 规范化并分类为 `user_private/account_shared/internal`，校验 URI、Account、Owner User 与 PostgreSQL 引用记录一致。
 - 普通用户接口固定使用 Actor 自己的 Account/User，不接受其他 Subject。
 - Account Admin/Platform Super Admin 接口允许指定目标 Subject，但必须先执行 account/platform Scope 授权。
+- 普通用户新增 Resource/Skill 时固定写入自己的 User 私有区；只有共享管理接口才能写入 Account 共享区，且必须拥有对应 `account_shared.*` Permission。
 - 注入 `RequestContext`。
 - 将 Actor、Subject、Action、Scope 和 Request ID 写入审计事件。
 - 查询 `iam_deletion_jobs`，保证软删除对象不出现在正常列表，也不能被普通详情接口读取。
@@ -111,6 +116,8 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 - 将 OpenViking 底层响应转换成稳定产品 DTO。
 
 示例：产品前端请求“我的记忆列表”，后端固定构造当前用户的 canonical User URI，不接受 `user_id` 参数；Account Admin 请求“查看成员记忆”时，路由中的 `user_id` 只作为 Subject，后端验证其属于当前 Account 后再构造 URI。
+
+Account 共享数据没有 Subject User。共享 Resource/Skill 访问只记录 `subject_account_id`，`subject_user_id` 为空；`created_by_actor_user_id` 是审计信息，不参与授权。不得为了复用“我的数据”接口，把共享对象伪装成创建者的私有对象。
 
 ### 11.3 Provisioning 与单一身份事实来源
 
@@ -157,6 +164,38 @@ API Key 不自动随用户创建而签发，Account Admin 也不能替用户创�
 OAuth Access Token 最终也映射到同一 `AuthenticatedUserPrincipal`。MCP middleware 与 REST auth dependency 必须复用同一个 Principal Resolver，避免 MCP 成为绕过 RBAC 的旁路。
 
 v0.1 不定义 Service Account 的 repository、resolver 或 credential type。内部 Worker 使用不可从公网提交、不可导出的 `SystemPrincipal`，不能拿 Root/User API Key 代替。
+
+### 11.5 低层 OpenViking API、MCP 与 URI Policy
+
+只给 `/api/platform/v1` 加权限检查是不够的。现有 `/api/v1`、MCP、SDK/CLI 和插件最终都可以触达 OpenViking 低层动作，因此必须在 Router/MCP Tool 调用 `OpenVikingService` 之前复用 `TargetPolicy + AuthorizationService`。
+
+最低映射规则：
+
+| 目标/动作 | 必需 Permission |
+| --- | --- |
+| 读取/检索自己的 `viking://user/{actor_ov_user_id}/resources/**` | `resource.user_private.read.self` |
+| 新增、写入、改名、移动、打标签、恢复自己的私有 Resource | `resource.user_private.write.self` |
+| 删除自己的私有 Resource | `resource.user_private.delete.self` |
+| 读取/检索 `viking://resources/**` | 当前 Account 使用 `resource.account_shared.read.account`；平台管理使用 `.platform` |
+| 任何会改变 `viking://resources/**` 的动作 | `resource.account_shared.write.account/platform`；删除使用对应 `.delete.*` |
+| 读取、使用、管理自己的 User 私有 Skill | `skill.user_private.read.self`、`.use.self`、`.manage.self` |
+| 查看或管理其他 User 的私有 Skill | 对应 `.read.account/platform`；修改/删除还需独立 `.manage.account/platform`，v0.1 不授予 Account Admin |
+| 读取、使用、管理 `viking://agent/skills/**` | 对应 `skill.account_shared.*.account/platform` |
+| 访问 `agent/endpoints/tools/payments` 或内部根 | 产品/用户集成默认拒绝；必须另行定义控制面 Permission |
+
+“会改变”包括但不限于 `add_resource`、`write`、`mkdir`、`mv` 的源与目标、`set_tags`、归档、导入、恢复和批量操作；不能只保护 POST 创建接口。跨可见性移动不得作为普通 `mv` 放行，必须走“复制/发布为新对象”业务动作。
+
+为避免 Product API 与低层入口形成两份内容目录，所有对外创建 Resource/Skill 的入口还必须共用 Content Registry Service：先按 `Idempotency-Key` 建立 `platform_content_refs(status=provisioning)`，再调用 OpenViking，成功后写入 canonical URI 并置为 `active`；失败置为 `failed` 并由 Reconciler 清理或重试。产品列表只返回 `active` 引用。低层 `write/mkdir` 不允许在未登记的新顶级内容根下直接创建产品对象；应改走 `add_resource/add_skill`，已有对象内部写入则解析现有引用并更新审计。这样 API Key、MCP 或插件创建的内容会立即出现在相同产品页面中。
+
+默认目标规则：
+
+- 用户 API Key/OAuth 调用 `add_resource` 且未显式指定目标时，服务端强制使用 `viking://user/{actor_ov_user_id}/resources/**`，不能沿用源码当前的 `viking://resources` 默认值。
+- Skill 默认目标保持 User 私有 `viking://user/{actor_ov_user_id}/skills/**`。
+- 显式指定 Account 共享目标不会改变身份，只会触发共享写 Permission 检查；普通 User 返回 403。
+- 搜索必须由服务端按有效权限注入可见根：自己的私有根 + 当前 Account 共享根；客户端不能通过额外 URI 扩大搜索范围。
+- Platform Super Admin 的跨 Account 低层调用只能来自平台管理 API，不接受普通用户凭证通过 Header 切换目标 Account。
+
+当前源码中 `Namespace.is_accessible()` 会允许同 Account 用户触达 `viking://resources/**`，但它没有表达“普通 User 只读、Account Admin 可写”的产品策略。因此 OpenViking Namespace ACL 仍作为隔离兜底，新的 URI Policy 才是共享区写权限的强制边界。
 
 ## 12. API 设计
 
@@ -273,6 +312,8 @@ RESTORE_WINDOW_EXPIRED
 - API Key/OAuth 解析出的 Account/User 是 Actor，客户端不得通过 Header 或请求体切换身份。
 - 每个低层 API/MCP Tool 必须映射到 Permission Code；同一用户通过登录 Session、API Key、OAuth 调用相同业务动作时授权结果一致。
 - Codex、OpenClaw、OpenCode 等插件使用谁的 Key，就以谁的身份读写和审计。
+- 所有低层目标先规范化并分类；普通 User 可读取 Account 共享 Resource、读取/使用共享 Skill，但写入和删除共享区返回 403。
+- 未显式指定 Resource 目标时默认写入调用用户的 User 私有区；客户端不能利用源码默认值把个人内容写入共享区。
 - v0.1 不接受 `principal_type=service_account`，也不签发 Service Account Key。
 
 ### 12.5 产品 API
@@ -284,9 +325,24 @@ RESTORE_WINDOW_EXPIRED
 | POST | `/api/platform/v1/memories/search` | `memory.read.self` | search/find |
 | PUT | `/api/platform/v1/memories/{id}` | `memory.write.self` | content write |
 | DELETE | `/api/platform/v1/memories/{id}` | `memory.delete.self` | 软删除；30 天后 rm |
-| GET | `/api/platform/v1/resources` | `resource.read.shared` | account shared resources |
-| POST | `/api/platform/v1/resources` | `resource.write.shared` | add_resource |
-| DELETE | `/api/platform/v1/resources/{id}` | `resource.delete.shared` | 软删除；30 天后 rm |
+| GET | `/api/platform/v1/me/resources` | `resource.user_private.read.self` | 当前 User 私有 Resource |
+| POST | `/api/platform/v1/me/resources` | `resource.user_private.write.self` | 固定添加到当前 User 私有区 |
+| PUT | `/api/platform/v1/me/resources/{id}` | `resource.user_private.write.self` | 仅自己的私有 Resource |
+| DELETE | `/api/platform/v1/me/resources/{id}` | `resource.user_private.delete.self` | 软删除；30 天后 rm |
+| GET | `/api/platform/v1/account/resources` | `resource.account_shared.read.account` | 当前 Account 共享 Resource，只读接口对普通 User 开放 |
+| POST | `/api/platform/v1/account/resources` | `resource.account_shared.write.account` | Account Admin 新建共享 Resource |
+| PUT | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.write.account` | Account Admin 修改共享 Resource |
+| DELETE | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.delete.account` | Account Admin 软删除共享 Resource |
+| GET | `/api/platform/v1/me/skills` | `skill.user_private.read.self` | 当前 User 私有 Skill |
+| POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 新建自己的私有 Skill |
+| PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 修改自己的私有 Skill |
+| DELETE | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 软删除自己的私有 Skill |
+| POST | `/api/platform/v1/me/skills/{id}/execute` | `skill.user_private.use.self` | 使用自己的私有 Skill |
+| GET | `/api/platform/v1/account/skills` | `skill.account_shared.read.account` | 当前 Account 共享 Skill |
+| POST | `/api/platform/v1/account/skills/{id}/execute` | `skill.account_shared.use.account` | 使用当前 Account 共享 Skill |
+| POST | `/api/platform/v1/account/skills` | `skill.account_shared.manage.account` | Account Admin 新建共享 Skill |
+| PUT | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 修改共享 Skill |
+| DELETE | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 软删除共享 Skill |
 | GET | `/api/platform/v1/sessions` | `session.read.self` | current user sessions |
 | POST | `/api/platform/v1/sessions` | `session.write.self` | create session |
 | POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | add message |
@@ -296,6 +352,8 @@ RESTORE_WINDOW_EXPIRED
 | POST | `/api/platform/v1/recycle-bin/{id}/restore` | 对应资源的 self write | 30 天内恢复 |
 
 产品 API 返回产品 DTO，不原样泄露内部绝对文件路径、系统目录和控制字段。普通用户请求永远不能切换 Account；`auth/me` 的 Account 是固定归属，不提供 Account 切换列表。
+
+不提供含义不清的通用写接口 `/api/platform/v1/resources` 或 `/api/platform/v1/skills`。`/me/*` 明确表示 User 私有目标，`/account/*` 明确表示 Account 共享目标；后端仍根据对象引用和 canonical URI 二次校验，不能只相信路径名称。
 
 ### 12.6 管理 API
 
@@ -312,6 +370,8 @@ RESTORE_WINDOW_EXPIRED
 | GET | `/api/platform/v1/admin/audit-events` | `audit.read` |
 | GET | `/api/platform/v1/admin/users/{id}/memories` | `memory.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/sessions` | `session.read.account` |
+| GET | `/api/platform/v1/admin/users/{id}/resources` | `resource.user_private.read.account` |
+| GET | `/api/platform/v1/admin/users/{id}/skills` | `skill.user_private.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/api-keys` | `credential.read.account` |
 | DELETE | `/api/platform/v1/admin/users/{id}/api-keys/{credential_id}` | `credential.revoke.account` |
 | GET | `/api/platform/v1/admin/recycle-bin` | Account 范围恢复权限 |
@@ -329,6 +389,12 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users` | `user.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/memories` | `memory.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/resources` | `resource.user_private.read.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills` | `skill.user_private.read.platform` |
+| GET/POST | `/api/platform/v1/platform/accounts/{account_id}/resources` | `resource.account_shared.read.platform/resource.account_shared.write.platform` |
+| PUT/DELETE | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.write.platform/resource.account_shared.delete.platform` |
+| GET/POST | `/api/platform/v1/platform/accounts/{account_id}/skills` | `skill.account_shared.read.platform/skill.account_shared.manage.platform` |
+| PUT/DELETE | `/api/platform/v1/platform/accounts/{account_id}/skills/{id}` | `skill.account_shared.manage.platform` |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/password/reset` | `user.password.reset.platform`；禁止目标为 Platform Super Admin |
 | PUT | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/role` | `role.assign.platform`；仅 `user -> account_admin` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys` | `credential.read.platform` |

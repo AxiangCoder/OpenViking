@@ -13,10 +13,14 @@
 - CSRF 校验。
 - Permission 并集和角色禁用。
 - `AuthenticatedUserPrincipal + DataAccessContext -> RequestContext` 映射。
+- PostgreSQL 产品 ID 与 `ov_account_id/ov_user_id` 映射不可混用，OpenViking URI 只能使用服务端查得的 `ov_*` ID。
+- `platform-gateway` 执行占位标识只能用于已授权的 Account 共享 URI，不能登录、签发 Key、访问 User 私有根或从外部请求声明。
 - 登录 Session、用户 API Key、OAuth 到同一用户 Principal 的解析。
 - API Key hash 校验、一次性明文、到期和撤销。
 - Actor/Subject Scope 授权矩阵。
 - 产品 ID 到 OpenViking URI 的安全映射。
+- URI 分类器能稳定区分 `user_private/account_shared/internal`，并拒绝 URI、Owner User、Account 与可见性不一致的对象。
+- Resource 未指定目标时强制落入 Actor 的 User 私有区，不继承源码当前共享区默认值。
 - 审计脱敏。
 
 ### 18.2 API 集成测试
@@ -30,6 +34,10 @@
 - Platform Super Admin 不能通过产品 API 创建或重置另一个 Platform Super Admin。
 - 上级管理员重置低级别用户密码后，目标用户全部登录 Session 立即失败，但 OpenViking 对话 Session 和 API Key 不受影响。
 - User A 不能读取 User B 的 Memory/OpenViking 对话 Session。
+- User A 可管理自己的私有 Resource/Skill，但不能读取 User B 的私有 Resource/Skill。
+- 普通 User 可读取 Account 共享 Resource、读取和使用共享 Skill，但所有共享新增、写入、改名、移动、标签、恢复和删除操作均返回 403。
+- Account Admin 可管理本 Account 的共享 Resource/Skill，不能管理其他 Account 的共享内容，也不能默认修改其他用户的私有内容。
+- Account 共享对象删除创建者后仍保留，且授权不取决于 `created_by`。
 - Account Admin 能读取当前 Account 成员数据，但不能修改、导出或删除他人数据。
 - Account Admin 不能访问其他 Account；Platform Super Admin 可以按平台权限读取任意 Account/User 数据。
 - 管理员跨用户读取的审计事件同时包含正确 Actor 与 Subject。
@@ -48,6 +56,9 @@
 - API Key 解析出的 Account/User 不能被 Header、URL 或请求体覆盖。
 - MCP、Python SDK、TypeScript SDK、CLI 和 Codex/OpenClaw/OpenCode 插件可使用新签发的用户 API Key。
 - MCP 与 REST 复用同一 Principal Resolver 和 AuthorizationService。
+- 同一普通 User 通过 `/api/platform/v1`、`/api/v1`、MCP、SDK/CLI 或插件访问相同 URI 时得到一致的共享/私有授权结果。
+- `/api/v1` 的 `write/rm/mv/set_tags/add_resource` 及对应 MCP Tool 不能绕过共享区只读策略；`mv` 的源和目标都要授权。
+- 搜索只返回调用者自己的私有根与当前 Account 共享根，不返回同 Account 其他 User 私有数据或其他 Account 数据。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - `/studio` 仍可访问，但生产访问受网络边界控制。
 
@@ -59,6 +70,8 @@
 - Account Admin 能管理用户并查看当前 Account 的用户数据，但看不到跨 Account 数据。
 - Platform Super Admin 可从 `/platform` 查看所有 Account、用户和数据，页面始终保留当前 Actor 身份。
 - 普通用户没有 Account 切换入口。
+- Resource/Skill 页面明确分为“我的”和“Account 共享”；普通 User 的共享页没有写入、删除或恢复入口。
+- 新增 Resource 默认进入“我的 Resource”；管理员发布到共享区时页面明确展示目标 Account，并创建独立共享对象。
 - 高风险操作弹窗展示影响范围，不要求输入密码或 Account 名称。
 - Role 变更后导航和按钮即时更新。
 - 登录 Session 过期后回到登录页且不丢失安全状态。
@@ -76,6 +89,7 @@
 - 创建/重置密码响应不会进入访问日志、前端埋点、错误上报或审计 metadata。
 - 删除/禁用最后一个 Account Admin 被拒绝。
 - 篡改 Subject Account/User、伪造角色或绕过确认弹窗均不能绕过后端授权。
+- 篡改 `visibility`、直接提交 `viking://resources`、利用默认目标、编码/别名 URI 或跨可见性移动均不能绕过共享写权限。
 
 ## 19. 分阶段实施
 
@@ -147,6 +161,7 @@
 - `openviking/server/routers/__init__.py`：若沿用现有聚合方式，导出 Platform Router。
 - `openviking/server/auth/plugins/api_key.py` 与 `openviking/server/api_keys/**`：改为从 PostgreSQL 用户凭证生成统一 Principal，不读取旧用户 Key registry。
 - `openviking/server/mcp_endpoint.py`：复用与 REST 相同的 Principal Resolver 和 AuthorizationService。
+- `openviking/server/routers/content.py`、`filesystem.py`、`resources.py`、`skills.py` 等外部低层入口：接入统一 URI Target Policy，覆盖读、写、移动、标签、删除与默认添加目标。
 - `openviking/server/config.py` 或主配置模型：接入 Platform 配置。
 - `pyproject.toml`：增加 PostgreSQL/SQLAlchemy/Alembic 依赖。
 - Dockerfile / Compose / Helm：增加 `web-platform` 构建和 PostgreSQL 配置。
@@ -181,6 +196,9 @@
 17. Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建普通 User，系统没有注册、邀请和激活流程。
 18. 初始/重置密码可复制、可长期使用且不强制修改；后端不保存明文，页面关闭后不能再次获取。
 19. 密码重置只允许严格上级操作下级；同级重置被拒绝，成功后只撤销目标登录 Session，不删除 OpenViking 对话数据或自动撤销 API Key。
+20. Resource/Skill 在页面、产品 API、低层 API、MCP 和审计中都能明确区分 User 私有与 Account 共享，不出现把 Account 共享称为互联网“公共”的含糊语义。
+21. 普通 User 默认新增 Resource/Skill 到自己的私有区，只读共享 Resource、读取/使用共享 Skill；任何渠道均不能写入或删除 Account 共享区。
+22. Account Admin 可管理本 Account 共享 Resource/Skill；Platform Super Admin 可管理目标 Account；共享对象不因创建者变化而改变授权或被自动删除。
 
 ## 22. 关键架构决策记录
 
@@ -204,6 +222,11 @@
 | 用户 API Key | 多个具名 Key，全部代表所属 User | 支持插件按设备撤销，同时保持身份、RBAC 和数据范围统一 |
 | 插件与 MCP 身份 | 用户委托型集成 | 调用渠道不产生新身份，使用谁的 Key 就代表谁 |
 | Service Account | v0.1 不提供 | 当前没有独立于自然人的 Account 级共享机器主体需求 |
+| Resource/Skill 可见性 | `user_private` 与 `account_shared` | “共享”严格限定在同一 Account；不使用含糊的“公共”表示跨租户或互联网可见 |
+| 普通 User 的共享权限 | Resource 只读；Skill 可读、可使用、不可管理 | 团队共享内容由 Account Admin 维护，避免所有成员直接改写共同知识 |
+| 默认新增位置 | User 私有区 | 当前源码 Resource 默认落入共享根，不符合产品最小权限原则；服务端必须显式覆盖 |
+| 共享对象所有权 | 归 Account，不归创建者 | `created_by` 只审计，不引入 v0.1 的贡献者/内容所有者权限模型 |
+| 多入口授权 | Platform API、低层 API、MCP 共用 Principal Resolver、URI Policy 和 RBAC | API Key、SDK/CLI 或插件只是调用渠道，不能成为权限旁路 |
 | 管理员数据访问 | Actor/Subject 分离 | 管理员按范围查看数据，同时保留真实操作者和数据归属者 |
 | 高风险确认 | 展示影响范围的确认弹窗 | v0.1 以防误触为目标，不重输密码、不输入名称、不做双人审批 |
 | 删除策略 | 30 天软删除 | 提供误操作恢复窗口，期满后异步物理清理 |
@@ -213,8 +236,7 @@
 
 这些问题不阻塞架构设计，但在编码前必须定稿：
 
-1. Account 共享资源是否允许普通 User 写入。
-2. 是否需要第一阶段即支持企业微信/OIDC。
-3. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理 SSO。
+1. 是否需要第一阶段即支持企业微信/OIDC。
+2. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理 SSO。
 
 在这些决策确认前，可以先实现与产品策略无关的底座：PostgreSQL schema、登录 Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约测试。

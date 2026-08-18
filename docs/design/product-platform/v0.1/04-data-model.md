@@ -175,6 +175,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | `subject_user_id` | 被访问数据所属 User，可空 |
 | `action` | 权限或业务动作 |
 | `target_type/target_id` | 操作对象 |
+| `target_visibility` | `user_private/account_shared/internal`，非数据操作可空 |
 | `scope` | `self/account/platform` |
 | `result` | `success/denied/failed` |
 | `reason` | 拒绝/失败原因 |
@@ -200,9 +201,37 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | `last_error` | 脱敏错误 |
 | `created_at/completed_at` | 时间 |
 
-### 10.11 `iam_deletion_jobs`
+### 10.11 `platform_content_refs`
 
-统一跟踪 Account、User、Memory、OpenViking 对话 Session 和 Resource 的软删除、恢复和期满清理：
+该表保存产品稳定 ID、授权元数据与 OpenViking URI 的映射，不复制业务内容正文。OpenViking 仍是内容事实来源，PostgreSQL 是可见性、归属与审计关联的事实来源。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID/ULID 主键，作为产品 API 的对象 ID |
+| `account_id` | 对象所在 Account，不可空 |
+| `object_type` | `resource/skill`；Memory 与 Session 继续使用 OpenViking 自身稳定 ID，不建立影子目录 |
+| `visibility` | `user_private/account_shared` |
+| `owner_user_id` | User 私有对象的所属 User；Account 共享对象必须为空 |
+| `ov_uri` | 规范化后的 OpenViking URI，在 Account 内唯一；不直接由前端指定 |
+| `created_by_actor_user_id` | 实际创建者，仅用于审计和展示，不授予 Account 共享对象所有权 |
+| `updated_by_actor_user_id` | 最近更新 Actor，可空 |
+| `status` | `provisioning/active/failed/pending_deletion/deleted` |
+| `created_at/updated_at/deleted_at` | 时间 |
+
+一致性约束：
+
+- `visibility=user_private` 时 `owner_user_id IS NOT NULL`，URI 必须位于该 User 的 `viking://user/{ov_user_id}/...` canonical root。
+- `visibility=account_shared` 时 `owner_user_id IS NULL`，Resource URI 必须位于 `viking://resources/**`，Skill URI 必须位于 `viking://agent/skills/**`。
+- 客户端提交的可见性不能直接落库；服务端根据操作入口、已授权目标与 canonical URI 共同判定，并在事务中校验。
+- Account 共享对象属于 Account，不属于创建它的 User。删除或禁用创建者不自动删除共享对象，也不会改变其他成员的读取权限。
+- v0.1 不支持把对象在 `user_private` 与 `account_shared` 间直接改字段转换。发布到共享区或复制回私有区是显式的新建动作，生成新产品 ID、执行对应写权限检查并分别审计。
+- 产品 API、对外开放的低层 API 与 MCP 创建 Resource/Skill 时都必须通过同一个 Content Registry Service 写入该表，不能产生只存在于 OpenViking、没有产品引用记录的外部内容。
+
+索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。
+
+### 10.12 `iam_deletion_jobs`
+
+统一跟踪 Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 的软删除、恢复和期满清理：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -223,3 +252,4 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - 回收期内按数据范围授权恢复；恢复动作必须写审计。
 - 到达 `purge_after` 后由后台 Worker 幂等清理 OpenViking 数据，再将状态置为 `purged`。
 - 审计事件不随业务数据物理清理。
+- `resource_id` 引用 `platform_content_refs.id`；删除任务中的 `ov_uri` 只供受控 Worker 使用，不能替代创建任务时的可见性与 Permission 校验。

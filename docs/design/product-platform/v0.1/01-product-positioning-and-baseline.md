@@ -14,6 +14,7 @@
 - Platform API 在服务端把登录身份转换成现有 `RequestContext(account_id, user_id, role)`，直接调用 `OpenVikingService`，不在同一进程内绕一圈 HTTP。
 - SDK、CLI、插件和 MCP 使用用户 API Key 或用户 OAuth Token，解析为与网页登录相同的用户主体和 RBAC 权限。
 - 产品角色和细粒度权限由 Platform API 强制执行；OpenViking 核心继续承担 account/user/peer 命名空间隔离，形成双层防护。
+- Resource 与 Skill 明确区分 Account 共享区和 User 私有区；普通 User 默认写入自己的私有区，并对 Account 共享区只读/使用。
 
 第一阶段目标不是把 OpenViking 改造成通用身份提供商，而是在复用其核心能力的前提下，构建一个可登录、可授权、可管理、可审计的产品平台。v0.1 是产品初版，不承担旧 Account/User/API Key 门禁的迁移与兼容。
 
@@ -39,7 +40,10 @@
 | Root | OpenViking 实例级最高控制身份 | 系统密钥，不是普通可分配用户角色 |
 | Platform Super Admin | 产品平台的人类超级管理员 | 可以管理和查看所有 Account、用户及数据，但不等于 Root API Key |
 | Actor | 实际发起操作的登录用户 | 谁在看、谁在操作 |
-| Subject | 被访问数据的归属用户 | 正在查看谁的数据 |
+| Subject | 被访问或操作的数据主体，可以是 User，也可以是 Account | 正在看谁的私有数据，或正在操作哪个团队的共享数据 |
+| User 私有数据 | 归属于一个确定 User，只允许本人及被明确授权的管理员按数据范围访问 | 某个用户自己的资料，不会因为在同一 Account 就自动让其他普通用户看到 |
+| Account 共享数据 | 归属于 Account、不归属于创建者个人，同一 Account 的成员按角色共同读取或管理 | 团队共用区；这里只是团队内共享，不是向互联网公开 |
+| 可见性（Visibility） | 对象采用 `user_private` 或 `account_shared` 的业务分类 | 这份数据到底是“我自己的”还是“团队共用的” |
 
 ### 2.1 三类页面的明确划分
 
@@ -58,8 +62,8 @@
 
 1. 支持账号密码登录、退出、查看当前用户和撤销登录会话。
 2. 支持 Platform Super Admin 创建 Account 和首位 Account Admin，支持 Account Admin 直接创建本 Account 普通 User。
-3. 支持普通用户访问自己的 OpenViking 记忆、对话 Session 和 User 资源。
-4. 支持 Account 共享资源的权限控制。
+3. 支持普通用户访问和管理自己的 OpenViking 记忆、对话 Session、User 私有 Resource 与 User 私有 Skill。
+4. 支持同一 Account 成员读取 Account 共享 Resource，读取和使用 Account 共享 Skill；共享内容由 Account Admin 管理，普通 User 在 v0.1 只读。
 5. 支持 Account Admin 管理并查看当前 Account 的用户和数据，支持 Platform Super Admin 查看全平台 Account、用户和数据。
 6. 支持用户创建、查看元数据和撤销个人 API Key，并用于 SDK、CLI、插件和 MCP。
 7. 用户 API Key 与 OAuth Token 只代表所属用户，实时继承用户状态、角色、Permission 和数据范围。
@@ -100,6 +104,9 @@
 | Codex/OpenClaw/OpenCode 集成 | `examples/*-plugin/` | 当前均可配置用户 API Key，确认这些插件属于用户委托型集成 |
 | account 物理路径隔离 | `openviking/storage/viking_fs.py` | 继续作为核心数据隔离层 |
 | user/peer URI ACL | `openviking/core/namespace.py` | 继续阻止客户端绕过 Platform 授权直接跨用户读取 |
+| User 私有目录 | `openviking/core/directories.py` | `viking://user/{ov_user_id}/resources/**` 与 `.../skills/**` 分别作为私有 Resource/Skill 区 |
+| Account 共享 Resource | `openviking/core/directories.py`、`openviking/storage/viking_fs.py` | `viking://resources/**` 作为当前 Account 共享区 |
+| Account 共享 Skill | `openviking/utils/skill_processor.py`、`openviking/server/routers/skills.py` | `viking://agent/skills/**` 作为当前 Account 共享 Skill 区 |
 | OAuth 2.1 | `openviking/server/oauth/` | 复用 MCP 授权协议，最终仍解析为授权用户主体 |
 | Web Studio | `web-studio/` | 原样保留在 `/studio` |
 
@@ -114,12 +121,32 @@
 5. Studio 使用 API Key 连接 OpenViking，不是产品登录会话。
 6. 现有 Admin API 适合 OpenViking 控制面，不足以表达产品登录、管理员直建用户、分级密码重置、禁用和审计。
 7. 当前 API Key 与 Account/User registry、Base Role 绑定，尚未与产品 PostgreSQL RBAC 统一，也没有独立 Service Account 主体。
+8. 当前 `viking://resources/**` 对 Account 内已认证用户可访问，`content.write`、Resource 添加和文件删除等低层写接口没有按产品角色区分共享区写权限；仅依赖当前 Namespace ACL 不能实现“普通 User 只读共享区”。
+9. 当前 Resource 默认添加目标是 `viking://resources`，而 Skill 默认写入 `viking://user/{ov_user_id}/skills`；若不覆盖 Resource 默认目标，普通用户通过 API/MCP 添加的内容会误入 Account 共享区。
+10. 源码中的 `PUBLIC_SCOPES` 表示可以作为公开 API URI 使用的根路径集合，不等于产品业务上的“所有人公开可见”，产品文档不得据此把 Account 共享数据称为互联网公共数据。
+11. 当前 OpenViking Admin 身份不会自动获得其他 User 私有 URI 的读取能力；Account Admin/Platform Super Admin 查看他人私有数据仍需要 Product Facade 在保留原 Actor 的同时构造目标 Subject 上下文。
 
-### 4.3 必须保留的底层不变量与产品约束
+### 4.3 v0.1 数据可见性映射
+
+| OpenViking URI | v0.1 业务分类 | 普通 User | Account Admin | Platform Super Admin |
+| --- | --- | --- | --- | --- |
+| `viking://user/{ov_user_id}/resources/**` | User 私有 Resource | 管理自己的 | 管理自己的；可读本 Account 其他用户 | 可按平台权限读取或执行高风险管理 |
+| `viking://resources/**` | Account 共享 Resource | 只读本 Account | 管理本 Account | 管理任意目标 Account |
+| `viking://user/{ov_user_id}/skills/**` | User 私有 Skill | 读取、使用、管理自己的 | 同左；可读本 Account 其他用户 | 可按平台权限读取或执行高风险管理 |
+| `viking://agent/skills/**` | Account 共享 Skill | 读取、使用本 Account | 管理本 Account | 管理任意目标 Account |
+| `viking://user/{ov_user_id}/memories/**`、`sessions/**`、`privacy/**`、`peers/**` | User 私有业务数据 | 访问自己的 | 按现有 Actor/Subject 规则读取本 Account | 按平台规则访问目标 Account/User |
+| `viking://agent/endpoints/**`、`tools/**`、`payments/**` | OpenViking Account 级技术命名空间 | 产品 API 默认不开放 | 产品 API 默认不开放 | 仅经另行定义的控制面权限开放 |
+| `temp`、`queue`、`upload`、`_system` 等内部目录 | 系统内部数据 | 不开放 | 不开放 | 不通过产品数据 API 开放 |
+
+Account 共享对象的权限归 Account，而不是归创建者：创建者只记录在 `created_by_actor_user_id` 审计字段中，不因此获得“只有我能改”或“离开 Account 后仍拥有”的特殊权利。v0.1 不设计共享内容贡献者角色或“只能编辑自己创建的共享内容”；如未来需要，单独增加内容所有权/工作流模型。
+
+### 4.4 必须保留的底层不变量与产品约束
 
 - `account_id` 是 OpenViking 物理路径和向量数据隔离边界。
 - `user_id` 是 User URI、OpenViking 对话 Session、Memory 和 Peer 数据归属边界。
 - User 只能访问自己的 User namespace，且不能切换 Account。
+- `viking://resources/**` 与 `viking://agent/skills/**` 只在当前 Account 内共享，不允许跨 Account；`viking://user/{ov_user_id}/**` 始终是 User 私有命名空间。
+- 普通 User 的 Resource 默认目标必须由服务端绑定为 `viking://user/{actor_ov_user_id}/resources/**`，不能沿用当前源码的共享区默认值；只有拥有 Account 共享写 Permission 的 Actor 才能显式选择共享目标。
 - Account Admin 跨用户读取、Platform Super Admin 跨 Account/用户读取只能经过 Platform API 的数据范围授权，不改变 OpenViking 低层 API 的默认 ACL。
 - 管理员读取目标用户数据时必须同时保留 Actor 与 Subject，不能把管理员身份无痕替换成目标用户。
 - Root 是实例级控制身份，不写入普通角色绑定表，不通过产品 UI 分配。
@@ -139,3 +166,5 @@
 7. **多入口、同一身份与权限**：登录 Session、用户 API Key 和 OAuth 只改变认证方式，不产生第二套角色和门禁。
 8. **初版不背兼容债**：不导入旧用户凭证或维持双身份存储；协议入口是否沿用由首版客户端需求决定。
 9. **删除默认可恢复**：Account、用户和业务数据先软删除并保留 30 天，物理清理异步执行。
+10. **可见性由 URI 与后端策略共同决定**：服务端先把目标 URI 规范化为 `user_private/account_shared/internal`，再检查对应 Permission；不能信任客户端填写的可见性字段。
+11. **低层入口不是旁路**：`/api/v1`、MCP、SDK/CLI 与插件必须和产品 API 共用 Principal Resolver、AuthorizationService 和 URI Policy，不能只在前端隐藏按钮。

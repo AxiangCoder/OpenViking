@@ -29,6 +29,10 @@
 - 高风险操作使用展示影响范围的确认弹窗，不要求重输密码、输入 Account 名称或双人审批。
 - Account、用户及其数据使用 30 天软删除与恢复窗口，期满后异步物理清理。
 - SDK、CLI、插件和 MCP 使用用户 API Key 或用户 OAuth Token，均代表授权用户本人，并实时继承同一套 RBAC 与数据范围。
+- 业务数据不使用含糊的“公共/私有”表述，统一分为 **Account 共享数据** 与 **User 私有数据**；共享只表示同一 Account 内可见，不表示互联网公开或跨 Account 可见。
+- `viking://resources/**` 是 Account 共享 Resource；`viking://user/{ov_user_id}/resources/**` 是 User 私有 Resource。普通 User 默认新增到自己的私有区，只读 Account 共享 Resource；Account Admin 管理本 Account 共享 Resource。
+- `viking://agent/skills/**` 是 Account 共享 Skill；`viking://user/{ov_user_id}/skills/**` 是 User 私有 Skill。普通 User 可读取和使用共享 Skill，但只能管理自己的私有 Skill；Account Admin 管理本 Account 共享 Skill。
+- `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - v0.1 不提供 Service Account 或 Service Account Key；内部 Worker 使用不对外签发凭证的系统身份。
 - v0.1 是产品初版，不导入或兼容旧 Account/User/API Key 门禁；现有协议入口可被选为首版契约，但鉴权统一接入新 IAM。
 
@@ -40,9 +44,9 @@
 | 2026-08-18 | Design v0.1 补充 | 明确三级数据范围、Actor/Subject 审计、弹窗确认与 30 天软删除。 |
 | 2026-08-18 | Design v0.1 凭证修订 | 明确插件/MCP 为用户委托型集成，用户 API Key 统一继承 RBAC；Service Account 和旧门禁兼容均不进入 v0.1。 |
 | 2026-08-18 | Design v0.1 用户创建与密码修订 | 取消注册和邀请流程；明确管理员直建用户、长期初始密码手工交接、禁止同级重置及登录 Session 撤销。 |
+| 2026-08-18 | Design v0.1 数据可见性修订 | 根据 v0.4.12 源码核对 Resource/Skill 命名空间；明确 Account 共享与 User 私有边界、默认写入位置及全入口统一授权。 |
 
 ## 待继续讨论
 
-- 共享资源的普通用户写权限。
 - OIDC/企业登录进入哪个设计版本。
 - Studio 的生产访问边界。
