@@ -37,7 +37,7 @@ Phase 3 启动条件：P3-E1 在 Phase 1 完成 + Spike 脚手架冻结后可提
 ### 96.1 P1-E1：IAM PostgreSQL 数据层（Schema + Alembic Migration + Repository）
 
 - **Plane**：优先级 high ｜ 状态 backlog
-- **范围 In**：SQLAlchemy 2 async + asyncpg 接入现有 FastAPI 进程；Alembic async 模板（复用 spike `migrations/` 示范）；9 张 `iam_*` 表（accounts/users/api_credentials/roles/permissions/role_permissions/user_roles/sessions/audit_events，字段与约束按 04 §10.1–10.8）；**`iam_roles.rank`（3/2/1，注明与 OpenViking `Role` 内置 rank 独立、禁止混用，04 §10.4）**；唯一约束：`normalized_email` 全局唯一（仅 Unicode/大小写/首尾空白规范化）、`(account_id, ov_user_id)`、`(account_id, normalized_username)`、`public_id/key_hash`、`token_hash`；`account_id IS NULL` 仅允许 `platform_super_admin`；repository（05 §11 `iam/repository.py`）含乐观锁；确认 `code` 与 `ov_account_id` 双唯一语义（Spike §4.2 #8 待决）。
+- **范围 In**：SQLAlchemy 2 async + asyncpg 接入现有 FastAPI 进程；Alembic async 模板（复用 spike `migrations/` 示范）；9 张 `iam_*` 表（accounts/users/api_credentials/roles/permissions/role_permissions/user_roles/sessions/audit_events，字段与约束按 04 §10.1–10.8）；**`iam_roles.rank`（3/2/1，注明与 OpenViking `Role` 内置 rank 独立、禁止混用，04 §10.4）**；唯一约束：`normalized_email` 全局唯一（仅 Unicode/大小写/首尾空白规范化）、`(account_id, ov_user_id)`、`(account_id, normalized_username)`、`public_id/key_hash`、`token_hash`；`account_id IS NULL` 仅允许 `platform_super_admin`；repository（05 §11 `iam/repository.py`）含乐观锁；`code` 与 `ov_account_id` 双唯一语义已确认（Spike §4.2 #8，回填 04 §10.1）。
 - **范围 Out**：`iam_outbox` 消费与 Provisioning Worker、`platform_content_refs/operation_refs/uploads/deletion_jobs/oauth_*` 表、角色/权限种子（P1-E2）。
 - **依赖**：PostgreSQL 16；`pyproject.toml` 增加 SQLAlchemy 2/asyncpg/Alembic；Platform 配置模型。
 - **验收标准**：① 全新库执行迁移后 9 表创建成功，upgrade/downgrade 可重复；② `normalized_email`、`(account_id, ov_user_id)`、`(account_id, normalized_username)` 唯一生效；③ `iam_roles.rank` 支撑 verify.py "ranks 3/2/1" 断言；④ `account_id IS NULL` 仅 PSA；⑤ 外键循环（`accounts.deleted_by↔users.account_id`）按 Spike §4.2 #5 人工编排迁移，无手工修复残留；⑥ repository 提供事务性 CRUD 与乐观锁。
@@ -245,7 +245,7 @@ Phase 3 启动条件：P3-E1 在 Phase 1 完成 + Spike 脚手架冻结后可提
 - **Plane**：优先级 high ｜ 状态 backlog
 - **范围 In**：按 15.2 八步初始化顺序落地（全新 schema→一次性命令建首位 PSA→PSA 建 Account+首位 Admin→Worker 初始化 namespace→Admin 建 User→用户建 Key→配置客户端→三凭证一致验证）；bootstrap 升级为正式部署命令（种子+建 PSA，环境变量注入密码、重复执行幂等拒绝）；新 IAM 签发 Key 全链路、无旧 Key 导入/双写路径；17.1 审计事件清单生产验证；17.2 日志关联（Request ID 贯通 HTTP/审计/trace/任务，管理员跨用户事件字段完整）；17.3 健康检查扩展（PG 连通、migration 版本、Provisioning backlog、Session cleanup、待清理数量与 Purge 状态；**阈值入 06 §16.3 配置并在本 Epic 定义：backlog > 100 条、migration 落后 ≥ 1 版本、Purge 停滞（待清理数量超阈值或最早 `purge_after` 落后超阈值天）判定非 ready**）；14.4 生产化（HTTPS、脱敏、备份加密、CORS）。
 - **范围 Out**：功能开发；PSA 网页 Break-glass（Phase 6）；多实例 Redis（Phase 6）；旧数据迁移；告警通道（v0.1 不部署，以健康检查 + 日志为准，告警随 Phase 6）。
-- **依赖**：P5-E1；Phase 1–4；Alembic 外键循环手工编排（Spike §4.2 #5）、argon2-cffi 版本锁定（#6）、`IAMAccount.code` 唯一性确认（#8）。
+- **依赖**：P5-E1；Phase 1–4；Alembic 外键循环手工编排（Spike §4.2 #5）、argon2-cffi 版本锁定（#6）、`IAMAccount.code` 唯一性已确认（#8，2026-08-19 回填 04 §10.1）。
 - **验收标准**：① 全新环境按 15.2 八步完整走通且文档化可重复；② 初始化命令幂等、密码仅一次展示、库中仅 Argon2id hash；③ 无旧 Key 导入路径、新 Key 均为 `ovk_u.*` 由 IAM 签发；④ `/health`、`/ready` 在 PG 故障/migration 落后/backlog 超阈值/Purge 停滞时非 ready 且含可读诊断（阈值见 06 §16.3 配置，可精确复测）；⑤ 17.1 每类事件有脱敏审计、跨用户事件含 Actor+Subject；⑥ 日志/审计/埋点无密码/Cookie/Key 明文/完整 hash/Token；⑦ 三角色经 Session、API Key 与 OAuth 三凭证获得一致权限与数据范围（06 §15.2 第 8 步一一对应）。
 - **对应章节**：06 §14.4/§15.1–15.3/§17.1–17.3；13 §89.2；07 §21 条目 3/4/8/10/17/18（生产复验输入，证据收口归 P5-E4）；Spike README §4.2 #5–8。
 
@@ -368,7 +368,7 @@ Phase 汇总：P2 满足 #3/5/8/9/16/21/23（#8 由 P2-E2 + P2-E6b 闭合）｜ 
 | create_app() 真实挂载（Spike 风险 9） | 类型/模块层已 14/14 验证；完整挂载需真实 ServerConfig | P2-E1 开发态挂载并存验证（验证点之一）+ P5-E1 生产配置态闭合，两处验证点 |
 | MCP OAuth SQLite→PG（Spike 风险 10） | 独立工作项，阻塞 07 §21 条目 8 与 18.5 OAuth 断言 | P2-E6b 闭合，Phase 2 收口时明确标记 |
 | Provisioning outbox/worker（Spike 风险 11） | Spike 仅验证状态机与重试守卫 | P2-E1 实现，P5-E3 恢复侧验证 |
-| `IAMAccount.code` 唯一性未定（Spike §4.2 #8） | 设计 04 §10.1 只有 `ov_account_id` 唯一 | P1-E1 首周确认后回填设计 |
+| `IAMAccount.code` 唯一性未定（Spike §4.2 #8） | 设计 04 §10.1 只有 `ov_account_id` 唯一 | **已解决（2026-08-19）**：`code` 与 `ov_account_id` 双唯一，`code` 为展示/路径短标识、创建后不可修改；已回填 04 §10.1 与 P1-E1 范围 |
 | Skill 名称占用与 Resource URI 占用不对称 | 已确认的刻意设计（12 号清单 #7） | 前端文案与错误码差异化实现（P2-E4/P3-E5/P4-E3） |
 | 多 SubAgent 并行开发冲突 | Epic 间共享后端模块（Facade/Registry、app.py Router 注册、errors.py 错误码表、ProductFacade 扩展点）与前端共享组件 | 按 Epic 隔离 worktree；P2-E1 优先交付、E2 共享模块串行指派；骨架冻结点（P1-E1/P2-E1/P2-E2/P3-E1 交付即冻结）、错误码前缀分区、story 分批见 §95 并行细则；前端共享组件归属：`lib/`、路由树、跳转契约归 P3-E1 冻结；shared-resources/shared-skills 管理组件归 P3-E4/E5 开发（P4-E3 只复用）；recycle-bin 恢复组件归 P3-E3（P4-E3 复用）；一次性凭证展示组件归 P3-E2（P4-E1/P4-E4 复用） |
 | 并行路测试互相干扰 | 多 worktree 同时跑 `tests/platform/` 集成测试共用 PG/端口产生假失败 | 每 worktree 独立 PG 库/端口；合并门禁在全量回归统一执行（见 §95 并行细则） |
@@ -388,6 +388,7 @@ Phase 汇总：P2 满足 #3/5/8/9/16/21/23（#8 由 P2-E2 + P2-E6b 闭合）｜ 
 
 | 日期 | 修订 | 说明 |
 | --- | --- | --- |
+| 2026-08-19 | P1-E1 设计回填 | 确认 `iam_accounts.code` 与 `ov_account_id` 双唯一（Spike §4.2 #8 关闭）：04 §10.1 增补 `code` 字段（唯一、展示/路径短标识、创建后不可修改），§96.1 范围与 §101 风险表同步标记已解决。 |
 | 2026-08-18 | 初稿 | 基于 Design v0.1（design-v0.1.0）与 Spike 结论（57/57+14/14）产出 Phase 1–5 共 24 个 Epic；含测试策略映射与 26 条验收归属。 |
 | 2026-08-18 | 拆分审查修正 | 按 review/ 目录 5 份审查记录修订：Phase 1 门禁改 `==5`/`==12` 外、E5 依赖放宽至 E1–E3、审计写入归属（登录/权限拒绝/种子变更直写 E1 repository）、Session cleanup 归 P1-E3、Out 修正 MCP OAuth 归属；Phase 2 统一执行序 P2-E1→E2→（E3‖E4‖E5‖E6b）→E6a、拆 P2-E6a/E6b（Epic 数 24→25）、E2 补 OAuth Principal 解析与管理后端归属（User 删除/聚合 recycle-bin/activity/monitoring）、E3 补 admin 只读 Resource/search/deletion-preview、E4 补平台只读 Skill 与 skill-configs 后端、E5 补 dashboard 与 P2-E1 依赖、低层空窗条款；Phase 3 补跳转契约（E1 冻结）/前端共享组件归属表/私密配置管理/裸路由默认分区/登录设备区/18.4 条目映射表；Phase 4 共享两页并入 P4-E3、P4-E4 增平台共享 Resource 管理页与组件复用声明、各 Epic 承载 18.2 管理类用例；Phase 5 低层入口双保险/Studio 启用开关/健康阈值入配置/OAuth 三凭证/告警边界声明/备份工具选型/E2→E3 串行/Go-No-Go 证据模板；§101 风险表新增 4 条。 |
 | 2026-08-18 | 拆分审查复核修正（第二轮） | 按 review/ 目录 5 份审查记录第二轮结果修订：Phase 1 删除 E3 范围 In「提权」轮换表述并同步 03 §8.1、验收⑩ 改为「重置撤销目标全部登录 Session」、`==7` 主归属 P1-E5（E3/E4 保留服务级/切片断言）、`==3/4/6` 复跑标注按实际断言如实表述、18.1 计数 19→20；Phase 2 monitoring 单归属 P2-E2（E6a 删除）、05 §12.5 回填 4 个 09 §46.2 端点并声明契约仲裁、P2-E2 认领 Account deletion-preview/DELETE、E3 补平台成员只读 Resource、E2 括注改 04 §10.10/§10.12/§10.14、E4 补 §10.12 且 skill-configs 引用改 10 §53.3/08 §28.1、E1 对应章节改 05 §12.1/§12.6；Phase 3 05 §12.3 增 `auth/me/session-summary` 契约、P3-E3 补 `/app/activity` 验收⑩；Phase 4 P4-E2 依赖拆分（P1-E5/P2-E3/E4/E5）、P4-E4 依赖补后端 Epic 映射、18.4 条目 17 改跨域（删 P3-E2，补 P3-E4/E5/P4-E3/P4-E4）并同步 §95 退出标准、P4-E3 依赖补 P3-E4/E5；Phase 5 P5-E3 删除自引用依赖、P5-E1 `/oauth/*` 通配改为具体两条路径（其余归 OpenViking）、06 §16.3 补 Purge 停滞阈值、P5-E4 18.5 清单补第 6 条、P5-E2 对应章节改条目 3/4/8/10/17/18、18.5 行条目 16 对应改 6/7/13。 |

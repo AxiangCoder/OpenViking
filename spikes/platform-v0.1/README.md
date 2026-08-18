@@ -56,7 +56,7 @@ PSA 默认密码：`Spike-PSA-Pass-2026-Dev`（可用 `OV_PSA_PASSWORD` 覆盖�
 5. **Alembic autogenerate 外键循环**：`iam_accounts.deleted_by → iam_users` 与 `iam_users.account_id → iam_accounts` 成环，autogenerate 生成的迁移会因建表顺序失败；需手工调整（Spike 已示范：先建 users、再 `create_foreign_key`）。→ 正式 migration 需人工编排或拆两版。
 6. **argon2-cffi 异常**：用 `VerifyMismatchError/VerificationError/InvalidHashError`，旧版本异常名不同（`VerifyMemoryError` 不存在于当前版本），需锁定版本。
 7. **权限缓存**：Spike 用进程内 dict + 双版本键。设计 06 §16.4 允许单实例短 TTL；多实例前必须换共享后端（Redis）。
-8. **`IAMAccount.code` 与 `ov_account_id` 双唯一**：Spike 的 Account 创建接口同时校验 code 唯一（PG 约束）。设计 04 §10.1 只有 `ov_account_id` 唯一——`code`（展示/路径标识）是否也要唯一未在设计明确。→ 建议确认。
+8. **`IAMAccount.code` 与 `ov_account_id` 双唯一**：Spike 的 Account 创建接口同时校验 code 唯一（PG 约束）。设计 04 §10.1 只有 `ov_account_id` 唯一——`code`（展示/路径标识）是否也要唯一未在设计明确。→ ✅ **已确认（2026-08-19）**：双唯一，`code` 为展示/路径短标识、创建后不可修改；已回填设计 04 §10.1 与 14 号开发计划。
 
 ### 4.3 未验证风险（正式开发首周验证）
 
