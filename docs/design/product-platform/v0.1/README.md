@@ -15,6 +15,7 @@
 6. [前端、安全、初始部署与运维](06-frontend-security-and-operations.md)
 7. [测试、实施边界与架构决策](07-quality-rollout-and-decisions.md)
 8. [产品能力归属设计](08-product-capability-ownership.md)
+9. [Resource 页面与产品契约](09-resource-product-contract.md)
 
 ## 已确认设计决策
 
@@ -38,6 +39,8 @@
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
 - MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
 - Watch/自动同步作为 Resource 详情子功能，Task 通过 Activity 展示；Relations/Graph 只作为 Search/Session/Context 的内部能力。
+- Resource 产品页面不暴露 Viking URI 或底层文件写入；支持文件、公开 HTTPS 页面和公开 HTTPS Git，解析内容只读，Refresh 期间继续提供上一次成功版本。
+- Account Admin 只能把自己的私有 Resource 发布为新的 Account 共享副本，不能把其他 User 私有数据直接发布到共享区。
 - Snapshot、Pack、Backup、Import、Restore 只留私网运维；当前 WebDAV 共享根写入口在 v0.1 生产禁用。
 - v0.1 不提供 Service Account 或 Service Account Key；内部 Worker 使用不对外签发凭证的系统身份。
 - v0.1 是产品初版，不导入或兼容旧 Account/User/API Key 门禁；现有协议入口可被选为首版契约，但鉴权统一接入新 IAM。
@@ -54,3 +57,4 @@
 | 2026-08-18 | Design v0.1 登录方式收敛 | 删除 OIDC、企业微信和企业单点登录设计及后续计划；产品网页登录固定为本地邮箱密码。 |
 | 2026-08-18 | Design v0.1 Studio 边界收敛 | 正式能力统一进入 `/app`、`/admin`、`/platform`；`/studio` 降级为可选的私网维护入口，生产公网默认不挂载。 |
 | 2026-08-18 | Design v0.1 能力归属收敛 | 完成 Studio、REST、MCP、SDK/CLI 能力盘点；Watch 纳入 Resource 子功能，Relations 保持内部能力，Snapshot/Pack 与 WebDAV 不进入公网产品；MCP OAuth 授权页迁出 Studio。 |
+| 2026-08-18 | Design v0.1 Resource 契约收敛 | 明确 Resource 列表、详情、导入来源、异步状态、Watch、发布、删除恢复、安全边界和 Product API。 |

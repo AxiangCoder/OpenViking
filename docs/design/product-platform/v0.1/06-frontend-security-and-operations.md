@@ -71,7 +71,9 @@ web-platform/
 /app/memories
 /app/resources
 /app/resources/private
+/app/resources/private/$resourceId
 /app/resources/shared
+/app/resources/shared/$resourceId
 /app/skills
 /app/skills/private
 /app/skills/shared
@@ -84,8 +86,10 @@ web-platform/
 
 /admin/users
 /admin/users/$userId/data
+/admin/users/$userId/resources/$resourceId
 /admin/users/$userId/api-keys
 /admin/shared-resources
+/admin/shared-resources/$resourceId
 /admin/shared-skills
 /admin/roles
 /admin/audit
@@ -97,8 +101,10 @@ web-platform/
 /platform/accounts
 /platform/accounts/$accountId/users
 /platform/accounts/$accountId/resources
+/platform/accounts/$accountId/resources/$resourceId
 /platform/accounts/$accountId/skills
 /platform/accounts/$accountId/users/$userId/data
+/platform/accounts/$accountId/users/$userId/resources/$resourceId
 /platform/accounts/$accountId/users/$userId/api-keys
 /platform/audit
 /platform/activity
@@ -119,14 +125,18 @@ web-platform/
 
 | 页面 | 内容 | User 操作 | Account Admin 操作 |
 | --- | --- | --- | --- |
-| 我的 Resource | 当前用户 `viking://user/{ov_user_id}/resources/**` | 查看、新增、编辑、删除 | 管理自己的 |
-| Account 共享 Resource | 当前 Account `viking://resources/**` | 查看、检索、引用 | 查看、新增、编辑、删除 |
+| 我的 Resource | 当前用户 `viking://user/{ov_user_id}/resources/**` | 查看、新增、编辑元数据、替换/Refresh、Watch、删除 | 管理自己的 |
+| Account 共享 Resource | 当前 Account `viking://resources/**` | 查看、检索、引用 | 查看、新增、编辑元数据、替换/Refresh、Watch、删除 |
 | 我的 Skill | 当前用户 `viking://user/{ov_user_id}/skills/**` | 查看、使用、管理 | 管理自己的 |
 | Account 共享 Skill | 当前 Account `viking://agent/skills/**` | 查看、使用 | 查看、使用、管理 |
 
 普通 User 在共享页不显示“新建、上传、编辑、移动、标签、删除、恢复”入口，并显示“共享内容由 Account 管理员维护”。Account Admin 可在 `/admin/shared-resources`、`/admin/shared-skills` 集中管理，也可在 `/app` 对应共享页看到相同管理能力。
 
 “添加 Resource”默认进入“我的 Resource”，界面不得把默认目标设为 Account 共享。管理员想发布到共享区时必须从共享页发起明确动作并看到目标 Account；从私有区发布为共享对象采用复制/发布语义，原私有对象保留，新对象获得独立产品 ID 和审计记录。
+
+Resource 新增页不显示 Viking URI、`visibility`、父目录、`create_parent` 或 `processing_mode`。页面入口已经决定目标：私有页只能创建私有 Resource，共享管理页只能创建当前 Account 共享 Resource。解析后的目录树、正文、Abstract 和 Overview 在 v0.1 中只读；更新内容通过替换上传文件或 Refresh 稳定远程来源完成。
+
+Account Admin 只能把自己的私有 Resource 发布为共享副本，不能利用“可读取成员数据”把其他 User 的私有 Resource 复制到共享区。完整页面、字段、状态和 Watch 交互以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准。
 
 共享列表可展示创建者和更新时间帮助追溯，但不能显示“只有创建者可编辑”的暗示；v0.1 中共享对象归 Account，由有权限的管理员统一管理。
 

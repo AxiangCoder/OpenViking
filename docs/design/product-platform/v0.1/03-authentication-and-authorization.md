@@ -266,6 +266,7 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | 修改或删除其他用户的私有 Resource/Skill | 独立高风险 Permission | 默认无 |  |
 | Account 共享 Resource 读取 | 全部 Account | 当前 Account | 当前 Account |
 | Account 共享 Resource 写入、删除 | 全部 Account | 当前 Account |  |
+| 将自己的私有 Resource 发布为共享副本 | 不适用 | 当前 Account |  |
 | 管理自己的 User 私有 Skill | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
 | Account 共享 Skill 读取、使用 | 全部 Account | 当前 Account | 当前 Account |
 | Account 共享 Skill 管理 | 全部 Account | 当前 Account |  |

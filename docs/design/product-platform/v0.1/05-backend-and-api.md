@@ -120,6 +120,9 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 - 普通用户接口固定使用 Actor 自己的 Account/User，不接受其他 Subject。
 - Account Admin/Platform Super Admin 接口允许指定目标 Subject，但必须先执行 account/platform Scope 授权。
 - 普通用户新增 Resource/Skill 时固定写入自己的 User 私有区；只有共享管理接口才能写入 Account 共享区，且必须拥有对应 `account_shared.*` Permission。
+- Resource Upload ID 绑定 Actor、Account 和目标 Visibility；私有 Upload 不能被共享导入接口消费，过期或已消费 ID 不能重放。
+- Resource 名称、说明和标签是产品元数据；修改名称不移动 canonical URI。解析正文、Abstract、Overview 和内部目录在 v0.1 只读。
+- Refresh/Watch 使用 staging/版本指针，成功后原子切换；处理期间继续提供上一次成功版本，旧 Operation generation 不能覆盖新状态。
 - 注入 `RequestContext`。
 - 将 Actor、Subject、Action、Scope 和 Request ID 写入审计事件。
 - 查询 `iam_deletion_jobs`，保证软删除对象不出现在正常列表，也不能被普通详情接口读取。
@@ -356,20 +359,35 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | POST | `/api/platform/v1/memories/search` | `memory.read.self` | search/find |
 | PUT | `/api/platform/v1/memories/{id}` | `memory.write.self` | content write |
 | DELETE | `/api/platform/v1/memories/{id}` | `memory.delete.self` | 软删除；30 天后 rm |
+| GET | `/api/platform/v1/resources/capabilities` | 当前 User 基础访问 | 返回来源类型、上传限制、Watch 能力和周期预设 |
+| POST | `/api/platform/v1/me/resource-uploads` | `resource.user_private.write.self` | 创建当前 User 私有作用域的一次性 Upload ID |
 | GET | `/api/platform/v1/me/resources` | `resource.user_private.read.self` | 当前 User 私有 Resource |
-| POST | `/api/platform/v1/me/resources` | `resource.user_private.write.self` | 固定添加到当前 User 私有区 |
-| PUT | `/api/platform/v1/me/resources/{id}` | `resource.user_private.write.self` | 仅自己的私有 Resource |
+| POST | `/api/platform/v1/me/resources/imports` | `resource.user_private.write.self` | 文件/公开网页/公开 Git，固定添加到当前 User 私有区 |
+| GET | `/api/platform/v1/me/resources/{id}` | `resource.user_private.read.self` | 产品详情，不返回 Viking URI |
+| PATCH | `/api/platform/v1/me/resources/{id}` | `resource.user_private.write.self` | 只修改名称、说明和标签；使用乐观锁 |
+| POST | `/api/platform/v1/me/resources/{id}/replace` | `resource.user_private.write.self` | 上传文件替换，旧成功版本在处理期间保持可读 |
+| POST | `/api/platform/v1/me/resources/{id}/refresh` | `resource.user_private.write.self` | 稳定远程来源 Refresh |
+| POST | `/api/platform/v1/me/resources/{id}/retry` | `resource.user_private.write.self` | 重试首次失败导入；上传/一次性 URL 需重新提交来源 |
+| POST | `/api/platform/v1/me/resources/{id}/publish` | 私有 read + `resource.account_shared.write.account` | 仅 Account Admin 发布自己的私有 Resource 为独立共享副本 |
 | DELETE | `/api/platform/v1/me/resources/{id}` | `resource.user_private.delete.self` | 软删除；30 天后 rm |
 | GET | `/api/platform/v1/me/resources/{id}/watch` | 对应私有 Resource read | 查看自己的自动同步设置和状态 |
 | PUT | `/api/platform/v1/me/resources/{id}/watch` | `resource.user_private.write.self` | 创建或更新自己的 Resource Watch |
+| POST | `/api/platform/v1/me/resources/{id}/watch/pause` | `resource.user_private.write.self` | 暂停并保留配置 |
+| POST | `/api/platform/v1/me/resources/{id}/watch/resume` | `resource.user_private.write.self` | 恢复后重新计算下次执行时间 |
 | POST | `/api/platform/v1/me/resources/{id}/watch/trigger` | `resource.user_private.write.self` | 手动触发一次同步并产生 Task |
 | DELETE | `/api/platform/v1/me/resources/{id}/watch` | `resource.user_private.write.self` | 停止自动同步，不删除 Resource |
+| GET | `/api/platform/v1/me/resources/{id}/nodes` | `resource.user_private.read.self` | 当前 Resource 内部只读节点分页，隐藏控制文件 |
+| GET | `/api/platform/v1/me/resources/{id}/operations` | `task.read.self` | 当前 Resource 的脱敏 Activity |
+| GET | `/api/platform/v1/me/resources/{id}/deletion-preview` | `resource.user_private.delete.self` | 删除影响范围和恢复截止时间 |
+| POST | `/api/platform/v1/account/resource-uploads` | `resource.account_shared.write.account` | Account 共享作用域的一次性 Upload ID |
 | GET | `/api/platform/v1/account/resources` | `resource.account_shared.read.account` | 当前 Account 共享 Resource，只读接口对普通 User 开放 |
-| POST | `/api/platform/v1/account/resources` | `resource.account_shared.write.account` | Account Admin 新建共享 Resource |
-| PUT | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.write.account` | Account Admin 修改共享 Resource |
+| POST | `/api/platform/v1/account/resources/imports` | `resource.account_shared.write.account` | Account Admin 导入共享 Resource |
+| GET | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.read.account` | 普通 User 可读取的共享详情 |
+| PATCH | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.write.account` | Account Admin 只修改名称、说明和标签 |
+| POST | `/api/platform/v1/account/resources/{id}/refresh` | `resource.account_shared.write.account` | Account Admin Refresh 稳定远程来源 |
 | DELETE | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.delete.account` | Account Admin 软删除共享 Resource |
 | GET | `/api/platform/v1/account/resources/{id}/watch` | `resource.account_shared.read.account` | 共享 Resource Watch 状态 |
-| PUT/POST/DELETE | `/api/platform/v1/account/resources/{id}/watch[/trigger]` | `resource.account_shared.write.account` | Account Admin 管理或触发共享 Resource Watch |
+| PUT/POST/DELETE | `/api/platform/v1/account/resources/{id}/watch/*` | `resource.account_shared.write.account` | Account Admin 配置、暂停、恢复、触发或删除共享 Watch |
 | GET | `/api/platform/v1/me/skills` | `skill.user_private.read.self` | 当前 User 私有 Skill |
 | POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 新建自己的私有 Skill |
 | PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 修改自己的私有 Skill |
@@ -419,6 +437,7 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | GET | `/api/platform/v1/admin/users/{id}/memories` | `memory.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/sessions` | `session.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/resources` | `resource.user_private.read.account` |
+| GET | `/api/platform/v1/admin/users/{id}/resources/{resource_id}` | `resource.user_private.read.account`；只读预览，不提供下载/导出 |
 | GET | `/api/platform/v1/admin/users/{id}/skills` | `skill.user_private.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/api-keys` | `credential.read.account` |
 | DELETE | `/api/platform/v1/admin/users/{id}/api-keys/{credential_id}` | `credential.revoke.account` |
@@ -438,9 +457,15 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/memories` | `memory.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/resources` | `resource.user_private.read.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/resources/{resource_id}` | `resource.user_private.read.platform`；默认只读预览 |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills` | `skill.user_private.read.platform` |
-| GET/POST | `/api/platform/v1/platform/accounts/{account_id}/resources` | `resource.account_shared.read.platform/resource.account_shared.write.platform` |
-| PUT/DELETE | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.write.platform/resource.account_shared.delete.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/resources` | `resource.account_shared.read.platform` |
+| POST | `/api/platform/v1/platform/accounts/{account_id}/resource-uploads` | `resource.account_shared.write.platform` |
+| POST | `/api/platform/v1/platform/accounts/{account_id}/resources/imports` | `resource.account_shared.write.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.read.platform` |
+| PATCH | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.write.platform` |
+| POST | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}/refresh` | `resource.account_shared.write.platform` |
+| DELETE | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.delete.platform` |
 | GET/POST | `/api/platform/v1/platform/accounts/{account_id}/skills` | `skill.account_shared.read.platform/skill.account_shared.manage.platform` |
 | PUT/DELETE | `/api/platform/v1/platform/accounts/{account_id}/skills/{id}` | `skill.account_shared.manage.platform` |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/password/reset` | `user.password.reset.platform`；禁止目标为 Platform Super Admin |

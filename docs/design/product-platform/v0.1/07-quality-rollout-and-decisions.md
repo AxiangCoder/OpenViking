@@ -21,6 +21,9 @@
 - 产品 ID 到 OpenViking URI 的安全映射。
 - URI 分类器能稳定区分 `user_private/account_shared/internal`，并拒绝 URI、Owner User、Account 与可见性不一致的对象。
 - Resource 未指定目标时强制落入 Actor 的 User 私有区，不继承源码当前共享区默认值。
+- Resource Lifecycle 与 Operation Status/Stage 分开映射，源码 Task 阶段变化不能改变产品枚举契约。
+- Resource 元数据重命名不改变 canonical URI；旧 Operation generation 不能覆盖新版本或删除中对象。
+- 稳定远程来源、一次性含 Query URL、上传文件和 Git 来源的 Watch Eligibility 判定。
 - 审计脱敏。
 
 ### 18.2 API 集成测试
@@ -46,6 +49,11 @@
 - CSRF 缺失或错误时写请求失败。
 - 重复 `Idempotency-Key` 不创建重复用户。
 - 软删除对象立即隐藏，30 天内可恢复，期满清理任务幂等。
+- Resource Batch Upload 按文件独立返回 Resource/Operation，重复 `Idempotency-Key` 不产生重复对象。
+- 共享首次导入在 active 前只对管理者可见；Refresh 失败继续返回上一次成功版本。
+- 上传来源不能启用 Watch；远程 Resource 的 Watch 暂停、恢复、触发和删除均继承目标写权限。
+- Account Admin 只能发布自己的私有 Resource，共享副本使用新 ID，不能发布其他成员私有 Resource。
+- 删除 Resource 立即暂停 Watch；晚到 Task 结果不能重新激活对象；恢复后 Watch 不自动恢复。
 
 ### 18.3 凭证与集成测试
 
@@ -72,6 +80,10 @@
 - 普通用户没有 Account 切换入口。
 - Resource/Skill 页面明确分为“我的”和“Account 共享”；普通 User 的共享页没有写入、删除或恢复入口。
 - 新增 Resource 默认进入“我的 Resource”；管理员发布到共享区时页面明确展示目标 Account，并创建独立共享对象。
+- Resource 表单不显示 Viking URI、`visibility`、`create_parent` 或 `processing_mode`；文件、网页和 Git 只显示各自适用字段。
+- Resource 详情的解析内容只读，内部控制文件和绝对路径不可见；替换/Refresh 期间旧成功版本保持可读。
+- Watch 只出现在稳定远程 Resource 详情；暂停、恢复、立即同步和 Activity 状态一致。
+- 删除弹窗展示 Watch、进行中任务、节点数量、共享影响和 30 天恢复截止时间。
 - 高风险操作弹窗展示影响范围，不要求输入密码或 Account 名称。
 - Role 变更后导航和按钮即时更新。
 - 登录 Session 过期后回到登录页且不丢失安全状态。
@@ -94,6 +106,10 @@
 - `/studio` 不挂载时，同设备和跨设备 MCP OAuth 仍能通过 `/oauth/consent`、`/oauth/verify` 和产品登录 Session 完成；浏览器网络与存储中不出现 User API Key。
 - MCP `forget` 和所有公开删除入口只进入 30 天回收期，不能直接调用物理删除。
 - 普通 User 不能查看、触发或取消其他 User 私有 Resource 的 Watch/Task；Account Admin 只能管理共享 Resource Watch 和有权操作的任务。
+- 远程 Resource 拒绝 localhost、私网、云元数据、DNS Rebinding、危险 Redirect、本地路径、URL Userinfo 和私有 Git 凭证。
+- 完整远程 URL 只以应用层密文保存，Outbox、QueueFS、Watch JSON、日志、审计和产品 DTO 不出现含 Query 的明文来源。
+- Upload ID 过期、重放、跨 User/Account/Visibility 消费均被拒绝；文件大小和 MIME 由服务端重新校验。
+- 篡改 Resource Node ID 不能跳出父 Resource；HTML/SVG 预览不能执行来源脚本，下载文件名不能注入响应头。
 - 生产公网访问 WebDAV、Snapshot、Pack、Debug、Observer 和系统修复入口得到 404/拒绝，不能借这些 Router 绕过 Product Facade。
 
 ## 19. 分阶段实施
@@ -239,4 +255,4 @@
 
 ## 23. 设计收敛状态
 
-IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。后续设计讨论进入页面字段、状态和交互契约。
+IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 页面字段、来源、状态、Watch、发布和删除恢复契约已经收敛。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。

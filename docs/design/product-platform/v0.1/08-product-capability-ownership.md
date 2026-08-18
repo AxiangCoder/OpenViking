@@ -125,7 +125,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | 源码模块/Router | 源码能力 | 产品化归属 | 产品化处理 |
 | --- | --- | --- | --- |
 | `server/routers/admin.py` | Account、User、Role、API Key 管理；旧迁移与 Agent Evolution | Platform/Account Control Plane | IAM 管理迁移为新的 Platform API；Provisioning 复用受控 Service；旧 Key 生成、`migrate`、Agent Evolution 不进入产品 UI/API |
-| `server/routers/resources.py` | Resource/Skill 导入、临时上传、等待处理、Watch 参数 | Account/User Content Plane | 经 Content Registry 和 Target Policy；未指定目标的 Resource 强制进入 User 私有区 |
+| `server/routers/resources.py` | Resource/Skill 导入、临时上传、等待处理、Watch 参数 | Account/User Content Plane | 经 Content Registry 和 Target Policy；未指定目标的 Resource 强制进入 User 私有区；v0.1 产品页只开放文件、公开 HTTPS 页面和公开 HTTPS Git |
 | `server/routers/skills.py` | Skill 列表、查找、校验、读取、更新、删除 | User/Account Collaboration Plane | 按 `user_private` 与 `account_shared` 分流；共享 Skill 普通 User 只能读取和使用 |
 | `server/routers/sessions.py` | 创建 Session、消息、Tool Result、Context、Commit、Extract | User Experience Plane | 作为用户对话和上下文产品能力；Session 归 User，不等同于登录 Session |
 | `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | 服务端固定检索根；至少包含本人私有根和当前 Account 共享根，不接受客户端扩大范围 |
@@ -357,6 +357,7 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 | `05-backend-and-api.md` | 定义 ProductFacade、TargetPolicy 和 API；本文确定哪些源码 Router 只能作为底层实现 |
 | `06-frontend-security-and-operations.md` | 定义 `/app`、`/admin`、`/platform` 页面和安全规则；本文提供页面能力目录的来源和边界 |
 | `07-quality-rollout-and-decisions.md` | 定义测试、实施和验收；本文的验收标准应进入 Phase 0 能力目录冻结和后续权限测试 |
+| `09-resource-product-contract.md` | 将本文确定的 Resource、Watch、Task 能力边界细化为页面字段、状态机、动作、API 和异常流程 |
 
 ## 35. 本轮收敛结论
 
@@ -369,4 +370,4 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 5. WebDAV 因当前实现直接映射 Account 共享根且支持写、删、移动，v0.1 生产禁用。
 6. Studio 继续是可选私网维护入口；它现有的业务能力必须拆入正式产品页面，底层调试能力不得借 Studio 身份进入产品权限模型。
 
-以上是能力边界，不是开发计划。后续设计讨论应转向“每个正式页面的字段、状态、动作和异常流程”，而不是继续按源码 Router 增加菜单。
+以上是能力边界，不是开发计划。Resource 页面契约已经在 09 号文档中继续细化；其他页面也应按同样方式讨论字段、状态、动作和异常流程，而不是继续按源码 Router 增加菜单。
