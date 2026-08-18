@@ -305,7 +305,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
 - 回收站恢复按对象类型分别校验权限，不允许用单一「Account 范围恢复权限」放行所有类型：Account 共享 Resource/Skill 由 Account Admin（或平台代管）恢复；User 只恢复自己的私有 Resource/Skill；其他 User 的私有 Skill 不允许恢复；Session 恢复只允许属主本人；User/Account 恢复按数据范围权限执行（05 §12.6 注）。
 - Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
-- User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但不能恢复、修改或删除其他用户的私有 Skill。Platform Super Admin 可按独立平台级高风险 Permission 恢复其他类型的全平台范围对象，但对 Skill 始终只读。
+- User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但不能恢复、修改或删除其他用户的私有 Skill。Platform Super Admin 仅可恢复目标 Account 及其 Account 共享 Resource（按平台级 Permission）；其他用户的私有 Resource/Skill/User/Session 均不可恢复，对 Skill 始终只读。
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
 - 审计事件独立保留，不随业务对象物理清理。
 

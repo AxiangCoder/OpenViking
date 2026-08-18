@@ -84,4 +84,6 @@
 | 2026-08-18 | Design v0.1 标签模型收敛 | Resource、Skill 与 Search 统一采用 `key=value` 结构化标签，多标签检索要求全部匹配。 |
 | 2026-08-18 | Design v0.1 Search 时间语义收敛 | 时间范围固定按 `updated_at` 筛选，页面不提供创建时间/更新时间切换。 |
 | 2026-08-18 | Design v0.1 源码复用原则与 Search 结果 | 明确已有合规能力直接复用；Search 复用列表和详情抽屉，同时移除引擎诊断字段。 |
-| 2026-08-18 | Design v0.1 Memory/Search/Session 详细契约 | 完成页面、API、权限、Chat Stream、自动 Commit、Memory Impact、软删除、错误与验收规则；保留 Bot Session/Skill 绑定与服务端标题这一组源码冲突。 |
+| 2026-08-18 | Design v0.1 Memory/Search/Session 详细契约 | 完成页面、API、权限、Chat Stream、自动 Commit、Memory Impact、软删除、错误与验收规则；Bot Session/Skill 绑定与服务端标题源码冲突已消解：不展示标题、VikingBot 不承担网页聊天。 |
+| 2026-08-18 | Design v0.1 一致性修订 | 移除 Platform Super Admin 代建普通 User（普通 User 仅由 Account Admin 创建）；Session 删除弹窗不展示标题；回收站恢复权限按对象类型补全权限 code；Skill 契约 API 表格格式修正。 |
+| 2026-08-18 | Design v0.1 权限矩阵对齐 | Account 删除「停用」（suspended 状态保留、无产品操作端点）；PSA 管理用户收窄到现有 API（仅查看、密码重置、角色提升、凭据管理）；修改/导出/删除他人私有 Resource 改为预留独立高风险权限、v0.1 不提供端点；06 §14.6、08 §29.3、09 §38.2、01 §4.3 同步对齐。 |

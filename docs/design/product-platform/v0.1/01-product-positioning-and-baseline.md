@@ -134,7 +134,7 @@
 
 | OpenViking URI | v0.1 业务分类 | 普通 User | Account Admin | Platform Super Admin |
 | --- | --- | --- | --- | --- |
-| `viking://user/{ov_user_id}/resources/**` | User 私有 Resource | 管理自己的 | 管理自己的；可读本 Account 其他用户 | 可按平台权限读取或执行高风险管理 |
+| `viking://user/{ov_user_id}/resources/**` | User 私有 Resource | 管理自己的 | 管理自己的；可读本 Account 其他用户 | 只读；修改/删除为预留独立高风险权限，v0.1 不提供端点 |
 | `viking://resources/**` | Account 共享 Resource | 只读本 Account | 管理本 Account | 管理任意目标 Account |
 | `viking://user/{ov_user_id}/skills/**` | User 私有 Skill | 读取、使用、管理自己的 | 管理自己的；可读并发布本 Account 其他用户 | 只读任意目标 Account/User |
 | `viking://agent/skills/**` | Account 共享 Skill | 读取、使用本 Account | 读取、使用、管理本 Account | 只读任意目标 Account |

@@ -74,7 +74,7 @@
 | 读取当前 Account 共享 Resource | 查看、检索、预览、下载；外部 Agent 可按权限检索/读取 | 同 User | 选择 Account 后读取 |
 | 管理当前 Account 共享 Resource | 不允许 | 导入、改元数据、Refresh/Watch、删除、恢复 | 按目标 Account 代管 |
 | 查看其他 User 私有 Resource | 不允许 | 当前 Account 只读 | 平台范围只读或按独立高风险 Permission 处理 |
-| 修改/删除其他 User 私有 Resource | 不允许 | 默认不允许 | 必须拥有对应平台级高风险 Permission |
+| 修改/删除其他 User 私有 Resource | 不允许 | 默认不允许 | v0.1 预留独立高风险 Permission，平台 API 不提供端点 |
 | 将私有 Resource 发布为共享 | 不允许 | 只能发布自己的私有 Resource | v0.1 不从他人私有区直接发布 |
 
 管理员查看他人私有 Resource 的页面是 Subject 数据查看，不是切换身份；页面固定显示“操作者”和“数据所属用户”，并隐藏编辑、Watch、发布、下载/导出和删除按钮，除非平台角色确实拥有对应独立 Permission。`resource.user_private.read.account/platform` 只允许受控页面预览，不自动推导出原文件下载或批量导出。

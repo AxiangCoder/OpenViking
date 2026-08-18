@@ -35,7 +35,7 @@
 - Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建普通 User，不存在邀请流程。
 - 相同规范化邮箱不能在不同 Account 重复创建。
 - Account Admin 创建用户时不能指定 `account_admin`，也不能提升或重置同级 Account Admin。
-- Platform Super Admin 不能通过产品 API 创建或重置另一个 Platform Super Admin。
+- 平台 API 不提供创建普通 User 的端点；Platform Super Admin 不能通过产品 API 创建或重置另一个 Platform Super Admin。
 - 上级管理员重置低级别用户密码后，目标用户全部登录 Session 立即失败，但 OpenViking 对话 Session 和 API Key 不受影响。
 - User A 不能读取 User B 的 Memory/OpenViking 对话 Session。
 - User A 可管理自己的私有 Resource/Skill，但不能读取 User B 的私有 Resource/Skill。

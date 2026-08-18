@@ -241,8 +241,8 @@ Account Admin 负责本 Account 的日常协作内容，但不是其他 Account 
 
 `/platform` 仅面向 Platform Super Admin，承载：
 
-- Account 创建、暂停、恢复、删除和 Provisioning 重试。
-- 首位 Account Admin 创建、Account Admin 生命周期管理和全局用户管理。
+- Account 创建、软删除（30 天回收站）与恢复、Provisioning 重试。
+- 首位 Account Admin 创建、Account Admin 生命周期管理，以及全局用户的查看、密码重置与角色提升（普通 User 仅由 Account Admin 创建）。
 - 跨 Account 的受控数据查看、平台审计和平台运维状态。
 - Platform 级权限、Provisioning、回收和异步清理状态；实例级修复仍由私网运维面执行。
 

@@ -11,7 +11,7 @@
 | `id` | UUID | 主键，内部不可变 ID |
 | `ov_account_id` | VARCHAR(64) | 唯一，映射 OpenViking `account_id` |
 | `display_name` | VARCHAR(128) | 展示名称 |
-| `status` | VARCHAR(24) | `provisioning/active/suspended/failed/pending_deletion/deleted` |
+| `status` | VARCHAR(24) | `provisioning/active/suspended/failed/pending_deletion/deleted`；`suspended` 状态保留但 v0.1 无产品操作端点（不提供 suspend/resume API），暂停操作以软删除（进入回收站）表达 |
 | `provisioning_error` | TEXT | 最近一次同步错误 |
 | `deleted_at` | TIMESTAMPTZ | 进入回收期的时间，可空 |
 | `purge_after` | TIMESTAMPTZ | 默认 `deleted_at + 30 days`，可空 |

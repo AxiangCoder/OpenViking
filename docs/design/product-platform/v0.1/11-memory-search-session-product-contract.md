@@ -244,7 +244,7 @@ Memory 的 Add/Merge/Delete 由提取器和 Memory Policy 决定。v0.1 不把 M
 源码 `DELETE /api/v1/sessions/{id}` 会立即递归物理删除。产品版必须使用已确认的 30 天软删除：
 
 1. Product Facade 创建 Session 删除任务并从正常列表/Search 隐藏，后续接入写入返回 `SESSION_DELETED`。
-2. 删除确认弹窗显示 Session 标题、消息数量、Commit 数、Memory Impact 记录是否仍可查看以及恢复截止时间。
+2. 删除确认弹窗显示 Session 标识（客户端名称 + Session ID 短标识）、消息数量、Commit 数、Memory Impact 记录是否仍可查看以及恢复截止时间。
 3. 回收期内 User 可恢复自己的 Session；管理员不能恢复他人 Session。
 4. 恢复后重新显示历史，但不会回滚该 Session 过去已经产生的 Memory 变更。
 5. 30 天后 Worker 使用 canonical URI 幂等调用源码物理删除。

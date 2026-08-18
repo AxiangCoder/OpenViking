@@ -241,20 +241,20 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | 权限组 | Platform Super Admin | Account Admin | User |
 | --- | ---: | ---: | ---: |
 | 查看 Account | 全部 | 当前 Account |  |
-| 创建、停用、恢复 Account | ✓ |  |  |
-| 管理用户 | 全部 Account | 当前 Account |  |
-| 创建普通 User | 可代管 | 当前 Account |  |
+| 创建、软删除、恢复 Account | ✓ |  |  |
+| 管理用户 | 全部 Account（仅查看、密码重置、角色提升、凭据管理） | 当前 Account |  |
+| 创建普通 User | — | 当前 Account |  |
 | 创建、提升 Account Admin | ✓ |  |  |
 | 重置严格低级别用户密码 | Account Admin、User | 当前 Account 的 User |  |
 | 重置同级密码 | 禁止 | 禁止 | 禁止 |
 | 查看自己的记忆与对话 Session | ✓ | ✓ | ✓ |
 | 查看其他用户的记忆与对话 Session | 全部 Account | 当前 Account |  |
-| 修改其他用户 Resource | 独立高风险 Permission | 默认无 |  |
-| 导出、删除其他用户 Resource | 独立高风险 Permission | 默认无 |  |
+| 修改其他用户 Resource | 预留独立高风险 Permission；v0.1 平台 API 不提供端点 | 默认无 |  |
+| 导出、删除其他用户 Resource | 预留独立高风险 Permission；v0.1 平台 API 不提供端点 | 默认无 |  |
 | 修改、删除或恢复其他用户 Memory/Session | v0.1 禁止 | 禁止 |  |
 | 管理自己的 User 私有 Resource | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
 | 查看其他用户的私有 Resource | 全部 Account | 当前 Account |  |
-| 修改或删除其他用户的私有 Resource | 独立高风险 Permission | 默认无 |  |
+| 修改或删除其他用户的私有 Resource | 预留独立高风险 Permission；v0.1 平台 API 不提供端点 | 默认无 |  |
 | 修改、删除或恢复其他用户的私有 Skill | 禁止 | 禁止 |  |
 | Account 共享 Resource 读取 | 全部 Account | 当前 Account | 当前 Account |
 | Account 共享 Resource 写入、删除 | 全部 Account | 当前 Account |  |
@@ -276,7 +276,7 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 
 管理员查看他人数据属于授权的数据范围访问，不称为“冒充登录”。每次访问都必须记录 Actor、Subject、Action、Scope、Request ID 和结果；查看权限不能自动推导出写入、导出或删除权限。
 
-Platform Super Admin 的内置角色通常包含平台级修改、导出和删除 Permission；Skill 是明确例外，只授予跨 Account 读取，不授予写入、发布、恢复或使用。Account Admin 默认不包含修改、导出或删除他人数据的 Permission，`skill.user_private.publish.account` 仅允许经确认和审计的 Skill 归属转换。
+Platform Super Admin 的内置角色包含 Account 共享对象的平台级修改、导出和删除 Permission 以及 Account 级管理；修改、导出或删除其他用户私有数据属于预留的独立高风险 Permission，v0.1 不提供平台 API 端点。Skill 是明确例外，只授予跨 Account 读取，不授予写入、发布、恢复或使用。Account Admin 默认不包含修改、导出或删除他人数据的 Permission，`skill.user_private.publish.account` 仅允许经确认和审计的 Skill 归属转换。
 
 普通 User 的“只读共享 Resource”包括列表、详情、检索和在其自己的会话/工作流中引用，不包括新增、覆盖正文、改名、移动、打标签、归档、恢复或删除。“使用共享 Skill”表示在被允许的执行入口调用 Skill，不等于修改 Skill 定义。Account Admin 的共享管理权只在自己固定所属的 Account 生效。
 

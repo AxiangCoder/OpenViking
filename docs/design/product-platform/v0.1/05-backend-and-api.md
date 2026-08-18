@@ -411,7 +411,7 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | GET | `/api/platform/v1/activity` | `task.read.self`；共享项另需 `task.read.account_shared` | 当前用户私有对象任务和当前 Account 共享对象任务 |
 | POST | `/api/platform/v1/activity/{id}/cancel` | `task.cancel.self` 或 `task.cancel.account_shared` | 仅可取消状态；同时校验目标对象写权限 |
 | GET | `/api/platform/v1/recycle-bin` | 对应资源的 self read | 当前用户回收站 |
-| POST | `/api/platform/v1/recycle-bin/{id}/restore` | 对应资源的 self write | 30 天内恢复 |
+| POST | `/api/platform/v1/recycle-bin/{id}/restore` | 按对象类型校验（详见 §12.6 注） | 30 天内恢复 |
 
 产品 API 返回产品 DTO，不原样泄露内部绝对文件路径、系统目录和控制字段。普通用户请求永远不能切换 Account；`auth/me` 的 Account 是固定归属，不提供 Account 切换列表。
 
@@ -511,7 +511,20 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/recycle-bin` | 按对象类型校验（见下注） |
 | POST | `/api/platform/v1/platform/recycle-bin/{id}/restore` | 按对象类型校验（见下注） |
 
-注（回收站恢复权限）：恢复接口必须按对象类型分别校验权限，不存在单一的「Account/平台范围恢复权限」放行所有类型——Account 共享 Resource/Skill 恢复用各自的共享管理恢复权限；自己的私有 Resource/Skill 恢复用 self 权限；Account 共享 Skill 发布后已归 Account，只能由 Account Admin 恢复；其他 User 的私有 Skill 不允许恢复；Session 恢复只允许属主本人（管理员不能恢复他人 Session）；User/Account 恢复分别由 Account 范围与平台级恢复权限控制（详见各资源契约与 06 §14.6）。
+注（回收站恢复权限）：恢复是删除/管理类动作的逆操作，恢复接口必须按对象类型分别校验权限，不存在单一的「Account/平台范围恢复权限」放行所有类型。权限映射如下：
+
+| 对象类型 | 谁可以恢复 | 权限 code |
+| --- | --- | --- |
+| 自己的私有 Resource | 属主本人 | `resource.user_private.delete.self` |
+| 自己的私有 Skill | 属主本人 | `skill.user_private.manage.self` |
+| Account 共享 Resource | Account Admin（本 Account）；Platform Super Admin（目标 Account） | `resource.account_shared.delete.account` / `resource.account_shared.delete.platform` |
+| Account 共享 Skill | 仅 Account Admin（本 Account）；发布后已归 Account | `skill.account_shared.manage.account` |
+| 其他 User 的私有 Skill | 不允许恢复 | — |
+| 自己的 Session | 仅属主本人；管理员不能恢复他人 Session | `session.delete.self` |
+| User | Account Admin（本 Account） | `user.delete` |
+| Account | 仅 Platform Super Admin | `account.delete` |
+
+Platform Super Admin 对 Skill 始终只读，任何 Skill 的恢复均不允许。恢复动作必须写审计；User/Account 恢复接口同时保留 Actor 与 Subject（详见各资源契约与 06 §14.6）。
 
 Platform Super Admin 选择目标 Account 是管理浏览行为，不是把登录用户切换成该 Account 成员。每个管理请求都保留原 Actor，并将目标 Account/User 记录为 Subject。
 
