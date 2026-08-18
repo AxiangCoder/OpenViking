@@ -83,7 +83,9 @@ dependencies = [
     "opentelemetry-instrumentation-asyncio>=0.61b0",
     "loguru>=0.7.3",
     "cryptography>=48.0.1",
-    "argon2-cffi>=23.0.0",
+    # 锁定版本保证异常名稳定（VerifyMismatchError/VerificationError/InvalidHashError，
+    # spike §4.2 #6）；uv.lock 已锁定 25.1.0
+    "argon2-cffi==25.1.0",
     "lark-oapi>=1.5.3",
     "mcp>=1.27,<2",
     "pathspec>=1.1.1",
