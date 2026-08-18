@@ -86,7 +86,7 @@ async def session(
             text(
                 "TRUNCATE TABLE iam_audit_events, iam_user_roles, iam_role_permissions, "
                 "iam_sessions, iam_roles, iam_api_credentials, iam_users, iam_accounts, "
-                "iam_permissions CASCADE"
+                "iam_permissions, iam_permission_schema CASCADE"
             )
         )
         await s.commit()

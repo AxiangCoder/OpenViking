@@ -1,6 +1,7 @@
-"""P1-E1 迁移验收（AC ① ② ③ ⑤）。
+"""P1-E1 迁移验收（AC ① ② ③ ⑤）+ P1-E2 新增表（iam_permission_schema，04 §10.5）。
 
-- ① 全新库执行迁移后 9 表创建成功，upgrade/downgrade 可重复
+- ① 全新库执行迁移后 10 张 iam_* 表创建成功，upgrade/downgrade 可重复
+  （P1-E2 新增 iam_permission_schema，见 versions/b2c3d4e5f6a7）
 - ② normalized_email、(account_id, ov_user_id)、(account_id, normalized_username)、
      public_id/key_hash、token_hash、account code/ov_account_id 唯一生效
 - ③ iam_roles.rank 列存在（"ranks 3/2/1" 数据断言由 P1-E2 种子测试承载）
@@ -37,6 +38,7 @@ EXPECTED_TABLES = {
     "iam_user_roles",
     "iam_sessions",
     "iam_audit_events",
+    "iam_permission_schema",
 }
 
 
@@ -54,9 +56,28 @@ async def _count_iam_tables(session: AsyncSession) -> int:
     return len(await _iam_tables(session))
 
 
-async def test_fresh_upgrade_creates_nine_tables(session: AsyncSession) -> None:
-    """AC ①：全新库执行迁移后 9 张 iam_* 表创建成功。"""
+async def test_fresh_upgrade_creates_all_iam_tables(session: AsyncSession) -> None:
+    """AC ①：全新库执行迁移后全部 iam_* 表创建成功（P1-E1 9 张 + P1-E2 1 张）。"""
     assert await _iam_tables(session) == EXPECTED_TABLES
+
+
+async def test_permission_schema_singleton_constraint(session: AsyncSession) -> None:
+    """P1-E2：iam_permission_schema 单行约束（id=1）由 DB 强制。"""
+    await session.execute(
+        text(
+            "INSERT INTO iam_permission_schema (id, schema_version, catalog_fingerprint) "
+            "VALUES (1, 1, 'x' || repeat('0', 63))"
+        )
+    )
+    await session.commit()
+    with pytest.raises(IntegrityError):
+        await session.execute(
+            text(
+                "INSERT INTO iam_permission_schema (id, schema_version, catalog_fingerprint) "
+                "VALUES (2, 1, 'y' || repeat('0', 63))"
+            )
+        )
+        await session.commit()
 
 
 async def test_upgrade_downgrade_repeatable(session: AsyncSession, test_database: str) -> None:
