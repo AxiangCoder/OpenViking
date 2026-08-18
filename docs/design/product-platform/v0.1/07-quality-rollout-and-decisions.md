@@ -60,7 +60,7 @@
 - `/api/v1` 的 `write/rm/mv/set_tags/add_resource` 及对应 MCP Tool 不能绕过共享区只读策略；`mv` 的源和目标都要授权。
 - 搜索只返回调用者自己的私有根与当前 Account 共享根，不返回同 Account 其他 User 私有数据或其他 Account 数据。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
-- `/studio` 仍可访问，但生产访问受网络边界控制。
+- 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。
 
 ### 18.4 前端 E2E
 
@@ -135,7 +135,7 @@
 - 一次性初始化 Platform Super Admin、Account 和首位 Account Admin。
 - 使用新 IAM 签发用户 API Key，不导入或接受旧 Key。
 - 安全测试、备份恢复和回滚演练。
-- 限制 `/studio` 和低层 Admin API 的网络边界。
+- 确认生产公网未挂载 `/studio`，并限制低层 Admin API 的网络边界。
 
 ### Phase 6：可选增强
 
@@ -182,7 +182,7 @@
 4. Account Admin 可读取当前 Account 用户数据，Platform Super Admin 可读取全平台数据；审计同时记录 Actor 与 Subject。
 5. Account/User 身份完全由服务端从登录 Session、用户 API Key 或 OAuth 凭证解析，不能由客户端身份字段指定。
 6. 跨 Account、跨 User、Header spoofing 和 IDOR 测试全部通过。
-7. `/studio` 可访问；SDK、CLI、插件和 MCP 可使用新签发的用户 API Key 或用户 OAuth Token。
+7. 生产公网不挂载 `/studio`；SDK、CLI、插件和 MCP 可使用新签发的用户 API Key 或用户 OAuth Token，Studio 只可在显式启用的开发/私网入口使用。
 8. 登录 Session、用户 API Key 和 OAuth 对同一用户使用同一套实时 RBAC；任何渠道都不能切换到其他 Account/User。
 9. 用户禁用、密码修改和角色变更能立即影响会话与权限。
 10. 所有管理和高风险操作产生脱敏审计记录。
@@ -207,7 +207,7 @@
 | 后端形态 | 模块化单体 | 最小化二次开发和部署复杂度，保留未来拆分边界 |
 | 产品 API | 新建 `/api/platform/v1` | 避免污染上游 `/api/v1` 契约 |
 | 产品前端 | 新建 `web-platform` | 与 Studio 生命周期和认证模型解耦 |
-| Studio | 保留 `/studio` | 复用现有运维和底层能力页面 |
+| Studio | 保留代码、生产公网默认不挂载 `/studio` | 正式产品能力进入权限页面；旧 Studio 只用于可选私网排障，不成为产品依赖 |
 | 浏览器认证 | 不透明服务端登录 Session | 可立即撤销，权限变更即时生效 |
 | 用户开通 | 管理员直接创建 | v0.1 不提供注册、邀请、邮件和激活流程 |
 | 登录标识 | 全局唯一邮箱 | 登录时无需客户端指定 Account，一个用户固定属于一个 Account |
@@ -233,10 +233,6 @@
 | 删除策略 | 30 天软删除 | 提供误操作恢复窗口，期满后异步物理清理 |
 | 旧门禁 | 不迁移、不双写、不兼容旧用户 API Key | 产品处于初版，直接以 PostgreSQL IAM 作为唯一身份事实来源 |
 
-## 23. 实施前必须确认的产品决策
+## 23. 设计收敛状态
 
-该问题不阻塞架构设计，但在生产部署前必须定稿：
-
-1. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理访问认证。
-
-在该决策确认前，不影响 PostgreSQL schema、登录 Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约设计。
+当前已列出的 Design v0.1 未决项均已收敛。Studio 边界固定为“代码可选保留、生产公网默认不挂载”；若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。后续发现新的设计问题时继续补充讨论。

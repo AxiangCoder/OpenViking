@@ -7,7 +7,7 @@
 本设计把 OpenViking 定位为“上下文与记忆数据引擎”，在其外层增加产品平台能力：
 
 - 新建 `web-platform`，承载登录、产品页面和租户管理后台。
-- 保留现有 `web-studio`，继续挂载在 `/studio`，作为 OpenViking 运维与底层能力控制台。
+- 保留现有 `web-studio` 源码，但 `/studio` 只作为可选的私网维护入口；生产公网默认不挂载，也不作为正式产品能力依赖。
 - 在现有 FastAPI 进程中增加 Platform API、IAM 和 RBAC 模块，第一阶段采用模块化单体，不立即拆微服务。
 - 使用 PostgreSQL 保存账号、登录凭据、角色、权限、会话、审计和配置同步状态。
 - 浏览器登录使用服务端不透明会话和 `HttpOnly` Cookie，不使用或持久化 Root API Key 或用户 API Key；仅在用户主动创建 API Key 时一次性显示明文。
@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | 产品前端 | 面向最终用户的业务 SPA | 用户真正使用产品的页面 |
 | 管理后台 | 面向租户管理员的用户、内置角色权限和审计页面 | 管理员管人并查看固定权限规则的页面 |
-| Studio | OpenViking 自带的底层操作与运维控制台 | 开发、排障、观察 OpenViking 的工具页 |
+| Studio | OpenViking 自带的旧底层操作与运维控制台 | 可选的开发、排障工具，不是产品页面 |
 | Platform API | 面向产品前端的业务 API / BFF | 前端只找这个后端，不直接裸连 OpenViking |
 | IAM | Identity and Access Management | 管“谁能登录、账号是否可用” |
 | RBAC | Role-Based Access Control | 把一组权限装进角色，再把角色分给用户 |
@@ -45,16 +45,18 @@
 | Account 共享数据 | 归属于 Account、不归属于创建者个人，同一 Account 的成员按角色共同读取或管理 | 团队共用区；这里只是团队内共享，不是向互联网公开 |
 | 可见性（Visibility） | 对象采用 `user_private` 或 `account_shared` 的业务分类 | 这份数据到底是“我自己的”还是“团队共用的” |
 
-### 2.1 三类页面的明确划分
+### 2.1 正式产品页面与维护入口
 
 | 页面入口 | 使用者 | 主要职责 | 是否新建 |
 | --- | --- | --- | --- |
 | `/app/*` | 普通用户 | 记忆、资源、检索、会话、个人设置 | 是 |
 | `/admin/*` | Account 管理员 | 用户管理、内置角色与权限查看、凭据、审计 | 是 |
 | `/platform/*` | Platform Super Admin | 全部 Account、用户、数据和平台审计 | 是 |
-| `/studio/*` | 运维、开发、受控管理员 | OpenViking 底层功能、监控、任务、调试 | 否，保留现状 |
+| `/studio/*` | 运维、开发（仅私网） | 原始 URI、底层任务、监控和调试 | 否，可选保留，生产公网默认不挂载 |
 
-`/studio` 不能等同于产品管理后台。当前 Studio 虽然已有用户管理、监控和设置页面，但其认证方式、信息架构和权限粒度仍是 OpenViking 控制台模型。
+`/app`、`/admin`、`/platform` 与 `/studio` 是并列路由空间，不是基于 `/studio` 继续开发。前三者共同构成正式产品，并承接用户、Account 管理员和平台管理员需要的稳定业务能力；`/studio` 只是保留现有 bundle 的维护入口，不进入产品导航、产品 RBAC 页面或业务验收范围。
+
+二开后的正式产品能力覆盖并扩展现有 Studio，但不要求把 Studio 的每个底层按钮都复制到角色页面。原始 URI 编辑、底层任务调试和实验性设置属于维护能力，应留在私网 Studio 或后端运维工具中，不能为了“功能全覆盖”而开放给产品角色。
 
 ## 3. 目标与非目标
 
@@ -84,7 +86,7 @@
 - 不提供 OIDC、企业微信登录、企业单点登录或其他外部身份提供商登录；产品网页登录只使用本地邮箱和密码，且不列入后续版本计划。
 - 不在 v0.1 提供 Platform Super Admin 的网页紧急恢复或 Break-glass 通道；作为后续迭代处理。
 - 不在第一阶段实现双人审批或强制重新输入密码的高风险操作确认流程。
-- 不改造现有 Studio 为产品账号密码登录；Studio 通过独立的生产访问边界保护。
+- 不改造现有 Studio 为产品账号密码登录，不把 Studio 页面纳入产品角色体系；生产公网不挂载 `/studio`。
 
 ## 4. 当前源码基线
 
@@ -108,7 +110,7 @@
 | Account 共享 Resource | `openviking/core/directories.py`、`openviking/storage/viking_fs.py` | `viking://resources/**` 作为当前 Account 共享区 |
 | Account 共享 Skill | `openviking/utils/skill_processor.py`、`openviking/server/routers/skills.py` | `viking://agent/skills/**` 作为当前 Account 共享 Skill 区 |
 | OAuth 2.1 | `openviking/server/oauth/` | 复用 MCP 授权协议，最终仍解析为授权用户主体 |
-| Web Studio | `web-studio/` | 原样保留在 `/studio` |
+| Web Studio | `web-studio/` | 源码与 bundle 可选保留；仅在开发环境或私网维护入口挂载 `/studio` |
 
 ### 4.2 当前身份与权限模型的限制
 
@@ -118,7 +120,7 @@
 2. 普通 Account 用户只能持有 `user` 或 `admin`；`root` 是服务端配置身份。
 3. `Role.register()` 提供了自定义字符串和 rank 的扩展点，但账户用户校验和绝大多数 Router 仍按固定角色判断。
 4. 当前权限主要是“角色硬编码 + URI ACL”，缺少可持久化的 Permission、RolePermission 和 UserRole。
-5. Studio 使用 API Key 连接 OpenViking，不是产品登录会话。
+5. Studio 在被显式启用时仍使用 API Key 连接 OpenViking，不是产品登录会话；它不能成为正式产品功能的唯一入口。
 6. 现有 Admin API 适合 OpenViking 控制面，不足以表达产品登录、管理员直建用户、分级密码重置、禁用和审计。
 7. 当前 API Key 与 Account/User registry、Base Role 绑定，尚未与产品 PostgreSQL RBAC 统一，也没有独立 Service Account 主体。
 8. 当前 `viking://resources/**` 对 Account 内已认证用户可访问，`content.write`、Resource 添加和文件删除等低层写接口没有按产品角色区分共享区写权限；仅依赖当前 Namespace ACL 不能实现“普通 User 只读共享区”。

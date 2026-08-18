@@ -204,7 +204,6 @@ v0.1 不定义 Service Account 的 repository、resolver 或 credential type。�
 - 产品平台 API：`/api/platform/v1/*`
 - OpenViking 原生 API：`/api/v1/*`
 - MCP：`/mcp`
-- Studio：`/studio/*`
 
 产品 API 不占用现有 `/api/v1`，避免与上游 OpenViking 升级冲突。
 

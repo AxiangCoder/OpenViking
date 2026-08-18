@@ -137,11 +137,14 @@ web-platform/
 
 ### 13.6 Studio 处理
 
-- `/studio` 保持现有 bundle 和路由。
-- 第一阶段只允许受控网络、VPN 或管理员访问。
-- Studio 继续使用 API Key 连接模型，但用户凭证必须由新 IAM 签发；Root API Key 只允许受控运维人员在隔离环境使用。
+- 保留现有 `web-studio` bundle，便于本地开发、底层排障和上游能力对照，但正式产品不依赖它。
+- 生产公网反向代理默认不注册 `/studio` 路由；外部请求应得到 404，而不是进入产品登录或权限页面。
+- 需要排障时，只能在开发环境或独立私网运维入口显式启用 `/studio`；具体使用 VPN、Tailscale 或固定 IP 属于部署选择，不再是产品设计未决项。
+- `/studio` 不出现在 `/app`、`/admin`、`/platform` 导航中，也不分配给 User、Account Admin 或 Platform Super Admin 作为产品权限。
+- 用户、共享内容、凭据、审计、监控等正式能力必须按角色进入对应产品页面；不能保留“只有 Studio 能完成”的正式业务流程。
+- 原始 URI 操作、底层任务调试和实验性设置可继续只存在于 Studio，它们是运维能力，不计入产品页面功能覆盖。
+- Studio 被启用时继续使用 API Key 连接模型；用户凭证必须由新 IAM 签发，Root API Key 只允许受控运维人员在隔离环境使用。
 - Root 管理密钥不预置进公开静态资源。
-- 生产环境可在反向代理层为 `/studio` 增加独立访问认证；它不接入产品 OIDC 或产品用户登录体系。
 
 ### 13.7 管理员直接创建用户与密码交接
 
@@ -275,13 +278,15 @@ postgresql（生产可使用托管 RDS）
 
 | 路径 | 上游/处理器 |
 | --- | --- |
-| `/login`, `/app/*`, `/admin/*` | `web-platform` SPA |
-| `/studio/*` | 现有 `web-studio` SPA |
+| `/login`, `/app/*`, `/admin/*`, `/platform/*` | `web-platform` SPA |
+| `/studio/*` | 公网不注册；仅可选私网入口指向现有 `web-studio` SPA |
 | `/api/platform/v1/*` | Platform Router |
 | `/api/v1/*` | OpenViking Router |
 | `/mcp` 和 OAuth well-known | OpenViking MCP/OAuth |
 
 同源部署可以减少 CORS 和 Cookie 配置错误。
+
+生产公网路由表中不存在 `/studio`。即使 Studio bundle 随镜像构建，也只有私网运维 listener 或开发配置可以挂载它；“代码保留”和“公网可访问”是两个独立概念。
 
 ### 16.3 配置建议
 

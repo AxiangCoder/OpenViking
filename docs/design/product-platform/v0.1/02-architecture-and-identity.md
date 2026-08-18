@@ -12,7 +12,6 @@ Browser
 Caddy / Nginx
   |-- /login, /app, /admin,
   |   /platform ------------------> web-platform static bundle
-  |-- /studio --------------------> existing web-studio bundle
   |-- /api/platform/v1 ----------> Platform Routers
   |-- /api/v1, /mcp -------------> existing OpenViking Routers
   |
@@ -27,7 +26,12 @@ OpenViking Product Server (one FastAPI process in Phase 1)
   |
   |-- PostgreSQL: identity, role, session, audit, outbox
   |-- VikingFS / VectorDB: memory, resource, session, index
+
+Private Operations Network (optional; no public ingress route)
+  |-- /studio --------------------> existing web-studio bundle
 ```
+
+`/studio` 与正式产品路由并列，但不属于公网产品入口。生产公开反向代理不注册 `/studio`；只有明确启用的开发环境或私网运维入口可以挂载现有 Studio bundle。
 
 ### 6.1 逻辑组件
 
