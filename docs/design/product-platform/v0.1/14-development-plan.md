@@ -25,6 +25,13 @@
 
 Phase 3 启动条件：P3-E1 在 Phase 1 完成 + Spike 脚手架冻结后可提前启动（与 Phase 2 并行）；P3-E3/E4/E5 启动门槛为 P2-E2 + 对应产品 API（P2-E3/E4/E5）就绪；P3-E2 的 OAuth 子项随 P2-E6b 联调（§101 风险表）。
 
+多 SubAgent 并行细则（Phase 1–4 各并行路执行时的统一约定）：
+
+- **冻结点（只扩展不重构）**：P1-E1（iam repository）→ P2-E1（create_app 路由注册）→ P2-E2（Facade/Content Registry 骨架）→ P3-E1（`lib/`、路由树、跳转契约、`permissions.ts`）串行交付后即冻结，并行路在其上只增量扩展；`errors.py` 错误码按前缀分区（`RESOURCE_*`/`SKILL_*`/`SESSION_*`/`PROVISIONING_*`），各 Epic 只 append 自己分区、禁止跨分区重构。
+- **测试隔离**：每 worktree 独立 PG 库/端口运行 `tests/platform/`；合并门禁 = 验收标准 + 按依赖链顺序统一执行全量回归（P2-E3→E4/E5→E6a；P4-E4 最后），并行路各自跑通自己的模块测试即可先行合并。
+- **story 分批**：P2-E4 的 ZIP/SKILL.md 上传消费 P2-E3 的 `me/resource-uploads` upload_id（隐藏依赖，见 §97.4），该 story 排在 P2-E3 交付后；P2-E4 首批 story 只做「名称唯一/列表详情/两段式发布」。
+- **推荐并行规模**：Phase 2 首轮 3 路（E3‖E4‖E5）；P2-E6b 与 P3-E1 按 E2 交付进度插入，全局峰值 5 路；每路完成即回写 Plane `completed`，防重复领取。
+
 ## 96. Phase 1：IAM 基础（Epic P1-E1 ～ P1-E5）
 
 ### 96.1 P1-E1：IAM PostgreSQL 数据层（Schema + Alembic Migration + Repository）
@@ -106,7 +113,7 @@ Phase 3 启动条件：P3-E1 在 Phase 1 完成 + Spike 脚手架冻结后可提
 - **Plane**：优先级 high ｜ 状态 backlog
 - **范围 In**：私有/共享列表详情、在线创建、SKILL.md/ZIP 上传（ZIP 安全校验；上传消费 P2-E3 的 `me/resource-uploads`/`account/resource-uploads` upload_id，不新增独立 skill-uploads 端点，10 §61.5）；整体更新 PUT（name 不可变，ZIP 新包 name 必须一致）；Account 范围名称唯一（覆盖全部私有+共享未删除，冲突不泄露占用者）；软删立即释放名称、恢复唯一性复查冲突 `SKILL_NAME_CONFLICT`；成员 Skill 只读+`POST /admin/users/{id}/skills/{id}/publish`；平台只读 Skill（10 §61.4：`platform/accounts/{id}/skills`、`.../users/{id}/skills` 全只读）；**`me/skill-configs` 后端（05 §12.5：GET/PUT `/me/skill-configs/{skill_id}`、`/versions/{version}/activate`，privacy_configs 受控封装、仅当前 User 读写，10 §53.3、08 §28.1）**；**发布两段式（10 §58.4：PG 归属转换+`platform_operation_refs(skill_publish)`+outbox → Worker 受控 `fs.mv` 迁移、向量 URI 重写保留原向量、`owner_user_id` 残留清洗、失败幂等重试，禁止「已转换未迁移/已迁移未转换」）**；发布确认与审计（10 §58.3）；`SKILL_*` 错误码。
 - **范围 Out**：Skill 私密配置前端页面（P3-E5）；取消发布/共享转私有/多版本/远程 Skill/Watch（暂缓）；前端（P3）。
-- **依赖**：P2-E1（active 语义、outbox/SystemPrincipal 用于两段式发布）；P2-E2。
+- **依赖**：P2-E1（active 语义、outbox/SystemPrincipal 用于两段式发布）；P2-E2；P2-E3（隐藏依赖：ZIP/SKILL.md 上传消费 `me/resource-uploads` upload_id，对应 story 排 P2-E3 交付后，见 §95 并行细则）。
 - **验收标准**：① 同一 Account 任意两个未删除 Skill 不得同名（跨 User/可见性）；② name 不可修改（JSON 与 ZIP 均拒，`SKILL_NAME_IMMUTABLE`）；③ 冲突响应只说明「该名称在当前 Account 不可用」；④ 软删立即释放名称、恢复同名冲突保持删除状态不改名不覆盖；⑤ 发布按 10 §58.4 两段式、任一步失败由 Operation 状态机保护、重试幂等；⑥ 发布后目录完整迁移、向量不重新 embedding、残留 owner 被清洗；⑦ 普通 User 不能发布、Account Admin 可发布任意成员私有 Skill 但不能编辑/删除/恢复他人私有 Skill、PSA 全 Skill 只读（含平台只读路由）；⑧ 发布审计含 Actor/Subject/前后归属，不可取消；⑨ skill-configs 仅当前 User 读写、脱敏存储不返回可恢复 Secret、历史版本可激活（05 §12.5 三接口）。
 - **对应章节**：10 §52–§64；04 §10.10/§10.12；05 §12.5。
 
@@ -363,7 +370,8 @@ Phase 汇总：P2 满足 #3/5/8/9/16/21/23（#8 由 P2-E2 + P2-E6b 闭合）｜ 
 | Provisioning outbox/worker（Spike 风险 11） | Spike 仅验证状态机与重试守卫 | P2-E1 实现，P5-E3 恢复侧验证 |
 | `IAMAccount.code` 唯一性未定（Spike §4.2 #8） | 设计 04 §10.1 只有 `ov_account_id` 唯一 | P1-E1 首周确认后回填设计 |
 | Skill 名称占用与 Resource URI 占用不对称 | 已确认的刻意设计（12 号清单 #7） | 前端文案与错误码差异化实现（P2-E4/P3-E5/P4-E3） |
-| 多 SubAgent 并行开发冲突 | Epic 间共享后端模块（Facade/Registry、app.py Router 注册、errors.py 错误码表、ProductFacade 扩展点）与前端共享组件 | 按 Epic 隔离 worktree；P2-E1 优先交付、E2 共享模块串行指派；前端共享组件归属：`lib/`、路由树、跳转契约归 P3-E1 冻结；shared-resources/shared-skills 管理组件归 P3-E4/E5 开发（P4-E3 只复用）；recycle-bin 恢复组件归 P3-E3（P4-E3 复用）；一次性凭证展示组件归 P3-E2（P4-E1/P4-E4 复用） |
+| 多 SubAgent 并行开发冲突 | Epic 间共享后端模块（Facade/Registry、app.py Router 注册、errors.py 错误码表、ProductFacade 扩展点）与前端共享组件 | 按 Epic 隔离 worktree；P2-E1 优先交付、E2 共享模块串行指派；骨架冻结点（P1-E1/P2-E1/P2-E2/P3-E1 交付即冻结）、错误码前缀分区、story 分批见 §95 并行细则；前端共享组件归属：`lib/`、路由树、跳转契约归 P3-E1 冻结；shared-resources/shared-skills 管理组件归 P3-E4/E5 开发（P4-E3 只复用）；recycle-bin 恢复组件归 P3-E3（P4-E3 复用）；一次性凭证展示组件归 P3-E2（P4-E1/P4-E4 复用） |
+| 并行路测试互相干扰 | 多 worktree 同时跑 `tests/platform/` 集成测试共用 PG/端口产生假失败 | 每 worktree 独立 PG 库/端口；合并门禁在全量回归统一执行（见 §95 并行细则） |
 | P3-E2 OAuth 子项 ↔ P2-E6b 双向依赖 | pending/authorize/grants 后端在 P2-E6b（Phase 2 最末），P2-E6b 验收 ③ 的同意页 E2E 需 P3-E2 `/oauth/consent`（06 §13.8 流程页在 web-platform） | P2-E6b 先行冻结后端契约，P3-E2 其余部分可先行交付，两方 OAuth 相关验收联合收口 |
 | 低层入口 IAM 空窗（P2-E1 至 E6a 期间） | `/api/v1`、`/mcp` 未接新 IAM、沿用源码旧门禁与旧默认目标（默认 `viking://resources` 共享根，02 §7.5 注），中间构建若部署普通 User 可写共享区 | 空窗条款：P2-E1 至 E6a 期间低层入口保持旧门禁，任何中间构建不得公网部署/对产品用户开放；E6a 完成认证插件切换后闭合（07 §21 条目 21 在 Phase 2 内暂不成立） |
 | Phase 3 启动与 P2 交接 | P3-E1 仅依赖 P1，Phase 3 何时启动未定义 | P3-E1 在 P1 完成 + Spike 脚手架冻结后可提前启动（与 P2 并行）；P3-E3/E4/E5 启动门槛为 P2-E2 + 对应产品 API（P2-E3/E4/E5）就绪（见 §95） |
@@ -383,3 +391,4 @@ Phase 汇总：P2 满足 #3/5/8/9/16/21/23（#8 由 P2-E2 + P2-E6b 闭合）｜ 
 | 2026-08-18 | 初稿 | 基于 Design v0.1（design-v0.1.0）与 Spike 结论（57/57+14/14）产出 Phase 1–5 共 24 个 Epic；含测试策略映射与 26 条验收归属。 |
 | 2026-08-18 | 拆分审查修正 | 按 review/ 目录 5 份审查记录修订：Phase 1 门禁改 `==5`/`==12` 外、E5 依赖放宽至 E1–E3、审计写入归属（登录/权限拒绝/种子变更直写 E1 repository）、Session cleanup 归 P1-E3、Out 修正 MCP OAuth 归属；Phase 2 统一执行序 P2-E1→E2→（E3‖E4‖E5‖E6b）→E6a、拆 P2-E6a/E6b（Epic 数 24→25）、E2 补 OAuth Principal 解析与管理后端归属（User 删除/聚合 recycle-bin/activity/monitoring）、E3 补 admin 只读 Resource/search/deletion-preview、E4 补平台只读 Skill 与 skill-configs 后端、E5 补 dashboard 与 P2-E1 依赖、低层空窗条款；Phase 3 补跳转契约（E1 冻结）/前端共享组件归属表/私密配置管理/裸路由默认分区/登录设备区/18.4 条目映射表；Phase 4 共享两页并入 P4-E3、P4-E4 增平台共享 Resource 管理页与组件复用声明、各 Epic 承载 18.2 管理类用例；Phase 5 低层入口双保险/Studio 启用开关/健康阈值入配置/OAuth 三凭证/告警边界声明/备份工具选型/E2→E3 串行/Go-No-Go 证据模板；§101 风险表新增 4 条。 |
 | 2026-08-18 | 拆分审查复核修正（第二轮） | 按 review/ 目录 5 份审查记录第二轮结果修订：Phase 1 删除 E3 范围 In「提权」轮换表述并同步 03 §8.1、验收⑩ 改为「重置撤销目标全部登录 Session」、`==7` 主归属 P1-E5（E3/E4 保留服务级/切片断言）、`==3/4/6` 复跑标注按实际断言如实表述、18.1 计数 19→20；Phase 2 monitoring 单归属 P2-E2（E6a 删除）、05 §12.5 回填 4 个 09 §46.2 端点并声明契约仲裁、P2-E2 认领 Account deletion-preview/DELETE、E3 补平台成员只读 Resource、E2 括注改 04 §10.10/§10.12/§10.14、E4 补 §10.12 且 skill-configs 引用改 10 §53.3/08 §28.1、E1 对应章节改 05 §12.1/§12.6；Phase 3 05 §12.3 增 `auth/me/session-summary` 契约、P3-E3 补 `/app/activity` 验收⑩；Phase 4 P4-E2 依赖拆分（P1-E5/P2-E3/E4/E5）、P4-E4 依赖补后端 Epic 映射、18.4 条目 17 改跨域（删 P3-E2，补 P3-E4/E5/P4-E3/P4-E4）并同步 §95 退出标准、P4-E3 依赖补 P3-E4/E5；Phase 5 P5-E3 删除自引用依赖、P5-E1 `/oauth/*` 通配改为具体两条路径（其余归 OpenViking）、06 §16.3 补 Purge 停滞阈值、P5-E4 18.5 清单补第 6 条、P5-E2 对应章节改条目 3/4/8/10/17/18、18.5 行条目 16 对应改 6/7/13。 |
+| 2026-08-18 | 并行度细化 | 按多 SubAgent 并行要求补 §95「多 SubAgent 并行细则」（骨架冻结点 P1-E1/P2-E1/P2-E2/P3-E1 交付即冻结、errors.py 错误码前缀分区、每 worktree 独立 PG 库/端口测试隔离、story 分批、推荐 Phase 2 首轮 3 路峰值 5 路）；§97.4 P2-E4 依赖行补隐藏依赖（ZIP/SKILL.md 上传消费 P2-E3 `me/resource-uploads` upload_id，story 排 E3 交付后）；§101 风险表「多 SubAgent 并行开发冲突」处置引用 §95 并行细则并新增「并行路测试互相干扰」行。 |
