@@ -106,7 +106,7 @@ def repo() -> PostgresIamRepository:
 
 @pytest_asyncio.fixture
 async def auth_app(session_factory: async_sessionmaker[AsyncSession]):
-    """P1-E3 集成测试 FastAPI app（auth router）。
+    """P1-E3/P1-E4 集成测试 FastAPI app（auth + me router）。
 
     app.state 注入 IAM repository/RBAC/AuthService（create_app 挂载时的
     装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
@@ -116,7 +116,7 @@ async def auth_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.auth.service import AuthService
     from openviking.server.platform.db import get_session
     from openviking.server.platform.iam import RbacService
-    from openviking.server.platform.routers import auth_router
+    from openviking.server.platform.routers import auth_router, me_router
 
     app = FastAPI(title="ovp-platform-test")
     repo = PostgresIamRepository()
@@ -131,6 +131,7 @@ async def auth_app(session_factory: async_sessionmaker[AsyncSession]):
 
     app.dependency_overrides[get_session] = _override_get_session
     app.include_router(auth_router)
+    app.include_router(me_router)
     return app
 
 
