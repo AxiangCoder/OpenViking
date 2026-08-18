@@ -2,6 +2,9 @@
 
 配置只从环境变量注入，不硬编码生产口令。默认 DSN 仅面向本地开发
 （Spike 约定端口 55432），生产由部署层提供 OV_PLATFORM_DATABASE_URL。
+
+P1-E3 扩展（14 号计划 §96.3）：登录 Session TTL、Cookie 属性、登录限流、
+CSRF 信任源、Session 清理周期。
 """
 
 from __future__ import annotations
@@ -14,12 +17,35 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_list(name: str) -> tuple[str, ...]:
+    return tuple(p.strip() for p in os.environ.get(name, "").split(",") if p.strip())
+
+
 @dataclass(frozen=True)
 class PlatformConfig:
     """Platform v0.1 配置。
 
-    后续 Phase（Session TTL、Cookie、限流阈值等）在此扩展，
-    保持单实例进程内配置事实来源（06 §16.4）。
+    - Session：空闲 24h / 绝对 30 天可配置（03 §8.1，04 §10.7）；
+    - Cookie：`__Host-ov_session`，HttpOnly/Secure/SameSite=Lax/Path=/（03 §8.1）。
+      `OV_COOKIE_SECURE` 默认 1（生产安全默认）；本地 http 开发可置 0，
+      但 `__Host-` 前缀按标准要求 Secure，仅建议开发态关闭；
+    - 登录限流：连续失败进入递增冷却（03 §8.3，14 号计划 §96.3）；
+    - CSRF：`OV_CSRF_ALLOWED_ORIGINS` 为空时按请求 Host 同源校验（03 §8.2）；
+    - 过期 Session 物理清理 Worker 周期（14 号计划 §96.3，健康检查随 P5-E2）。
     """
 
     database_url: str = field(
@@ -27,6 +53,40 @@ class PlatformConfig:
             "OV_PLATFORM_DATABASE_URL",
             "postgresql+asyncpg://ov_platform:ov_platform_dev@127.0.0.1:55432/ov_platform",
         )
+    )
+
+    # ── P1-E3：登录 Session（03 §8.1，04 §10.7）──
+
+    session_idle_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("OV_SESSION_IDLE_TTL", 86400)
+    )
+    session_absolute_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("OV_SESSION_ABSOLUTE_TTL", 2592000)
+    )
+    cookie_name: str = "__Host-ov_session"
+    cookie_secure: bool = field(default_factory=lambda: _env_bool("OV_COOKIE_SECURE", True))
+    password_min_length: int = field(default_factory=lambda: _env_int("OV_PASSWORD_MIN_LENGTH", 12))
+
+    # ── P1-E3：登录限流（03 §8.3）──
+
+    login_max_attempts: int = field(default_factory=lambda: _env_int("OV_LOGIN_MAX_ATTEMPTS", 5))
+    login_cooldown_base_seconds: int = field(
+        default_factory=lambda: _env_int("OV_LOGIN_COOLDOWN_BASE", 60)
+    )
+    login_cooldown_max_seconds: int = field(
+        default_factory=lambda: _env_int("OV_LOGIN_COOLDOWN_MAX", 3600)
+    )
+
+    # ── P1-E3：CSRF 信任源（03 §8.2）──
+
+    csrf_allowed_origins: tuple[str, ...] = field(
+        default_factory=lambda: _env_list("OV_CSRF_ALLOWED_ORIGINS")
+    )
+
+    # ── P1-E3：过期 Session 清理 Worker ──
+
+    session_cleanup_interval_seconds: int = field(
+        default_factory=lambda: _env_int("OV_SESSION_CLEANUP_INTERVAL", 3600)
     )
 
     def with_database_url(self, url: str) -> "PlatformConfig":

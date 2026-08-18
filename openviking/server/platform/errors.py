@@ -36,3 +36,47 @@ class RoleAssignmentError(PlatformError):
     def __init__(self, reason: str, *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
+
+
+# ── P1-E3：认证与登录 Session（只 append，不修改既有码）──
+
+
+class AuthenticationError(PlatformError):
+    """认证链路失败（401 语义，03 §8）。
+
+    `code` 为稳定对外错误码（`LOGIN_FAILED`/`SESSION_EXPIRED`/`USER_DISABLED`/
+    `INVALID_CREDENTIAL`，05 §12.2），供 API 层原样映射。
+    """
+
+    def __init__(self, code: str, *args: object) -> None:
+        super().__init__(code, *args)
+        self.code = code
+
+
+class LoginFailedError(AuthenticationError):
+    """登录/改密统一失败：未知邮箱、错误密码、非 active 用户同一 `LOGIN_FAILED`
+    （防枚举，03 §8.3）。"""
+
+    def __init__(self) -> None:
+        super().__init__("LOGIN_FAILED")
+
+
+class LoginRateLimitedError(LoginFailedError):
+    """连续失败进入限流冷却（03 §8.3）：对外仍 `LOGIN_FAILED`（防枚举），
+    附带 `retry_after_seconds` 供 API 层下发 Retry-After。"""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__()
+        self.retry_after_seconds = retry_after_seconds
+
+
+class PasswordResetForbiddenError(PlatformError):
+    """分级密码重置被拒（03 §8.3）：`actor_role_rank <= target_role_rank`。
+
+    `reason` 为稳定原因码（`PASSWORD_RESET_SAME_OR_HIGHER_ROLE_FORBIDDEN`），
+    API 层映射 403；拒绝事件先写审计（result=denied）再抛出。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
