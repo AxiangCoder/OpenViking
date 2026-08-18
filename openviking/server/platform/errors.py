@@ -80,3 +80,18 @@ class PasswordResetForbiddenError(PlatformError):
     def __init__(self, reason: str, *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
+
+
+# ── P1-E4：用户 API Key（只 append，不修改既有码）──
+
+
+class ApiCredentialError(PlatformError):
+    """API Key 签发/撤销被拒（04 §10.3，05 §11.4）。
+
+    `reason` 为稳定原因码（`PSA_API_KEY_NOT_SUPPORTED`/`INVALID_EXPIRATION`），
+    API 层映射 400/403；服务层先写审计再抛出（对齐 P1-E2 拒绝语义）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
