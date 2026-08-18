@@ -130,7 +130,7 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 - 为对外异步 Task/Watch 建立 `platform_operation_refs`，使状态列表、取消和触发都能回到目标对象重新授权。
 - 将 OpenViking 底层响应转换成稳定产品 DTO。
 
-示例：产品前端请求“我的记忆列表”，后端固定构造当前用户的 canonical User URI，不接受 `user_id` 参数；Account Admin 请求“查看成员记忆”时，路由中的 `user_id` 只作为 Subject，后端验证其属于当前 Account 后再构造 URI。
+示例：产品前端请求“在我的 Memory 中检索”，后端固定构造当前用户的 canonical User URI，不接受 `user_id` 参数；Account Admin 请求“检索成员 Memory”时，路由中的 `user_id` 只作为 Subject，后端验证其属于当前 Account 后再构造 URI。v0.1 不为 Memory 建立独立列表或 CRUD API。
 
 Account 共享数据没有 Subject User。共享 Resource/Skill 访问只记录 `subject_account_id`，`subject_user_id` 为空；`created_by_actor_user_id` 是审计信息，不参与授权。不得为了复用“我的数据”接口，把共享对象伪装成创建者的私有对象。
 
@@ -409,7 +409,7 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | Session、消息和状态的产品 DTO |
 | GET | `/api/platform/v1/sessions/{id}/context` | `session.read.self` | 已使用上下文、Skill 和归档摘要 |
 | POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | add message |
-| POST | `/api/platform/v1/sessions/{id}/chat/stream` | `session.write.self` | 经受控 Bot/Agent 网关生成回复；部署未启用 Bot 时返回能力不可用 |
+| POST | `/api/platform/v1/sessions/{id}/chat/stream` | `session.write.self` | 经受控 VikingBot 网关生成回复并持久化消息；VikingBot 是 v0.1 必选部署组件 |
 | POST | `/api/platform/v1/sessions/{id}/commit` | `session.commit.self` | commit |
 | DELETE | `/api/platform/v1/sessions/{id}` | `session.delete.self` | 软删除；30 天后 delete session |
 | GET | `/api/platform/v1/activity` | `task.read.self`；共享项另需 `task.read.account_shared` | 当前用户私有对象任务和当前 Account 共享对象任务 |
@@ -422,6 +422,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 不提供含义不清的通用写接口 `/api/platform/v1/resources` 或 `/api/platform/v1/skills`。`/me/*` 明确表示 User 私有目标，`/account/*` 明确表示 Account 共享目标；后端仍根据对象引用和 canonical URI 二次校验，不能只相信路径名称。
 
 Skill 不提供独立 `/execute` API。详情页的“在新 Session 中使用”只把稳定 `skill_id` 带入 Session 创建流程，真正使用时由 Session/Agent 链路再次鉴权；具体 DTO 由 Session 产品契约固定。
+
+Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 OpenViking 现有的同步归档与异步 Memory 提取流程；产品只通过 Search 返回有权查看的 Memory 结果，并在 Session 详情返回脱敏的 Memory Impact。底层 Memory 文件写接口不进入 Product API。
 
 ### 12.6 管理 API
 

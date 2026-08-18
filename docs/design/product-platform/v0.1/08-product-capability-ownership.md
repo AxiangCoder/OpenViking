@@ -96,7 +96,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | 身份与登录 | Platform | Platform IAM、User 登录状态 | Platform Super Admin / IAM | `/login`、`/api/platform/v1/auth/*` | 正式产品能力 |
 | Account 生命周期 | Platform | Account 元数据与 Provisioning 状态 | Platform Super Admin | `/platform`、Platform API | 正式产品能力 |
 | 成员与角色 | Platform + Account | User、Role、Permission 关系 | Platform Super Admin 管全局；Account Admin 管本 Account 普通 User | `/admin`、`/platform` | 正式产品能力 |
-| 个人上下文与记忆 | User Experience | User 私有 Memory、Peer、Privacy | User；管理员按数据范围读取 | `/app`、用户集成入口 | 正式产品能力 |
+| 个人上下文与记忆 | User Experience | User 私有 Memory、Peer、Privacy | User；管理员按数据范围读取 | `/app/search`、Session Memory Impact、用户集成入口 | 正式产品能力；不设独立 Memory 页面或 CRUD |
 | 对话 Session 与上下文提交 | User Experience | User 私有 OpenViking Session | User；系统 Worker 执行异步提交 | `/app`、MCP、SDK/CLI | 正式产品能力 |
 | User 私有 Resource | User Experience | `viking://user/{ov_user_id}/resources/**` | User；Account Admin/Platform 按数据范围读取，修改/删除需独立 Permission | `/app`、用户集成入口 | 正式产品能力 |
 | Account 共享 Resource | Account Collaboration | `viking://resources/**` | Account Admin；Platform Super Admin 可平台代管 | `/app` 读取/引用、`/admin` 管理、`/platform` 代管 | 正式产品能力 |
@@ -114,7 +114,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | 原始观测、指标与系统修复 | System Operations | Queue、锁、模型、VectorDB、文件系统和实例状态 | 平台运维 | 监控系统、私网 `/studio` | v0.1 私网运维能力 |
 | 低层文件系统与 Content API | Engine Capability | 由目标 URI 决定 | Product Facade / URI Policy；不由原始 Router 自行决定 | 内部 Service；必要时由产品 Facade 暴露 | 非独立产品能力 |
 | MCP、SDK、CLI、插件和 MCP OAuth | Delivery Channel | 继承授权 User 和目标对象归属 | Platform 统一认证授权 | 集成入口、`/oauth/consent`、`/oauth/verify` | v0.1 正式集成能力 |
-| Bot/Agent Chat | Delivery Channel + User Experience | User 私有 Session | User；服务端受控转发 | `/app/sessions` | 部署启用 Bot 时的正式产品能力 |
+| Bot/Agent Chat | Delivery Channel + User Experience | User 私有 Session | User；服务端受控转发 | `/app/sessions` | v0.1 正式产品能力；VikingBot 为必选部署组件 |
 | WebDAV | Delivery Channel | 当前源码直接映射 Account 共享 Resource | 无合规的产品控制面 | 不挂载 | v0.1 禁用 |
 | Studio | System Operations | 可能触达实例级底层状态 | 运维/开发 | `/studio`，仅开发或私网 | 可选维护入口，不是正式产品能力 |
 
@@ -127,7 +127,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `server/routers/admin.py` | Account、User、Role、API Key 管理；旧迁移与 Agent Evolution | Platform/Account Control Plane | IAM 管理迁移为新的 Platform API；Provisioning 复用受控 Service；旧 Key 生成、`migrate`、Agent Evolution 不进入产品 UI/API |
 | `server/routers/resources.py` | Resource/Skill 导入、临时上传、等待处理、Watch 参数 | Account/User Content Plane | 经 Content Registry 和 Target Policy；未指定目标的 Resource 强制进入 User 私有区；v0.1 产品页只开放文件、公开 HTTPS 页面和公开 HTTPS Git |
 | `server/routers/skills.py` | Skill 列表、查找、校验、读取、更新、删除 | User/Account Collaboration Plane | 按 `user_private` 与 `account_shared` 分流；共享 Skill 普通 User 只能读取和使用 |
-| `server/routers/sessions.py` | 创建 Session、消息、Tool Result、Context、Commit、Extract | User Experience Plane | 作为用户对话和上下文产品能力；Session 归 User，不等同于登录 Session |
+| `server/routers/sessions.py` | 创建 Session、消息、Tool Result、Context、Commit、Extract | User Experience Plane | 作为用户对话、归档、上下文和 Memory 提取能力；Session 归 User，不等同于登录 Session；不由该 Router 生成 AI 回复 |
 | `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | 服务端固定检索根；至少包含本人私有根和当前 Account 共享根，不接受客户端扩大范围 |
 | `server/routers/relations.py` | 关系查询、链接、解除链接、构建图 | Engine + Product Facade | 关系两端的可见性和写权限都要分别检查；v0.1 不直接暴露任意 URI 图操作 |
 | `server/routers/privacy_configs.py` | 隐私配置版本、激活和读取 | User Experience | 作为用户敏感配置的受控子能力；原始类别和 target key 不直接开放给前端 |
@@ -155,7 +155,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `server/mcp_endpoint.py`、`server/oauth/` | 用户委托型集成 | MCP OAuth/Token 最终解析为 User Principal；授权页迁出 Studio，使用产品登录 Session；与 REST 共用 Principal Resolver、RBAC 和 URI Policy |
 | `examples/*-plugin/`、SDK、CLI | 用户委托型集成 | 使用谁的 User API Key，就代表谁；不生成新的业务身份 |
 | `server/routers/webdav.py` | 外部兼容渠道 | 当前固定映射到 `viking://resources` 且支持写/删/移动；v0.1 生产不挂载，后续如启用必须先另做读写和客户端身份设计 |
-| `server/routers/bot.py` | Bot/Agent 集成渠道 | Chat/Stream/Feedback 可由 Session Product Facade 暴露；Compile/Health 为内部能力；不得转发 API Key 绕过授权和审计 |
+| `server/routers/bot.py` | Bot/Agent 集成渠道 | VikingBot 为 v0.1 必选组件；Chat/Stream 经 Session Product Facade 暴露并解析为当前产品 User，Compile/Health 为内部能力；不得把浏览器 API Key 转发当作产品鉴权 |
 | `web-studio/` 与 `/studio` | 运维维护渠道 | 不进入正式产品导航；生产公网默认不挂载，开发/私网可用于底层排障 |
 
 ### 28.4 Studio 当前页面如何拆分

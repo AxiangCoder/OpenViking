@@ -235,7 +235,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 
 ### 10.11 `iam_deletion_jobs`
 
-统一跟踪 Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 的软删除、恢复和期满清理：
+统一跟踪 Account、User、OpenViking 对话 Session、Resource 和 Skill 的软删除、恢复和期满清理。Memory 不作为 v0.1 可独立删除或恢复的产品对象，因此不创建 Memory 删除任务；其增删改继续由 OpenViking Session Commit 的提取流程管理：
 
 | 字段 | 说明 |
 | --- | --- |

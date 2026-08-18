@@ -40,6 +40,8 @@
 - Skill 发布保持产品 ID 和名称不变，直接把归属与 URI 从 User 私有转换为 Account 共享，不保留副本且不支持取消发布；普通 User 和 Platform Super Admin 均无发布权限。
 - Platform Super Admin 对全平台 Skill 只有读取权限，不能创建、上传、编辑、发布、删除、恢复或使用 Skill。
 - Skill 页面支持在线创建、上传 `SKILL.md`/ZIP 和“在新 Session 中使用”；不提供 Git/网页导入、逐文件 ZIP 编辑、独立 Skill Runner 或 MCP Tool JSON 页面。
+- v0.1 不建立独立 Memory 页面或 Memory CRUD API；Memory 继续由 OpenViking 在 Session Commit 后提取和更新，用户通过 `/app/search` 检索，并在 Session 中查看本次 Commit 的 Memory Impact。
+- VikingBot 是 v0.1 必选部署组件；`/app/sessions` 提供完整聊天能力，OpenViking Session 负责消息、归档、上下文和记忆提取，VikingBot 负责模型与工具执行并生成回复。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
 - MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
@@ -64,3 +66,4 @@
 | 2026-08-18 | Design v0.1 能力归属收敛 | 完成 Studio、REST、MCP、SDK/CLI 能力盘点；Watch 纳入 Resource 子功能，Relations 保持内部能力，Snapshot/Pack 与 WebDAV 不进入公网产品；MCP OAuth 授权页迁出 Studio。 |
 | 2026-08-18 | Design v0.1 Resource 契约收敛 | 明确 Resource 列表、详情、导入来源、异步状态、Watch、发布、删除恢复、安全边界和 Product API。 |
 | 2026-08-18 | Design v0.1 Skill 契约收敛 | 明确 Skill 创建上传、Account 全局名称唯一、角色权限、原地发布、整体替换、Session 调用和删除恢复边界。 |
+| 2026-08-18 | Design v0.1 Memory 与 Session 收敛 | 取消独立 Memory 页面和 CRUD；Memory 通过 Search 与 Session Impact 查看；VikingBot 调整为 v0.1 必选组件。 |

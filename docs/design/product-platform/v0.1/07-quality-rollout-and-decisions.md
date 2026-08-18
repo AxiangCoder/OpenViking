@@ -144,13 +144,13 @@
 
 - Provisioning outbox/worker/reconciler。
 - `AuthenticatedUserPrincipal -> RequestContext`。
-- Memory、Resource、OpenViking 对话 Session 产品 Facade API。
+- Search、Resource、OpenViking 对话 Session 与 VikingBot Chat 产品 Facade API；不建立独立 Memory CRUD API。
 - 跨 Account/User 隔离测试。
 
 ### Phase 3：产品前端
 
 - 新建 `web-platform`。
-- 登录、产品首页、记忆、资源、OpenViking 对话 Session。
+- 登录、产品首页、统一检索、资源、Skill、OpenViking 对话 Session 与完整聊天。
 - 个人设置中的 API Key 管理与一次性明文展示。
 - 基于 Permission 的路由与按钮控制。
 

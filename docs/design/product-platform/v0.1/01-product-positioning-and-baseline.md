@@ -49,7 +49,7 @@
 
 | 页面入口 | 使用者 | 主要职责 | 是否新建 |
 | --- | --- | --- | --- |
-| `/app/*` | 普通用户 | 记忆、资源、检索、会话、个人设置 | 是 |
+| `/app/*` | 普通用户 | 资源、Skill、统一检索、会话聊天、个人设置 | 是 |
 | `/admin/*` | Account 管理员 | 用户管理、内置角色与权限查看、凭据、审计 | 是 |
 | `/platform/*` | Platform Super Admin | 全部 Account、用户、数据和平台审计；Skill 页面只读 | 是 |
 | `/studio/*` | 运维、开发（仅私网） | 原始 URI、底层任务、监控和调试 | 否，可选保留，生产公网默认不挂载 |
@@ -64,7 +64,7 @@
 
 1. 支持账号密码登录、退出、查看当前用户和撤销登录会话。
 2. 支持 Platform Super Admin 创建 Account 和首位 Account Admin，支持 Account Admin 直接创建本 Account 普通 User。
-3. 支持普通用户访问和管理自己的 OpenViking 记忆、对话 Session、User 私有 Resource 与 User 私有 Skill。
+3. 支持普通用户通过 Search 和 Session Memory Impact 查看自己的 OpenViking Memory，使用完整对话 Session，并管理自己的 User 私有 Resource 与 User 私有 Skill；v0.1 不提供独立 Memory CRUD。
 4. 支持同一 Account 成员读取 Account 共享 Resource，读取和使用 Account 共享 Skill；共享内容由 Account Admin 管理，普通 User 在 v0.1 只读。
 5. 支持 Account Admin 管理并查看当前 Account 的用户和数据，支持 Platform Super Admin 查看全平台 Account、用户和数据。
 6. 支持用户创建、查看元数据和撤销个人 API Key，并用于 SDK、CLI、插件和 MCP。
@@ -77,6 +77,8 @@
 - 不做跨地域多活。
 - 不立即拆分 IAM、Platform API 和 OpenViking 为独立微服务。
 - 不替换 OpenViking 的 VikingFS、VectorDB、对话 Session 和 QueueFS。
+- 不建立独立 Memory 页面，不向产品用户提供 Memory 新建、编辑、删除或恢复接口。
+- 不把 VikingBot 作为可选增强；v0.1 的 `/app/sessions` 完整聊天依赖 VikingBot，部署时必须启用。
 - 不让产品前端直接编辑任意 `viking://` URI。
 - 不把 Root API Key 变成普通用户登录凭据。
 - 不在第一阶段实现复杂组织树、部门继承和 ABAC 策略语言。

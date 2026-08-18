@@ -193,6 +193,8 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 
 - `/app` 首页只展示当前 User 的内容数量、最近 Session、最近 Resource/Skill 和处理失败摘要，不返回 Queue、锁、模型、VectorDB 等底层状态。
 - `/app/search` 提供统一语义检索；默认范围是“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
+- 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
+- `/app/sessions` 复用现有 Studio Session 的完整聊天方向，但使用产品登录 Session 和统一 RBAC。VikingBot 是 v0.1 必选部署组件；OpenViking Session 保存消息、归档、上下文及 Memory 提取状态，VikingBot 负责生成 AI 回复，前端不直接持有或转发 User API Key。
 - `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。
 - Resource 自动同步不建立独立顶级 Watch 菜单。用户在自己的 Resource 详情页设置同步周期、查看最近同步和手动触发；Account Admin 在共享 Resource 详情页执行相同操作。
 - 取消 Task 或 Watch 前展示目标 Resource、任务类型、当前状态和影响；后端再次校验 Task Permission、目标 Resource 写权限和可取消状态。
@@ -294,7 +296,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 ### 14.6 软删除与回收站
 
-- Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 默认先软删除。
+- Account、User、OpenViking 对话 Session、Resource 和 Skill 默认先软删除。Memory 不提供独立删除或恢复入口，其生命周期由 Session Commit 提取流程管理。
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
 - Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
 - User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但不能恢复、修改或删除其他用户的私有 Skill。Platform Super Admin 可按独立平台级高风险 Permission 恢复其他类型的全平台范围对象，但对 Skill 始终只读。
