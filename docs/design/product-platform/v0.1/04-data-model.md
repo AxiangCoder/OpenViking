@@ -100,7 +100,7 @@ v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色�
 | `description` | 权限解释 |
 | `risk_level` | `low/medium/high/critical` |
 
-Permission 由代码和 migration 注册，不允许普通管理员任意创建未知 Permission Code。
+Permission 由代码和 migration 注册，不允许普通管理员任意创建未知 Permission Code。内置角色权限种子或 migration 变更时递增全局 `permission_schema_version`，参与权限缓存键（见 03 §9.4），与用户级 `permission_version` 独立。
 
 ### 10.6 关联表
 

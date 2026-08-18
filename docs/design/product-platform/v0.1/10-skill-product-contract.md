@@ -249,6 +249,21 @@ Skill 详情页只负责查看和管理，不执行 Skill，也不创建网页 S
 
 不要求所属 User 审批，不要求重输密码或 Account 名称。审计记录 Actor Account Admin、Subject User、Skill ID、发布前后归属和结果。
 
+### 58.4 发布执行与失败补偿
+
+发布采用「PG 记录转换 + 受控迁移任务」两段式执行，不把物理迁移放在 HTTP 请求内：
+
+1. 前置检查：发布事务内确认 Skill 为 `active`、未删除，且目标共享根 `viking://agent/skills/{name}` 在 PostgreSQL 与磁盘上均无同名占用；名称唯一性以 PG 部分唯一约束为准，磁盘侧复查防事务外变更。
+2. 发布事务（同一 PG 事务）：`platform_content_refs` 写入归属转换（`visibility=account_shared`、`owner_user_id=NULL`、`ov_uri` 更新为目标共享根），同时创建 `platform_operation_refs(kind=task, type=skill_publish)` 与 `iam_outbox` 发布事件。
+3. 发布 Worker（SystemPrincipal）执行：
+   - 再次校验目标共享根无同名；
+   - 复用 `viking_fs.mv` 完成整目录迁移：文件树复制（含 `SKILL.md`、`.abstract.md`、`.overview.md`、辅助文件与 `.source.json`）、向量 URI/ID 重写（保留原向量，不重新 embedding）、源目录删除，一条调用完成；
+   - 清洗向量记录残留的旧 `owner_user_id`（源码 `update_uri_mapping` 复制记录时保留原 owner 字段；发布后必须清除，避免共享 Skill 残留属主语义）。
+4. 成功：Operation 置 `succeeded`，Content Ref 保持 `active`；失败：Operation 置 `failed` 并可重试——`fs.mv` 在源缺失时只清理孤儿索引且幂等，重试不会产生重复对象或重复移动。
+5. 发布不可取消、不可反向转换（§52.9）。迁移期间的意外失败由 Operation 状态机保护，不允许出现「已转换但未迁移」或「已迁移但未转换」的持久不一致。
+6. 兜底：孤儿向量与残留文件由 Purge Worker 复用现有 `prune_orphans` 机制清理；User 私密配置按 §52.16 不迁移、不共享、不删除。
+7. 审计：记录 Actor（Account Admin）、Subject User、Skill ID、发布前后归属（`user_private -> account_shared`）与结果，不记录 Skill 正文。
+
 ## 59. 删除与恢复
 
 - User 可以软删除和恢复自己的私有 Skill。

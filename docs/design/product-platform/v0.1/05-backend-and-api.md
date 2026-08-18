@@ -265,7 +265,7 @@ RESTORE_WINDOW_EXPIRED
 | POST | `/api/platform/v1/auth/logout` | 登录 Session | 撤销当前登录会话并清 Cookie |
 | POST | `/api/platform/v1/auth/logout-all` | 登录 Session | 撤销当前用户全部登录会话 |
 | GET | `/api/platform/v1/auth/me` | 登录 Session | 返回当前用户、角色、权限摘要 |
-| POST | `/api/platform/v1/auth/password/change` | 登录 Session | 修改密码并轮换当前登录会话 |
+| POST | `/api/platform/v1/auth/password/change` | 登录 Session + CSRF | 修改密码：请求体必填 `old_password` 与 `new_password`；旧密码校验失败返回统一 `LOGIN_FAILED` 并计入登录限流；成功后轮换当前登录会话 |
 
 邮箱是全局唯一登录标识，登录请求不提交 Account；服务端根据规范化邮箱解析固定的 User/Account：
 

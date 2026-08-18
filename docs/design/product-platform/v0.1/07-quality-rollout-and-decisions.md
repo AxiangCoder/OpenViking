@@ -25,6 +25,7 @@
 - Resource 元数据重命名不改变 canonical URI；旧 Operation generation 不能覆盖新版本或删除中对象。
 - 稳定远程来源、一次性含 Query URL、上传文件和 Git 来源的 Watch Eligibility 判定。
 - 审计脱敏。
+- 修改密码必须校验旧密码：错误返回统一 `LOGIN_FAILED` 并计入登录限流，成功后轮换当前登录 Session。
 
 ### 18.2 API 集成测试
 
@@ -59,6 +60,7 @@
 - Account Admin 只能发布自己的私有 Resource，共享副本使用新 ID，不能发布其他成员私有 Resource。
 - 删除 Resource 立即暂停 Watch；晚到 Task 结果不能重新激活对象；恢复后 Watch 不自动恢复。
 - Skill 软删除后名称立即释放；恢复时若名称已被新 Skill 占用则失败，不能改名或覆盖。
+- Skill 发布迁移失败后重试不产生重复对象或重复移动；发布成功后共享 Skill 的向量记录不含残留属主（`owner_user_id`）。
 
 ### 18.3 凭证与集成测试
 

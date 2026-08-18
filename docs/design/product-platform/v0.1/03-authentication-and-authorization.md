@@ -49,7 +49,7 @@
 3. Account Admin 不能创建、提升或重置另一个 Account Admin；Account Admin 的创建、提升和密码重置只能由 Platform Super Admin 执行。
 4. 系统生成随机初始登录密码，创建成功页只展示一次并提供复制按钮；服务端只保存 Argon2id hash。
 5. 创建者通过系统之外的方式自行把密码交给目标用户，系统不负责邀请或发送密码。
-6. 初始密码没有单独到期时间，可以长期使用；首次登录不强制修改。用户登录后可以自愿修改自己的密码。
+6. 初始密码没有单独到期时间，可以长期使用；首次登录不强制修改。用户修改自己的密码时必须提交当前密码（`old_password`），Argon2id 校验失败返回统一 `LOGIN_FAILED` 并计入登录限流；成功后轮换当前登录 Session。
 
 管理员密码重置采用严格的角色层级：
 
@@ -296,4 +296,4 @@ effective_permissions
 - `ov_base_role=admin` 只影响 OpenViking 控制面能力映射，不自动授予任何 Platform Permission。
 - 登录 Session、用户 API Key 和 OAuth 使用同一份有效权限；API Key 不参与 Permission 并集计算。
 - 用户禁用后，有效权限为空且所有登录会话失效。
-- 权限结果可按 `(account_id, user_id, permission_version)` 短期缓存；角色变更递增 `permission_version`。
+- 权限结果可按 `(account_id, user_id, permission_version, permission_schema_version)` 短期缓存；用户自身状态或角色变更递增用户级 `permission_version`；内置角色权限种子或 migration 变更递增全局 `permission_schema_version`（参与所有用户的缓存键），两者独立，避免全局权限变更后缓存继续返回旧权限。

@@ -139,9 +139,9 @@ Memory 永远是 User 私有对象，不存在 Account 共享 Memory。Account �
 
 ### 64.2 Session 标题
 
-v0.1 不新增标题字段。列表优先显示接入客户端提交且经过脱敏校验的 `display_name`；缺失时显示来源客户端名称与 Session ID 的短标识。Studio 从首条消息截取标题并写入 `localStorage` 的行为不进入正式产品。
+v0.1 不新增标题字段，也不接收或持久化客户端提交的标题。当前 OpenViking `SessionMeta` 没有 `display_name` 字段（`openviking/session/session.py`），产品不为此扩展源码。Session 列表显示「来源客户端名称 + Session ID 短标识」。
 
-显示名称不得参与授权、数据归属、Session 唯一性或底层 URI，也不得由产品浏览器从消息正文派生后持久化。
+标题不得参与授权、数据归属、Session 唯一性或底层 URI。Studio 从首条消息截取标题并写入 `localStorage` 的行为不进入正式产品；产品浏览器不得从消息正文派生标题并持久化。
 
 ### 64.3 接入与打开
 
