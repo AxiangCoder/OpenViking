@@ -17,7 +17,7 @@ from openviking.server.platform.auth.sessions import SessionService
 from openviking.server.platform.config import platform_config
 from openviking.server.platform.iam import PostgresIamRepository, RbacService
 from openviking.server.platform.iam.permissions import ACCOUNT_ADMIN, USER
-from openviking.server.platform.models import IamAccount, IamUser
+from openviking.server.platform.models import IamAccount, IamApiCredential, IamUser
 
 DEFAULT_PASSWORD = "Init-Pass-2026-Dev!"
 
@@ -131,3 +131,31 @@ async def create_login_session(
 
 def new_raw_token() -> str:
     return new_session_token()
+
+
+async def create_api_key(
+    repo: PostgresIamRepository,
+    session: AsyncSession,
+    account: IamAccount,
+    user: IamUser,
+    *,
+    name: str = "Codex",
+    public_id: str | None = None,
+) -> IamApiCredential:
+    """创建 API Key 记录（P1-E4 交付 me/api-keys 前，管理端测试直写 repository；
+    仅存 SHA-256(secret)+末四位，04 §10.3）。"""
+    import secrets
+
+    secret = "dev-secret-" + secrets.token_hex(8)
+    cred = await repo.create_api_credential(
+        session,
+        account_id=account.id,
+        user_id=user.id,
+        name=name,
+        public_id=public_id or f"pub_{secrets.token_hex(8)}",
+        key_hash=sha256_hex(secret),
+        key_last_four=secret[-4:],
+        created_by=user.id,
+    )
+    await session.commit()
+    return cred

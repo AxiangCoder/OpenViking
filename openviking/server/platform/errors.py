@@ -95,3 +95,28 @@ class ApiCredentialError(PlatformError):
     def __init__(self, reason: str, *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
+
+
+# ── P1-E5：IAM 管理 API 与审计基础（只 append，不修改既有码）──
+
+
+class LastAccountAdminError(PlatformError):
+    """最后一名 Account Admin 的禁用/删除被拒（05 §12.2 `LAST_ACCOUNT_ADMIN_REQUIRED`）。
+
+    拒绝事件先写审计（result=denied）再抛出；User 删除接口归属 P2-E2。
+    """
+
+
+class AdminActionForbiddenError(PlatformError):
+    """管理动作守卫拒绝（如平台级提升仅 `user → account_admin`）。
+
+    `reason` 为稳定原因码；拒绝事件先写审计（result=denied）再抛出。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class InvalidCursorError(PlatformError):
+    """分页 cursor 格式非法（05 §12.2：cursor 不透明、API 层映射 400）。"""

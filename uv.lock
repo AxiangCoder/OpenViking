@@ -3897,7 +3897,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16.0" },
     { name = "anyio", marker = "extra == 'gemini-async'", specifier = ">=4.0.0" },
     { name = "apscheduler", specifier = ">=3.11.0" },
-    { name = "argon2-cffi", specifier = ">=23.0.0" },
+    { name = "argon2-cffi", specifier = "==25.1.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "beautifulsoup4", marker = "extra == 'bot'", specifier = ">=4.12.0" },
     { name = "boto3", marker = "extra == 'test'", specifier = ">=1.42.44" },
