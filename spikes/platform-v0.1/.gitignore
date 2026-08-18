@@ -1,0 +1,6 @@
+# Spike 目录：可丢弃验证代码，不进入正式开发。
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+web-platform/dist/
