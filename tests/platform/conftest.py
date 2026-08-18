@@ -145,3 +145,48 @@ async def auth_client(auth_app):
     transport = httpx.ASGITransport(app=auth_app)
     async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
         yield client
+
+
+@pytest_asyncio.fixture
+async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
+    """P1-E5 集成测试 FastAPI app（auth + admin + platform 三组路由）。
+
+    app.state 注入 IAM repository/RBAC/AuthService/AdminService（create_app
+    挂载时的装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
+    """
+    from fastapi import FastAPI
+
+    from openviking.server.platform.admin.service import AdminService
+    from openviking.server.platform.auth.service import AuthService
+    from openviking.server.platform.db import get_session
+    from openviking.server.platform.iam import PostgresIamRepository, RbacService
+    from openviking.server.platform.routers import admin_router, auth_router, platform_router
+
+    app = FastAPI(title="ovp-platform-test")
+    repo = PostgresIamRepository()
+    rbac = RbacService(repo)
+    auth = AuthService(repo, rbac)
+    app.state.iam_repository = repo
+    app.state.iam_rbac_service = rbac
+    app.state.iam_auth_service = auth
+    app.state.iam_admin_service = AdminService(repo, rbac, auth)
+
+    async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _override_get_session
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+    app.include_router(platform_router)
+    return app
+
+
+@pytest_asyncio.fixture
+async def platform_client(platform_app):
+    """httpx ASGITransport 客户端（同一事件循环，避免跨 loop 连接问题）。"""
+    import httpx
+
+    transport = httpx.ASGITransport(app=platform_app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
+        yield client
