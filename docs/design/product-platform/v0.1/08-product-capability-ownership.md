@@ -128,7 +128,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `server/routers/resources.py` | Resource/Skill 导入、临时上传、等待处理、Watch 参数 | Account/User Content Plane | 经 Content Registry 和 Target Policy；未指定目标的 Resource 强制进入 User 私有区；v0.1 产品页只开放文件、公开 HTTPS 页面和公开 HTTPS Git |
 | `server/routers/skills.py` | Skill 列表、查找、校验、读取、更新、删除 | User/Account Collaboration Plane | 按 `user_private` 与 `account_shared` 分流；共享 Skill 普通 User 只能读取和使用 |
 | `server/routers/sessions.py` | 创建 Session、消息、Tool Result、Context、Commit、Extract | User Experience Plane | 作为用户对话、归档、上下文和 Memory 提取能力；Session 归 User，不等同于登录 Session；不由该 Router 生成 AI 回复 |
-| `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | 服务端固定检索根；至少包含本人私有根和当前 Account 共享根，不接受客户端扩大范围 |
+| `server/routers/search.py` | `find`、`search`、`recall`、`grep`、`glob` | Engine + Product Facade | `/app/search` 只提供 `find/search` 两种模式并固定检索根；`recall` 供受控调用链；`grep/glob` 只留私网 Studio |
 | `server/routers/relations.py` | 关系查询、链接、解除链接、构建图 | Engine + Product Facade | 关系两端的可见性和写权限都要分别检查；v0.1 不直接暴露任意 URI 图操作 |
 | `server/routers/privacy_configs.py` | 隐私配置版本、激活和读取 | User Experience | 作为用户敏感配置的受控子能力；原始类别和 target key 不直接开放给前端 |
 | `server/routers/stats.py` | Memory、Session 统计 | User/Account/Platform 视图 | 产品 API 根据 Actor/Subject 提供个人、Account 或平台聚合视图，不直接复用无范围统计接口 |
@@ -166,7 +166,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | --- | --- | --- | --- |
 | `/studio/home` | Dashboard、Token、Context Commit 摘要 | `/app` 个人摘要；`/admin/monitoring` Account 摘要；`/platform/monitoring` 平台摘要 | 原始 Token/Commit 调试明细 |
 | `/studio/playground` | VikingFS 浏览、内容编辑、Resource 导入、终端、Agent Chat | Resource 详情/导入与 `/app/sessions` Chat | 任意 URI 浏览、原始命令终端、底层 Session 命令 |
-| `/studio/retrieval` | find/search/grep/glob 与原始范围过滤 | `/app/search` 的受控统一检索 | 任意根 URI、调试过滤器和原始结果结构 |
+| `/studio/retrieval` | find/search/grep/glob 与原始范围过滤 | `/app/search` 的快速检索与结合会话检索 | grep/glob、任意根 URI、调试过滤器和原始结果结构 |
 | `/studio/skills` | 私有/共享 Skill 浏览 | `/app/skills`、`/admin/shared-skills`、平台只读页 | 原始文件结构和引擎调试信息 |
 | `/studio/sessions` | Session 列表、Chat、删除、Context/Archive | `/app/sessions`；管理员按 Subject 只读查看 | extract、tool-result 原始调试和任意底层操作 |
 | `/studio/tasks` | 所有 QueueFS Task | `/app/activity` 及受控管理摘要 | 系统任务、迁移、恢复、清理和原始错误堆栈 |
@@ -194,8 +194,8 @@ v0.4.12 的 MCP 暴露 13 个 Tool。Tool 名属于协议入口，最终权限�
 | `add_resource` | 导入 Resource | 未指定目标时固定 User 私有；Account 共享目标只允许 Account Admin/Platform 对应权限 |
 | `list_watches` | 查看 Resource 自动同步 | 只返回调用者有权读取的目标 Resource Watch |
 | `cancel_watch` | 停止 Resource 自动同步 | 目标 Resource 必须可写；停止同步不删除 Resource |
-| `grep` | 受控全文/模式检索 | 只在已授权根执行，结果逐项过滤 |
-| `glob` | 受控路径匹配 | 只在已授权根执行，禁止以 `viking://` 获得全局枚举 |
+| `grep` | 源码已有的全文/模式检索 | v0.1 不向产品 MCP 凭证发布，只留私网 Studio |
+| `glob` | 源码已有的路径匹配 | v0.1 不向产品 MCP 凭证发布，只留私网 Studio |
 | `forget` | 删除对象 | 名称保留，行为改为 30 天软删除；需要目标 delete Permission，不能直接物理删除 |
 | `health` | MCP 连接健康 | 不返回 Queue、模型、路径或租户数据；调用仍需有效集成凭证 |
 

@@ -49,7 +49,6 @@ web-platform/
     components/
     features/
       auth/
-      memories/
       resources/
       skills/
       sessions/
@@ -68,7 +67,6 @@ web-platform/
 
 /app
 /app/search
-/app/memories
 /app/resources
 /app/resources/private
 /app/resources/private/$resourceId
@@ -192,7 +190,8 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 ### 13.7 首页、检索、活动与 Resource Watch
 
 - `/app` 首页只展示当前 User 的内容数量、最近 Session、最近 Resource/Skill 和处理失败摘要，不返回 Queue、锁、模型、VectorDB 等底层状态。
-- `/app/search` 提供统一语义检索；默认范围是“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
+- `/app/search` 提供“快速检索”和“结合会话检索”两个模式，分别调用源码 `find` 与 `search`。快速检索是默认模式；结合会话检索要求用户选择自己有权读取的 Session。两种模式的默认范围均为“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
+- `recall` 不显示为页面模式，只供 VikingBot/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
 - 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
 - `/app/sessions` 复用现有 Studio Session 的完整聊天方向，但使用产品登录 Session 和统一 RBAC。VikingBot 是 v0.1 必选部署组件；OpenViking Session 保存消息、归档、上下文及 Memory 提取状态，VikingBot 负责生成 AI 回复，前端不直接持有或转发 User API Key。
 - `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。

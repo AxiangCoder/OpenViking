@@ -511,7 +511,7 @@ RESOURCE_PUBLISH_FORBIDDEN
 ### 47.1 每个入口都执行相同授权
 
 - Product API 根据 `/me`、`/account` 或 `/platform/accounts/{id}` 确定 DataAccessContext。
-- 原生 REST、MCP `add_resource/read/find/search/grep/glob/list_watches/cancel_watch/forget`、SDK 和 CLI 使用同一 Content Registry 与 Target Policy。
+- 原生 REST、产品 MCP `add_resource/read/find/search/list_watches/cancel_watch/forget`、SDK 和 CLI 使用同一 Content Registry 与 Target Policy。源码已有的 `grep/glob` 在 v0.1 不向产品凭证发布，只留私网 Studio。
 - MCP/SDK 未指定目标时固定 User 私有；普通 User 显式提交共享 URI 返回 403。
 - Resource Node ID 只能在父 Resource 内解析，防止用另一个节点 ID 读取跨对象数据。
 - 看不见的 Resource 返回 404；看得见但没有写权限的共享 Resource 写操作返回 403。

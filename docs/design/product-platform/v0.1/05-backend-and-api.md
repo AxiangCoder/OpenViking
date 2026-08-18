@@ -354,12 +354,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | 方法 | 路径 | Permission | OpenViking 映射 |
 | --- | --- | --- | --- |
 | GET | `/api/platform/v1/dashboard` | 当前 User 基础访问 | 个人内容、处理状态和最近活动的受控聚合 |
-| POST | `/api/platform/v1/search` | 按每个目标对象的 read Permission | 固定检索本人私有根 + 当前 Account 共享根 |
-| GET | `/api/platform/v1/memories` | `memory.read.self` | 当前 User memory roots |
-| GET | `/api/platform/v1/memories/{id}` | `memory.read.self` | 受控 URI read |
-| POST | `/api/platform/v1/memories/search` | `memory.read.self` | search/find |
-| PUT | `/api/platform/v1/memories/{id}` | `memory.write.self` | content write |
-| DELETE | `/api/platform/v1/memories/{id}` | `memory.delete.self` | 软删除；30 天后 rm |
+| POST | `/api/platform/v1/search/find` | 按每个目标对象的 read Permission | 快速语义检索；复用源码 `find`，固定检索本人私有根 + 当前 Account 共享根 |
+| POST | `/api/platform/v1/search/search` | 按每个目标对象的 read Permission；`session_id` 另需 `session.read.self` | 结合调用者自己的 Session 上下文检索；复用源码 `search`，检索根同上 |
 | GET | `/api/platform/v1/resources/capabilities` | 当前 User 基础访问 | 返回来源类型、上传限制、Watch 能力和周期预设 |
 | POST | `/api/platform/v1/me/resource-uploads` | `resource.user_private.write.self` | 创建当前 User 私有作用域的一次性 Upload ID |
 | GET | `/api/platform/v1/me/resources` | `resource.user_private.read.self` | 当前 User 私有 Resource |
@@ -424,6 +420,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 Skill 不提供独立 `/execute` API。详情页的“在新 Session 中使用”只把稳定 `skill_id` 带入 Session 创建流程，真正使用时由 Session/Agent 链路再次鉴权；具体 DTO 由 Session 产品契约固定。
 
 Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 OpenViking 现有的同步归档与异步 Memory 提取流程；产品只通过 Search 返回有权查看的 Memory 结果，并在 Session 详情返回脱敏的 Memory Impact。底层 Memory 文件写接口不进入 Product API。
+
+产品 Search API 不暴露 `target_uri`、任意 `filter`、`level` 或 `include_provenance` 等调试参数，也不暴露 `grep/glob`。`recall` 保留给 VikingBot、MCP 等受控调用链，不作为 `/app/search` 页面动作。
 
 ### 12.6 管理 API
 
