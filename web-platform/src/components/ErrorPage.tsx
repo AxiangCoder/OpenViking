@@ -17,7 +17,7 @@ export function extractRequestId(error: unknown): string | null {
 export default function ErrorPage({ error }: { error?: unknown }) {
   const requestId = extractRequestId(error);
   const code = isPlatformError(error) ? error.code : "UNKNOWN";
-  const message = error instanceof Error ? error.message : "发生未知错误";
+  const message = isPlatformError(error) ? error.message : "发生未知错误";
 
   return (
     <div className="error-page" role="alert">
