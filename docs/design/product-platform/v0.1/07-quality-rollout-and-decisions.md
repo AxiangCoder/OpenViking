@@ -75,6 +75,7 @@
 - 搜索只返回调用者自己的私有根与当前 Account 共享根，不返回同 Account 其他 User 私有数据或其他 Account 数据。
 - Search 页面只有类型、标签和时间筛选；结合会话检索只能选择当前 User 自己的 Session。伪造 `target_uri/filter/score_threshold/level/include_provenance/limit` 等字段必须被 Product API 拒绝，不能静默透传。
 - Search 的 `since/until` 始终按 `updated_at` 生效；客户端提交 `time_field=created_at` 或其他时间字段必须被 Product API 拒绝。
+- Search Product DTO 不包含 URI、分数、层级、Query Plan、Provenance、Relations 或原始 JSON；Resource/Skill 详情跳转只使用产品 ID。Memory 点击后只展示响应内摘要与匹配原因，不触发底层原始文件读取。
 - Resource/Skill 标签只接受 `key=value`；空 key/value、多个 `=`、超过数量或长度限制均返回字段错误。大小写和首尾空白规范化后去重，多标签 Search 只返回同时具备全部标签的结果。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。

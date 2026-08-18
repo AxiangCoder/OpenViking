@@ -194,6 +194,8 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 - Search 主表单只显示检索词、模式和内容类型（全部、Memory、Resource、Skill）；选择“结合会话检索”后显示当前 User 自己的 Session 选择器。“更多筛选”只包含结构化标签和“更新时间范围”。标签输入提示使用 `key=value`，例如 `project=openviking`；多个标签表示必须全部匹配。页面不提供创建时间/更新时间切换。
 - 相似度分数阈值、索引层级、来源追踪开关、结果数量和自定义 URI 不显示在产品页面，也不能通过 URL Query 或浏览器请求透传到底层 API。
 - `recall` 不显示为页面模式，只供 VikingBot/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
+- Search 结果复用 Studio 现有的“结果列表 + 右侧详情抽屉”交互。列表按引擎返回顺序展示类型、产品显示名称、我的/Account 共享归属和摘要；点击 Resource/Skill 可进入对应产品详情，点击 Memory 只打开抽屉展示 Memory 类型、摘要和匹配原因。
+- Search 列表和抽屉不展示 Viking URI、相似度分数、L0/L1/L2、Query Plan、Provenance、Relations、原始 JSON，也不提供“在 Playground 打开”。Memory 抽屉不读取原始文件，不显示编辑、删除、恢复或下载动作。
 - 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
 - `/app/sessions` 复用现有 Studio Session 的完整聊天方向，但使用产品登录 Session 和统一 RBAC。VikingBot 是 v0.1 必选部署组件；OpenViking Session 保存消息、归档、上下文及 Memory 提取状态，VikingBot 负责生成 AI 回复，前端不直接持有或转发 User API Key。
 - `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。

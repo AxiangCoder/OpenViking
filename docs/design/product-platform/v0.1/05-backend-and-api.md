@@ -435,6 +435,14 @@ Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 Open
 
 所有 Resource/Skill 创建、上传和编辑 API 对 `tags` 使用同一校验：最多 20 项、每项最多 40 字符、严格 `key=value`、key/value 均非空、整体小写并去重。Product Facade 在提交 PostgreSQL 后通过 Outbox 同步 OpenViking `search_tags`；不得把任意自由文本标签静默转换成另一套内部格式。
 
+Search Product Facade 复用源码分组结果，但必须转换为产品 DTO：
+
+- 保留 `context_type`、可显示名称、`abstract/overview` 摘要和 `match_reason`。
+- Resource/Skill 的内部 URI 映射为 `platform_content_refs.id` 和产品详情链接；Memory 只返回当前结果抽屉所需的类型、显示名称、摘要和匹配原因。
+- `visibility` 由服务端根据已授权 canonical URI 分类为 `user_private/account_shared`，不能由客户端提交。
+- 删除原始 `uri`、`score`、`level`、`query_plan`、`provenance`、`relations` 和底层 category；浏览器不能据产品结果还原 Account/User 存储路径。
+- Memory 结果不提供独立详情读取、文件下载或修改动作；抽屉直接使用 Search 响应，不再调用底层 `content/read`。
+
 ### 12.6 管理 API
 
 | 方法 | 路径 | Permission |

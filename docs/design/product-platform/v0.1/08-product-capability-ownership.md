@@ -166,7 +166,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | --- | --- | --- | --- |
 | `/studio/home` | Dashboard、Token、Context Commit 摘要 | `/app` 个人摘要；`/admin/monitoring` Account 摘要；`/platform/monitoring` 平台摘要 | 原始 Token/Commit 调试明细 |
 | `/studio/playground` | VikingFS 浏览、内容编辑、Resource 导入、终端、Agent Chat | Resource 详情/导入与 `/app/sessions` Chat | 任意 URI 浏览、原始命令终端、底层 Session 命令 |
-| `/studio/retrieval` | find/search/grep/glob 与原始范围过滤 | `/app/search` 的快速检索与结合会话检索 | grep/glob、任意根 URI、调试过滤器和原始结果结构 |
+| `/studio/retrieval` | find/search/grep/glob、结果列表/抽屉与原始范围过滤 | `/app/search` 复用结果列表/抽屉及快速检索、结合会话检索 | grep/glob、任意根 URI、分数/层级/检索计划/来源追踪和原始结果结构 |
 | `/studio/skills` | 私有/共享 Skill 浏览 | `/app/skills`、`/admin/shared-skills`、平台只读页 | 原始文件结构和引擎调试信息 |
 | `/studio/sessions` | Session 列表、Chat、删除、Context/Archive | `/app/sessions`；管理员按 Subject 只读查看 | extract、tool-result 原始调试和任意底层操作 |
 | `/studio/tasks` | 所有 QueueFS Task | `/app/activity` 及受控管理摘要 | 系统任务、迁移、恢复、清理和原始错误堆栈 |

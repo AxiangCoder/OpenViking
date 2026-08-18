@@ -5,6 +5,11 @@
 > 基线提交：`c1d38eb47ff2ebf9ff4cee46756728893fd8caf3`<br>
 > 目标读者：产品负责人、前端工程师、后端工程师、运维与安全负责人
 
+## 设计推进原则
+
+- OpenViking v0.4.12 源码已有且符合已确认产品边界的能力，直接复用并写入设计，不逐项重复确认。
+- 只有源码没有对应能力、源码行为与产品规则冲突，或复用会改变已确认的权限/业务语义时，才提出产品决策问题。
+
 ## 文档导航
 
 1. [产品定位、术语与源码基线](01-product-positioning-and-baseline.md)
@@ -45,6 +50,7 @@
 - `/app/search` 提供“快速检索”和“结合会话检索”两个产品模式，分别复用源码 `find` 与 `search`；`recall` 只供 VikingBot/MCP 等调用链使用，`grep/glob` 只留私网 Studio。
 - Search 基础筛选只有内容类型；结合会话检索额外选择当前 User 自己的 Session。结构化标签和更新时间范围放入“更多筛选”；时间固定按 `updated_at`，分数阈值、索引层级、来源追踪、结果数量和自定义 URI 均由后端控制，不进入产品 UI。
 - Resource、Skill 与 Search 统一使用源码兼容的 `key=value` 结构化标签；标签规范化为小写并去重，多个检索标签采用 AND 关系，不建立普通标签到检索标签的转换层。
+- Search 结果复用 Studio 的“结果列表 + 右侧详情抽屉”交互；Resource/Skill 跳转产品详情，Memory 只在抽屉显示摘要和匹配原因。产品页面不显示 URI、分数、索引层级、检索计划、来源追踪或原始 JSON。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
 - MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
@@ -74,3 +80,4 @@
 | 2026-08-18 | Design v0.1 Search 筛选收敛 | 类型作为基础筛选，标签与时间作为更多筛选；隐藏分数、层级、来源追踪、数量和 URI 等调试参数。 |
 | 2026-08-18 | Design v0.1 标签模型收敛 | Resource、Skill 与 Search 统一采用 `key=value` 结构化标签，多标签检索要求全部匹配。 |
 | 2026-08-18 | Design v0.1 Search 时间语义收敛 | 时间范围固定按 `updated_at` 筛选，页面不提供创建时间/更新时间切换。 |
+| 2026-08-18 | Design v0.1 源码复用原则与 Search 结果 | 明确已有合规能力直接复用；Search 复用列表和详情抽屉，同时移除引擎诊断字段。 |
