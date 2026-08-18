@@ -360,6 +360,7 @@ postgresql（生产可使用托管 RDS）
 
 | 路径 | 上游/处理器 |
 | --- | --- |
+| `/` | `web-platform` 入口页（不注册 `/`→`/studio/` 重定向） |
 | `/login`, `/app/*`, `/admin/*`, `/platform/*` | `web-platform` SPA |
 | `/oauth/consent`, `/oauth/verify` | `web-platform` MCP OAuth 授权 SPA 页面 |
 | `/studio/*` | 公网不注册；仅可选私网入口指向现有 `web-studio` SPA |
@@ -370,6 +371,8 @@ postgresql（生产可使用托管 RDS）
 同源部署可以减少 CORS 和 Cookie 配置错误。
 
 生产公网路由表中不存在 `/studio`。即使 Studio bundle 随镜像构建，也只有私网运维 listener 或开发配置可以挂载它；“代码保留”和“公网可访问”是两个独立概念。
+
+应用层双重保险：create_app 必须提供 Studio 启用开关（bundle 存在时默认不挂载 `/studio`、不注册根路径重定向），并提供低层 router 条件挂载开关（按需 include debug/observer/snapshot/pack/console/admin/webdav）；代理层路径 deny 作为第二道防线，不能只依赖代理配置（源码 app.py 无条件 include 全部 router）。
 
 ### 16.3 配置建议
 
@@ -397,10 +400,28 @@ postgresql（生产可使用托管 RDS）
     "deletion": {
       "retention_days": 30,
       "purge_worker_enabled": true
+    },
+    "studio": {
+      "enabled": false
+    },
+    "low_level_routers": {
+      "enabled": ["admin"]
+    },
+    "health": {
+      "provisioning_backlog_threshold": 100,
+      "migration_lag_versions": 1,
+      "purge_stall_threshold": {
+        "max_pending": 500,
+        "max_stall_days": 3
+      }
     }
   }
 }
 ```
+
+- `studio.enabled`：bundle 存在时默认 `false`——不挂载 `/studio`、不注册 `/`→`/studio/` 重定向；私网运维可显式开启。
+- `low_level_routers.enabled`：低层运维 router（debug/observer/snapshot/pack/console/admin/webdav）白名单，默认只保留 `admin`（配合代理层 deny 双保险）。
+- `health`：`/ready` 判定阈值——Provisioning backlog 超过 100 条、migration 落后 ≥ 1 版本、Purge 停滞（待清理对象数量超过 `purge_stall_threshold.max_pending`，或最早 `purge_after` 落后超过 `max_stall_days` 天，或 Purge Worker 未运行）时非 ready（P5-E2 按此精确复测）。
 
 数据库 URL、Cookie 签名密钥和 Root API Key 必须通过环境变量或 Secret Manager 注入。
 

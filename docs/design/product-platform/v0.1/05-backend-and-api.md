@@ -265,6 +265,7 @@ RESTORE_WINDOW_EXPIRED
 | POST | `/api/platform/v1/auth/logout` | 登录 Session + CSRF | 撤销当前登录会话并清 Cookie |
 | POST | `/api/platform/v1/auth/logout-all` | 登录 Session + CSRF | 撤销当前用户全部登录会话 |
 | GET | `/api/platform/v1/auth/me` | 登录 Session | 返回当前用户、角色、权限摘要 |
+| GET | `/api/platform/v1/auth/me/session-summary` | 登录 Session | 返回当前登录 Session 的脱敏摘要（最后活动时间、浏览器/设备摘要：IP hash、User-Agent 截断，13 §81.4），不返回完整 IP 或单会话列表 |
 | POST | `/api/platform/v1/auth/password/change` | 登录 Session + CSRF | 修改密码：请求体必填 `old_password` 与 `new_password`；旧密码校验失败返回统一 `LOGIN_FAILED` 并计入登录限流；成功后轮换当前登录会话。**实现约束**：轮换必须同步向响应下发新的 Session Cookie（`Set-Cookie`），否则已登录客户端会在下一次请求时因旧会话被撤销而立即掉线（技术验证确认） |
 
 邮箱是全局唯一登录标识，登录请求不提交 Account；服务端根据规范化邮箱解析固定的 User/Account：
@@ -374,7 +375,11 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | POST | `/api/platform/v1/me/resources/{id}/watch/trigger` | `resource.user_private.write.self` | 手动触发一次同步并产生 Task |
 | DELETE | `/api/platform/v1/me/resources/{id}/watch` | `resource.user_private.write.self` | 停止自动同步，不删除 Resource |
 | GET | `/api/platform/v1/me/resources/{id}/nodes` | `resource.user_private.read.self` | 当前 Resource 内部只读节点分页，隐藏控制文件 |
+| GET | `/api/platform/v1/me/resources/{id}/nodes/{node_id}` | `resource.user_private.read.self` | 节点元数据/安全预览（09 §46.2） |
+| GET | `/api/platform/v1/me/resources/{id}/nodes/{node_id}/download` | `resource.user_private.read.self` | 单节点下载（09 §46.2） |
 | GET | `/api/platform/v1/me/resources/{id}/operations` | `task.read.self` | 当前 Resource 的脱敏 Activity |
+| POST | `/api/platform/v1/me/resources/{id}/operations/{operation_id}/cancel` | `task.cancel.self` | 仅可取消状态；同时校验目标对象写权限（09 §46.2） |
+| POST | `/api/platform/v1/me/resources/{id}/search` | `resource.user_private.read.self` | 仅在当前 Resource 内检索（09 §46.2） |
 | GET | `/api/platform/v1/me/resources/{id}/deletion-preview` | `resource.user_private.delete.self` | 删除影响范围和恢复截止时间 |
 | POST | `/api/platform/v1/account/resource-uploads` | `resource.account_shared.write.account` | Account 共享作用域的一次性 Upload ID |
 | GET | `/api/platform/v1/account/resources` | `resource.account_shared.read.account` | 当前 Account 共享 Resource，只读接口对普通 User 开放 |
@@ -387,6 +392,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | PUT/POST/DELETE | `/api/platform/v1/account/resources/{id}/watch/*` | `resource.account_shared.write.account` | Account Admin 配置、暂停、恢复、触发或删除共享 Watch |
 | GET | `/api/platform/v1/me/skills` | `skill.user_private.read.self` | 当前 User 私有 Skill |
 | POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 在线创建或上传自己的私有 Skill；Account 范围名称唯一 |
+
+Skill 创建/上传不新增独立 upload 端点，复用 `me/resource-uploads`/`account/resource-uploads` 生成的 `upload_id`（10 §61.5）；Upload ID 绑定 Actor、Account 与目标入口，普通 User 不能把私有入口生成的上传 ID 消费到共享区，客户端也不能用 `target_uri` 改变目标。
 | GET | `/api/platform/v1/me/skills/{id}` | `skill.user_private.read.self` | 自己的私有 Skill 详情 |
 | PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 整体修改自己的私有 Skill；名称不可变 |
 | DELETE | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 软删除自己的私有 Skill |

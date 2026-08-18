@@ -350,6 +350,32 @@
 3. `RESTORE_WINDOW_EXPIRED` 时提示恢复窗口已过，不可恢复。
 4. 恢复动作写审计（Actor/Subject/对象/结果）。
 
+## 88A. `/app` 个人回收站
+
+> 属主本人范围（当前 User 可恢复自己的对象）；与 `/admin/recycle-bin` 共用类型分组/恢复弹窗/错误码展示组件，数据契约见 05 §12.5 `GET /api/platform/v1/recycle-bin`、`POST .../recycle-bin/{id}/restore`。
+
+### 88A.1 页面结构
+
+- 按对象类型分组：自己的私有 Resource、自己的私有 Skill、自己的 Session。
+- 每项展示：名称、类型、删除时间、删除者（自己）、恢复截止时间、是否可恢复。
+- 空状态：无恢复窗口内对象时展示说明文案与链接入口（新增 Resource / 在线创建 Skill）。
+- 不展示：其他 User 的私有对象、Account 共享对象（共享对象恢复入口在 `/admin`，13 §88）。
+
+### 88A.2 恢复动作
+
+- 恢复权限按对象类型校验（05 §12.6 注）：
+  - 自己的私有 Resource：`resource.user_private.delete.self`。
+  - 自己的私有 Skill：`skill.user_private.manage.self`；同名已被占用时返回 `SKILL_NAME_CONFLICT` 并保持删除状态（10 §55.3）。
+  - 自己的 Session：`session.delete.self`（11 §72）。
+- 恢复确认弹窗：名称、类型、恢复截止时间；与 `/admin/recycle-bin` 同组件。
+
+### 88A.3 验收规则
+
+1. 仅展示当前 User 可恢复的对象；不可恢复类型不显示。
+2. 越权恢复直接请求后端返回 403 并审计。
+3. `RESTORE_WINDOW_EXPIRED` 正确展示、不可恢复。
+4. 恢复动作写审计；Skill 恢复冲突展示 `SKILL_NAME_CONFLICT`。
+
 ## 89. 平台管理 `/platform/*`
 
 ### 89.1 信息架构与守卫
