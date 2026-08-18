@@ -237,3 +237,71 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - 到达 `purge_after` 后由后台 Worker 幂等清理 OpenViking 数据，再将状态置为 `purged`。
 - 审计事件不随业务数据物理清理。
 - `resource_id` 引用 `platform_content_refs.id`；删除任务中的 `ov_uri` 只供受控 Worker 使用，不能替代创建任务时的可见性与 Permission 校验。
+
+### 10.12 `platform_operation_refs`
+
+该表把 OpenViking 的异步 Task、Resource Watch 和产品对象关联起来，负责授权索引和产品状态展示，不复制 QueueFS 的运行日志或任务正文。
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID/ULID 产品操作 ID |
+| `account_id` | 操作所属 Account，不可空 |
+| `operation_kind` | `task/watch` |
+| `operation_type` | `resource_import/resource_watch/skill_import/session_commit/...` 稳定产品枚举 |
+| `ov_operation_id` | OpenViking Task/Watch ID，与 `account_id + operation_kind` 组成唯一约束 |
+| `target_type/target_id` | 目标对象类型及产品 ID；可空表示平台内部任务 |
+| `target_visibility` | `user_private/account_shared/internal` |
+| `owner_user_id` | User 私有操作的 Subject User；共享或内部操作为空 |
+| `initiated_by_actor_user_id` | 发起操作的 Actor；系统发起时可空 |
+| `status` | `pending/running/active/succeeded/failed/cancelled/paused`；`active/paused` 主要用于 Watch |
+| `cancellable` | 当前任务类型是否允许用户取消；最终仍需实时校验 |
+| `created_at/updated_at/completed_at` | 时间 |
+
+规则：
+
+- `/app/activity` 只查询 `owner_user_id=actor_user_id` 的私有对象任务，以及 Actor 有权读取的当前 Account 共享对象任务。
+- Account Admin 的管理视图只显示 Account 共享对象任务，不因管理员可读取成员数据而默认暴露所有成员的私有任务日志。
+- Platform Super Admin 可按平台 Permission 查询全部范围，但每次查询仍记录 Actor、Subject Account/User 和 Scope。
+- 查看 Watch 继承目标 Resource 的读取权限；新增、修改、手动触发和取消继承目标 Resource 的写权限。
+- 取消 Task 需要对应 `task.cancel.*`、任务处于可取消状态，并再次校验目标对象的写权限；平台内部清理、Provisioning、备份恢复和迁移任务不允许通过普通产品接口取消。
+- `ov_operation_id` 不返回为可枚举的主 ID；产品 API 使用本表 `id`，再由服务端解析到底层操作。
+
+### 10.13 MCP OAuth 数据表
+
+MCP OAuth 的 Client、Grant、Pending Authorization 和 Token 数据迁入 PostgreSQL，不继续以工作目录 SQLite 作为产品生产环境的授权事实来源。这里的 OAuth 只用于 MCP 客户端授权，不用于产品网页登录。
+
+`iam_oauth_clients`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `client_id` | OAuth Public Client ID，主键 |
+| `client_name` | 同意页展示名称，可空 |
+| `redirect_uris` | 允许的精确回调 URI 列表 |
+| `grant_types/response_types` | 允许的协议类型 |
+| `token_endpoint_auth_method` | v0.1 固定为 Public Client 的 `none`，必须使用 PKCE |
+| `status` | `active/disabled` |
+| `created_at/updated_at` | 时间 |
+
+`iam_oauth_grants`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | UUID/ULID 主键，也是 `/app/profile/connections` 的连接 ID |
+| `account_id/user_id` | 完成授权的 Account User |
+| `client_id` | `iam_oauth_clients.client_id` |
+| `scope` | 协议 Scope；v0.1 为 `mcp` |
+| `status` | `active/revoked` |
+| `granted_at/last_used_at` | 授权与最近使用时间 |
+| `revoked_at/revoked_by` | 撤销信息，可空 |
+
+`iam_oauth_pending_authorizations` 保存短期 `pending_id`、display code hash、Client、精确 redirect URI、PKCE challenge、state、过期时间和批准状态；只能由 OAuth 协议端点与产品授权端点访问，前端不能提交或修改 redirect URI。
+
+`iam_oauth_tokens` 只保存 Access Token、Refresh Token 和 Authorization Code 的 hash、类型、Grant、Token family、父子轮换关系、过期/消费/撤销状态，不保存可再次读取的明文。Refresh Token 必须轮换；检测到已消费 Token 重放时撤销整个 Token family。
+
+授权约束：
+
+- 一个 Grant 绑定一个 `user_id + client_id + scope`，不绑定登录 Session，也不绑定某个 User API Key。
+- 同意动作只接受 `authentication_method=session` 的当前网页登录身份；API Key 可以直接调用 MCP，但不能代替浏览器批准 OAuth Client。
+- 每次 OAuth Token 调用都重新加载 User、Account、角色、Permission、Grant 和 Token 状态，生成与 API Key 相同语义的 User Principal。
+- 用户禁用或进入删除期时撤销其全部 OAuth Grant/Token；用户恢复后不自动恢复。角色变化无需重签 Token，但下一次请求立即按新权限计算。
+- OAuth Client/Grant/Token 的创建、批准、拒绝、轮换、重放拒绝和撤销均写审计，不记录 Code、Token、PKCE verifier 或 display code 明文。

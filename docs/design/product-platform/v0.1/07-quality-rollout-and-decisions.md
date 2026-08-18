@@ -91,6 +91,10 @@
 - 删除/禁用最后一个 Account Admin 被拒绝。
 - 篡改 Subject Account/User、伪造角色或绕过确认弹窗均不能绕过后端授权。
 - 篡改 `visibility`、直接提交 `viking://resources`、利用默认目标、编码/别名 URI 或跨可见性移动均不能绕过共享写权限。
+- `/studio` 不挂载时，同设备和跨设备 MCP OAuth 仍能通过 `/oauth/consent`、`/oauth/verify` 和产品登录 Session 完成；浏览器网络与存储中不出现 User API Key。
+- MCP `forget` 和所有公开删除入口只进入 30 天回收期，不能直接调用物理删除。
+- 普通 User 不能查看、触发或取消其他 User 私有 Resource 的 Watch/Task；Account Admin 只能管理共享 Resource Watch 和有权操作的任务。
+- 生产公网访问 WebDAV、Snapshot、Pack、Debug、Observer 和系统修复入口得到 404/拒绝，不能借这些 Router 绕过 Product Facade。
 
 ## 19. 分阶段实施
 
@@ -235,4 +239,4 @@
 
 ## 23. 设计收敛状态
 
-当前已列出的 Design v0.1 未决项均已收敛。Studio 边界固定为“代码可选保留、生产公网默认不挂载”；若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。后续发现新的设计问题时继续补充讨论。
+IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。后续设计讨论进入页面字段、状态和交互契约。

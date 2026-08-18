@@ -14,6 +14,7 @@
 5. [后端模块与 API](05-backend-and-api.md)
 6. [前端、安全、初始部署与运维](06-frontend-security-and-operations.md)
 7. [测试、实施边界与架构决策](07-quality-rollout-and-decisions.md)
+8. [产品能力归属设计](08-product-capability-ownership.md)
 
 ## 已确认设计决策
 
@@ -34,6 +35,10 @@
 - `viking://resources/**` 是 Account 共享 Resource；`viking://user/{ov_user_id}/resources/**` 是 User 私有 Resource。普通 User 默认新增到自己的私有区，只读 Account 共享 Resource；Account Admin 管理本 Account 共享 Resource。
 - `viking://agent/skills/**` 是 Account 共享 Skill；`viking://user/{ov_user_id}/skills/**` 是 User 私有 Skill。普通 User 可读取和使用共享 Skill，但只能管理自己的私有 Skill；Account Admin 管理本 Account 共享 Skill。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
+- 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
+- MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
+- Watch/自动同步作为 Resource 详情子功能，Task 通过 Activity 展示；Relations/Graph 只作为 Search/Session/Context 的内部能力。
+- Snapshot、Pack、Backup、Import、Restore 只留私网运维；当前 WebDAV 共享根写入口在 v0.1 生产禁用。
 - v0.1 不提供 Service Account 或 Service Account Key；内部 Worker 使用不对外签发凭证的系统身份。
 - v0.1 是产品初版，不导入或兼容旧 Account/User/API Key 门禁；现有协议入口可被选为首版契约，但鉴权统一接入新 IAM。
 
@@ -48,3 +53,4 @@
 | 2026-08-18 | Design v0.1 数据可见性修订 | 根据 v0.4.12 源码核对 Resource/Skill 命名空间；明确 Account 共享与 User 私有边界、默认写入位置及全入口统一授权。 |
 | 2026-08-18 | Design v0.1 登录方式收敛 | 删除 OIDC、企业微信和企业单点登录设计及后续计划；产品网页登录固定为本地邮箱密码。 |
 | 2026-08-18 | Design v0.1 Studio 边界收敛 | 正式能力统一进入 `/app`、`/admin`、`/platform`；`/studio` 降级为可选的私网维护入口，生产公网默认不挂载。 |
+| 2026-08-18 | Design v0.1 能力归属收敛 | 完成 Studio、REST、MCP、SDK/CLI 能力盘点；Watch 纳入 Resource 子功能，Relations 保持内部能力，Snapshot/Pack 与 WebDAV 不进入公网产品；MCP OAuth 授权页迁出 Studio。 |

@@ -22,12 +22,16 @@ web-platform/
       login/
       app/
         home/
+        search/
         memories/
         resources/
         skills/
         sessions/
+        activity/
+        recycle-bin/
         profile/
           api-keys/
+          connections/
       admin/
         users/
         shared-resources/
@@ -39,6 +43,9 @@ web-platform/
         accounts/
         users/
         audit/
+      oauth/
+        consent/
+        verify/
     components/
     features/
       auth/
@@ -60,6 +67,7 @@ web-platform/
 /login
 
 /app
+/app/search
 /app/memories
 /app/resources
 /app/resources/private
@@ -68,8 +76,11 @@ web-platform/
 /app/skills/private
 /app/skills/shared
 /app/sessions
+/app/activity
+/app/recycle-bin
 /app/profile
 /app/profile/api-keys
+/app/profile/connections
 
 /admin/users
 /admin/users/$userId/data
@@ -78,6 +89,9 @@ web-platform/
 /admin/shared-skills
 /admin/roles
 /admin/audit
+/admin/activity
+/admin/monitoring
+/admin/recycle-bin
 /admin/settings
 
 /platform/accounts
@@ -87,9 +101,17 @@ web-platform/
 /platform/accounts/$accountId/users/$userId/data
 /platform/accounts/$accountId/users/$userId/api-keys
 /platform/audit
+/platform/activity
+/platform/monitoring
+/platform/recycle-bin
+
+/oauth/consent
+/oauth/verify
 ```
 
 `/platform` 仅 Platform Super Admin 可进入。这里选择目标 Account 是查看管理对象，不会改变登录者的 Actor 身份，也不是普通用户意义上的“切换 Account”。Account Admin 和 User 的 Account 始终固定。
+
+`/oauth/consent` 和 `/oauth/verify` 是 MCP OAuth 的短流程页面，不属于产品登录方式，也不进入侧边栏。页面使用现有登录 Session 确认当前 User；未登录时先跳 `/login`，登录后只允许回到同源的这两个授权路由。
 
 ### 13.3 Resource/Skill 信息架构
 
@@ -144,9 +166,41 @@ web-platform/
 - 用户、共享内容、凭据、审计、监控等正式能力必须按角色进入对应产品页面；不能保留“只有 Studio 能完成”的正式业务流程。
 - 原始 URI 操作、底层任务调试和实验性设置可继续只存在于 Studio，它们是运维能力，不计入产品页面功能覆盖。
 - Studio 被启用时继续使用 API Key 连接模型；用户凭证必须由新 IAM 签发，Root API Key 只允许受控运维人员在隔离环境使用。
+- 当前 Studio 中的 `/studio/oauth/consent` 和 `/studio/oauth/verify` 不再作为产品 OAuth 入口；对应页面迁入 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，并以产品登录 Session 授权，避免 MCP OAuth 依赖不对公网开放的 Studio。
 - Root 管理密钥不预置进公开静态资源。
 
-### 13.7 管理员直接创建用户与密码交接
+### 13.7 首页、检索、活动与 Resource Watch
+
+- `/app` 首页只展示当前 User 的内容数量、最近 Session、最近 Resource/Skill 和处理失败摘要，不返回 Queue、锁、模型、VectorDB 等底层状态。
+- `/app/search` 提供统一语义检索；默认范围是“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
+- `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。
+- Resource 自动同步不建立独立顶级 Watch 菜单。用户在自己的 Resource 详情页设置同步周期、查看最近同步和手动触发；Account Admin 在共享 Resource 详情页执行相同操作。
+- 取消 Task 或 Watch 前展示目标 Resource、任务类型、当前状态和影响；后端再次校验 Task Permission、目标 Resource 写权限和可取消状态。
+- `/admin/monitoring` 只展示当前 Account 的业务健康摘要和共享对象失败任务；`/platform/monitoring` 展示平台聚合。Queue、锁、模型、VectorDB、文件系统和原始请求日志只留私网 Studio/监控系统。
+
+### 13.8 MCP OAuth 授权页
+
+同设备授权流程：
+
+```text
+MCP Client -> OAuth authorize -> /oauth/consent?pending=...
+                               -> 未登录则 /login
+                               -> 展示 Client/回调域名/Scope/数据范围
+                               -> 允许或拒绝
+                               -> OAuth Server 回调 MCP Client
+```
+
+跨设备流程由 MCP 客户端显示短期验证码；用户在任意已登录产品浏览器打开 `/oauth/verify`，输入验证码后看到同一份影响说明，再允许或拒绝。
+
+页面规则：
+
+- 不显示或要求输入 User API Key、Root API Key、密码或 Account 名称。
+- 不允许客户端提供的名称替代回调域名展示；同时展示服务端登记的 Client ID 和回调 host，降低仿冒风险。
+- 明确提示“该客户端将以你的身份运行，并受你当前角色权限限制”；普通 User 不会因同意 OAuth 获得共享写权限。
+- 用户可以在 `/app/profile/connections` 查看 Client、授权时间、最近使用时间和 Scope，并单独撤销。
+- `pending`、display code、authorization code 和 Token 不进入 URL 分析、错误上报、埋点或访问日志正文。
+
+### 13.9 管理员直接创建用户与密码交接
 
 - Platform Super Admin 创建 Account 时填写首位 Account Admin 的邮箱和展示信息；成功页展示系统生成的初始密码。
 - Account Admin 在 `/admin/users` 直接创建本 Account 的普通 User，不提供邀请按钮、邀请状态、邀请邮件或激活页面。
@@ -279,10 +333,11 @@ postgresql（生产可使用托管 RDS）
 | 路径 | 上游/处理器 |
 | --- | --- |
 | `/login`, `/app/*`, `/admin/*`, `/platform/*` | `web-platform` SPA |
+| `/oauth/consent`, `/oauth/verify` | `web-platform` MCP OAuth 授权 SPA 页面 |
 | `/studio/*` | 公网不注册；仅可选私网入口指向现有 `web-studio` SPA |
 | `/api/platform/v1/*` | Platform Router |
 | `/api/v1/*` | OpenViking Router |
-| `/mcp` 和 OAuth well-known | OpenViking MCP/OAuth |
+| `/mcp`、OAuth well-known、authorize/register/token 协议端点 | OpenViking MCP/OAuth Provider |
 
 同源部署可以减少 CORS 和 Cookie 配置错误。
 

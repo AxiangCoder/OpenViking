@@ -97,6 +97,18 @@
 - 相同用户通过登录 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
 - 系统内部 Worker 使用内部 `SystemPrincipal`，不借用用户 API Key，也不对外暴露系统凭证。
 
+MCP OAuth 是“用户把自己的 OpenViking 权限授权给一个 MCP 客户端”，不是产品登录，也不是企业单点登录。当前 v0.4.12 源码把同意页和跨设备验证码页放在 `/studio/oauth/consent`、`/studio/oauth/verify`，并依赖 Studio 中已配置的 API Key；这一实现不能进入产品 v0.1，因为生产公网不挂载 Studio，浏览器也不应保存 User API Key。
+
+产品化后的 OAuth 授权规则：
+
+- 同意页和跨设备验证页迁入 `web-platform`，使用独立路由 `/oauth/consent`、`/oauth/verify`，但不进入日常产品导航。
+- 未登录用户先跳转 `/login`，登录成功后只允许返回同源、白名单授权路由；授权身份来自服务端登录 Session。
+- 同意页展示客户端名称、回调域名、请求的 MCP Scope、当前 Account、可访问的数据范围和主要操作影响，并提供“允许/拒绝”；不要求输入密码、Account 名称或 User API Key。
+- 授权提交必须使用登录 Session + CSRF；OAuth Access Token 不能再次批准新的 OAuth 客户端，避免 Token 链式扩权。
+- Access/Refresh Token 只保存 hash，绑定授权用户、客户端和 Grant；用户禁用、删除、角色变化、Grant 撤销或 Token 到期后立即重新校验并拒绝。
+- 用户在 `/app/profile/connections` 查看并撤销自己已授权的客户端；撤销 Grant 同时撤销其 Token family，不影响该用户的其他 API Key 或其他客户端授权。
+- v0.1 的 MCP Scope 可以保持协议层单一 `mcp`，但 Scope 只表示“允许调用 MCP”；最终有效权限仍是 `用户当前 RBAC ∩ MCP Tool 对应动作`，不能用 Scope 扩大角色权限。
+
 ### 8.6 Service Account 决策
 
 v0.1 不提供 Service Account、Service Account Key、机器角色或相关管理页面。当前产品场景是每个用户为自己的插件/MCP 配置个人 API Key，没有已确认的 Account 级共享机器主体需求。
@@ -195,7 +207,19 @@ skill.account_shared.manage.platform
 
 audit.read
 monitoring.read
-system.task.read
+privacy_config.read.self
+privacy_config.write.self
+
+integration.oauth.authorize.self
+integration.oauth.read.self
+integration.oauth.revoke.self
+
+task.read.self
+task.cancel.self
+task.read.account_shared
+task.cancel.account_shared
+task.read.platform
+task.cancel.platform
 ```
 
 不使用 `admin=true` 之类布尔值代替 Permission。角色只是 Permission 的集合。
@@ -206,6 +230,9 @@ system.task.read
 - `account_shared` 表示对象归属于 Account；`account` 表示当前固定 Account，`platform` 表示由 Platform Super Admin 选择的目标 Account。
 - “共享”不是一个无限范围：`resource.account_shared.read.account` 只能读取 Actor 所属 Account 的共享 Resource，不能读取其他 Account。
 - Account 共享对象不授予创建者额外 Permission。`created_by` 只用于审计，不参与 v0.1 授权。
+- Search、Relations 和 Watch 不以“换一个入口”获得独立数据权限：Search/Relations 对每个结果或关系端点重新检查读取权限；Watch 的查看继承目标 Resource 的读取权限，新增、修改、触发和取消继承目标 Resource 的写权限。
+- `task.*` 只控制任务记录的查看和取消，不能替代目标对象权限。取消任务时必须同时满足 Task Permission、任务可取消状态和目标对象当前写权限。
+- `privacy_config.*.self` 只允许用户管理自己的 Skill 私密配置；管理员的数据查看权限不自动包含读取他人 Secret 的权限。
 
 ### 9.2 内置角色与数据范围
 
@@ -243,7 +270,11 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | Account 共享 Skill 读取、使用 | 全部 Account | 当前 Account | 当前 Account |
 | Account 共享 Skill 管理 | 全部 Account | 当前 Account |  |
 | 管理自己的 API Key |  | ✓ | ✓ |
+| 管理自己的 MCP 客户端授权 |  | ✓ | ✓ |
 | 查看并撤销其他用户的 API Key 元数据 | 全部 Account | 当前 Account |  |
+| 查看自己的处理任务 |  | ✓ | ✓ |
+| 查看 Account 共享对象处理状态 | 全部 Account | 当前 Account | 当前 Account |
+| 取消 Account 共享对象任务 | 全部 Account | 当前 Account |  |
 | 查看审计 | 全平台 | 当前 Account |  |
 | 系统监控 | ✓ | 当前 Account 视图 |  |
 

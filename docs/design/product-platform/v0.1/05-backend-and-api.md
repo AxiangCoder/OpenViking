@@ -36,14 +36,22 @@ openviking/server/platform/
     reconciler.py
 
   product/
+    dashboard.py
     memories.py
     resources.py
     skills.py
     sessions.py
     search.py
+    activity.py
+    watches.py
+    privacy_configs.py
     target_policy.py
     data_access.py
     recycle_bin.py
+
+  integrations/
+    mcp_oauth.py
+    oauth_repository.py
 
   audit/
     service.py
@@ -57,6 +65,9 @@ openviking/server/platform/
     product_resources.py
     product_skills.py
     product_sessions.py
+    product_search.py
+    product_activity.py
+    product_integrations.py
     admin_accounts.py
     admin_users.py
     admin_user_data.py
@@ -113,6 +124,7 @@ OAuth Access Token ------> OAuthPrincipalDependency ----+             |
 - 将 Actor、Subject、Action、Scope 和 Request ID 写入审计事件。
 - 查询 `iam_deletion_jobs`，保证软删除对象不出现在正常列表，也不能被普通详情接口读取。
 - 统一处理等待、任务、分页和错误。
+- 为对外异步 Task/Watch 建立 `platform_operation_refs`，使状态列表、取消和触发都能回到目标对象重新授权。
 - 将 OpenViking 底层响应转换成稳定产品 DTO。
 
 示例：产品前端请求“我的记忆列表”，后端固定构造当前用户的 canonical User URI，不接受 `user_id` 参数；Account Admin 请求“查看成员记忆”时，路由中的 `user_id` 只作为 Subject，后端验证其属于当前 Account 后再构造 URI。
@@ -196,6 +208,13 @@ v0.1 不定义 Service Account 的 repository、resolver 或 credential type。�
 - Platform Super Admin 的跨 Account 低层调用只能来自平台管理 API，不接受普通用户凭证通过 Header 切换目标 Account。
 
 当前源码中 `Namespace.is_accessible()` 会允许同 Account 用户触达 `viking://resources/**`，但它没有表达“普通 User 只读、Account Admin 可写”的产品策略。因此 OpenViking Namespace ACL 仍作为隔离兜底，新的 URI Policy 才是共享区写权限的强制边界。
+
+额外的入口约束：
+
+- MCP `forget` 在 v0.1 仍可保留 Tool 名称，但产品语义改为进入 30 天软删除回收期；它不能调用不可恢复的底层 `rm`。物理清理由 Purge Worker 执行。
+- MCP `list_watches/cancel_watch` 以及原生 Watch Router 必须先通过 `platform_operation_refs` 解析目标 Resource；取消 Watch 需要目标 Resource 当前写权限。
+- WebDAV 当前固定映射到 Account 共享 `viking://resources/**`，又包含 PUT、DELETE、MKCOL、MOVE 等写操作。v0.1 没有已确认的 WebDAV 业务需求，因此生产公网不挂载 `/webdav/resources`，避免形成共享区写入旁路。
+- Snapshot、Pack、Backup、Import、Restore、任意 URI 文件系统写入和系统修复接口不进入 v0.1 产品 API；只能在私网运维面以 Root/System 身份执行。
 
 ## 12. API 设计
 
@@ -315,10 +334,23 @@ RESTORE_WINDOW_EXPIRED
 - 未显式指定 Resource 目标时默认写入调用用户的 User 私有区；客户端不能利用源码默认值把个人内容写入共享区。
 - v0.1 不接受 `principal_type=service_account`，也不签发 Service Account Key。
 
+MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize、Token）继续遵循 OAuth 2.1/PKCE；产品授权页面和身份确认改走以下接口：
+
+| 方法 | 路径 | 鉴权 | Permission | 说明 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/platform/v1/integrations/mcp/oauth/pending/{pending_id}` | 无 | 无 | 只返回客户端名称、回调域名和 Scope 等公开安全元数据 |
+| POST | `/api/platform/v1/integrations/mcp/oauth/authorize` | 登录 Session + CSRF | `integration.oauth.authorize.self` | 使用 `pending_id` 或跨设备 code 批准/拒绝，不接受 API Key/OAuth Token |
+| GET | `/api/platform/v1/me/oauth-grants` | 登录 Session | `integration.oauth.read.self` | 当前用户已经授权的 MCP 客户端 |
+| DELETE | `/api/platform/v1/me/oauth-grants/{grant_id}` | 登录 Session + CSRF | `integration.oauth.revoke.self` | 撤销 Grant 及其 Token family |
+
+`/oauth/consent` 与 `/oauth/verify` 是 `web-platform` 的独立页面路由，不是 OIDC 登录页，也不属于 `/studio`。同设备流程提交 `pending_id`；跨设备流程提交用户看到的短期 display code。服务端从登录 Session 确定 User，忽略任何客户端提交的 Account/User/Role。
+
 ### 12.5 产品 API
 
 | 方法 | 路径 | Permission | OpenViking 映射 |
 | --- | --- | --- | --- |
+| GET | `/api/platform/v1/dashboard` | 当前 User 基础访问 | 个人内容、处理状态和最近活动的受控聚合 |
+| POST | `/api/platform/v1/search` | 按每个目标对象的 read Permission | 固定检索本人私有根 + 当前 Account 共享根 |
 | GET | `/api/platform/v1/memories` | `memory.read.self` | 当前 User memory roots |
 | GET | `/api/platform/v1/memories/{id}` | `memory.read.self` | 受控 URI read |
 | POST | `/api/platform/v1/memories/search` | `memory.read.self` | search/find |
@@ -328,15 +360,24 @@ RESTORE_WINDOW_EXPIRED
 | POST | `/api/platform/v1/me/resources` | `resource.user_private.write.self` | 固定添加到当前 User 私有区 |
 | PUT | `/api/platform/v1/me/resources/{id}` | `resource.user_private.write.self` | 仅自己的私有 Resource |
 | DELETE | `/api/platform/v1/me/resources/{id}` | `resource.user_private.delete.self` | 软删除；30 天后 rm |
+| GET | `/api/platform/v1/me/resources/{id}/watch` | 对应私有 Resource read | 查看自己的自动同步设置和状态 |
+| PUT | `/api/platform/v1/me/resources/{id}/watch` | `resource.user_private.write.self` | 创建或更新自己的 Resource Watch |
+| POST | `/api/platform/v1/me/resources/{id}/watch/trigger` | `resource.user_private.write.self` | 手动触发一次同步并产生 Task |
+| DELETE | `/api/platform/v1/me/resources/{id}/watch` | `resource.user_private.write.self` | 停止自动同步，不删除 Resource |
 | GET | `/api/platform/v1/account/resources` | `resource.account_shared.read.account` | 当前 Account 共享 Resource，只读接口对普通 User 开放 |
 | POST | `/api/platform/v1/account/resources` | `resource.account_shared.write.account` | Account Admin 新建共享 Resource |
 | PUT | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.write.account` | Account Admin 修改共享 Resource |
 | DELETE | `/api/platform/v1/account/resources/{id}` | `resource.account_shared.delete.account` | Account Admin 软删除共享 Resource |
+| GET | `/api/platform/v1/account/resources/{id}/watch` | `resource.account_shared.read.account` | 共享 Resource Watch 状态 |
+| PUT/POST/DELETE | `/api/platform/v1/account/resources/{id}/watch[/trigger]` | `resource.account_shared.write.account` | Account Admin 管理或触发共享 Resource Watch |
 | GET | `/api/platform/v1/me/skills` | `skill.user_private.read.self` | 当前 User 私有 Skill |
 | POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 新建自己的私有 Skill |
 | PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 修改自己的私有 Skill |
 | DELETE | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 软删除自己的私有 Skill |
 | POST | `/api/platform/v1/me/skills/{id}/execute` | `skill.user_private.use.self` | 使用自己的私有 Skill |
+| GET | `/api/platform/v1/me/skill-configs/{skill_id}` | `privacy_config.read.self` + Skill read/use | 读取自己为私有或共享 Skill 保存的配置状态和脱敏值，不返回可恢复 Secret |
+| PUT | `/api/platform/v1/me/skill-configs/{skill_id}` | `privacy_config.write.self` + Skill read/use | 写入新版本的个人 Skill 私密配置 |
+| POST | `/api/platform/v1/me/skill-configs/{skill_id}/versions/{version}/activate` | `privacy_config.write.self` + Skill read/use | 激活自己的历史配置版本 |
 | GET | `/api/platform/v1/account/skills` | `skill.account_shared.read.account` | 当前 Account 共享 Skill |
 | POST | `/api/platform/v1/account/skills/{id}/execute` | `skill.account_shared.use.account` | 使用当前 Account 共享 Skill |
 | POST | `/api/platform/v1/account/skills` | `skill.account_shared.manage.account` | Account Admin 新建共享 Skill |
@@ -344,9 +385,14 @@ RESTORE_WINDOW_EXPIRED
 | DELETE | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 软删除共享 Skill |
 | GET | `/api/platform/v1/sessions` | `session.read.self` | current user sessions |
 | POST | `/api/platform/v1/sessions` | `session.write.self` | create session |
+| GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | Session、消息和状态的产品 DTO |
+| GET | `/api/platform/v1/sessions/{id}/context` | `session.read.self` | 已使用上下文、Skill 和归档摘要 |
 | POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | add message |
+| POST | `/api/platform/v1/sessions/{id}/chat/stream` | `session.write.self` | 经受控 Bot/Agent 网关生成回复；部署未启用 Bot 时返回能力不可用 |
 | POST | `/api/platform/v1/sessions/{id}/commit` | `session.commit.self` | commit |
 | DELETE | `/api/platform/v1/sessions/{id}` | `session.delete.self` | 软删除；30 天后 delete session |
+| GET | `/api/platform/v1/activity` | `task.read.self`；共享项另需 `task.read.account_shared` | 当前用户私有对象任务和当前 Account 共享对象任务 |
+| POST | `/api/platform/v1/activity/{id}/cancel` | `task.cancel.self` 或 `task.cancel.account_shared` | 仅可取消状态；同时校验目标对象写权限 |
 | GET | `/api/platform/v1/recycle-bin` | 对应资源的 self read | 当前用户回收站 |
 | POST | `/api/platform/v1/recycle-bin/{id}/restore` | 对应资源的 self write | 30 天内恢复 |
 
@@ -367,6 +413,9 @@ RESTORE_WINDOW_EXPIRED
 | GET | `/api/platform/v1/admin/users/{id}/deletion-preview` | `user.delete` |
 | GET | `/api/platform/v1/admin/roles` | `role.read`；只读三个内置角色 |
 | GET | `/api/platform/v1/admin/audit-events` | `audit.read` |
+| GET | `/api/platform/v1/admin/activity` | `task.read.account_shared`；仅当前 Account 共享对象任务 |
+| POST | `/api/platform/v1/admin/activity/{id}/cancel` | `task.cancel.account_shared` + 目标对象写权限 |
+| GET | `/api/platform/v1/admin/monitoring` | `monitoring.read`；仅当前 Account 业务摘要 |
 | GET | `/api/platform/v1/admin/users/{id}/memories` | `memory.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/sessions` | `session.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/resources` | `resource.user_private.read.account` |
@@ -401,6 +450,9 @@ Platform Super Admin 使用独立的平台级接口：
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/deletion-preview` | `account.delete` |
 | GET | `/api/platform/v1/platform/audit-events` | 平台审计读取权限 |
+| GET | `/api/platform/v1/platform/activity` | `task.read.platform`；可按目标 Account 过滤 |
+| POST | `/api/platform/v1/platform/activity/{id}/cancel` | `task.cancel.platform` + 目标对象写权限；内部任务仍禁止取消 |
+| GET | `/api/platform/v1/platform/monitoring` | `monitoring.read`；平台聚合业务摘要 |
 | GET | `/api/platform/v1/platform/recycle-bin` | 平台范围恢复权限 |
 | POST | `/api/platform/v1/platform/recycle-bin/{id}/restore` | 平台范围恢复权限 |
 
