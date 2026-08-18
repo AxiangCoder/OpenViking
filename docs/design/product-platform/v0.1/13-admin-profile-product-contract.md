@@ -366,6 +366,7 @@
 | 创建 | `POST /api/platform/v1/platform/accounts` | `account.manage.platform` |
 | 删除预览 | `GET /api/platform/v1/platform/accounts/{account_id}/deletion-preview` | `account.delete` |
 | 删除 | `DELETE /api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
+| 重试开通 | `POST /api/platform/v1/platform/accounts/{account_id}/provisioning/retry` | `account.manage.platform`；仅 `provisioning/failed` 状态可重试，幂等 |
 
 - 列表字段：名称、`code`、状态（`provisioning/active/suspended/failed/pending_deletion`）、成员数、创建时间；按状态筛选。`suspended` 状态只展示不操作（v0.1 无暂停/恢复产品端点，暂停以软删除表达，04 §10.1）。
 - 创建表单：Account 名称、`code`、首位 Account Admin 的邮箱与显示名；成功后一次性展示首位 Admin 的初始密码（05 §12.6）。
@@ -423,8 +424,8 @@
 | 09/10/11 | 共享内容与成员数据的业务动作矩阵来源 |
 | 07 | 本文验收标准进入 Phase 3/4 的 E2E 与集成测试清单 |
 
-冻结前需补齐的缺口（已记录于 12 号清单的处置上下文，随一致性检查处理）：
+冻结前缺口的处置记录（随一致性检查与重新冻结一并闭合）：
 
-1. **Account Provisioning 重试接口缺失**：08 §29.3 声称 `/platform` 承载「Account 创建、软删除与恢复、Provisioning 重试」，05 §11.3 也要求「管理页面展示 `provisioning/failed` 并支持安全重试」，但 05 §12.6 平台 API 表无对应接口。建议在冻结一致性检查中为 05 补充 `POST /api/platform/v1/platform/accounts/{account_id}/provisioning/retry`（`account.manage.platform`），或明确从 v0.1 范围移除重试表述（Account `suspended` 已按并行修订明确为「状态保留、无产品操作端点」，删除/恢复以 30 天软删除表达）。
-2. **个人登录 Session 列表 API 缺失**：v0.1 明确只提供「退出所有设备」（`logout-all`），不做单会话列表/撤销。
-3. **`/admin/settings` 路由占位**：06 §13.2 存在该路由但无对应内容定义；v0.1 标记为不承载正式功能（可移除或仅展示本 Account 基本信息）。
+1. **Account Provisioning 重试接口**：已补齐——05 §12.6 平台 API 表新增 `POST /api/platform/v1/platform/accounts/{account_id}/provisioning/retry`（`account.manage.platform`，仅 `provisioning/failed` 状态可重试、幂等）；本节 §89.2 增加对应页面动作「重试开通」。
+2. **个人登录 Session 列表 API**：维持决策——v0.1 只提供「退出所有设备」（`logout-all`），不做单会话列表/撤销（03 §8.1、§81.4）。
+3. **`/admin/settings` 路由占位**：定为仅展示本 Account 基本信息占位，不承载正式功能（06 §13.2 已标注）。

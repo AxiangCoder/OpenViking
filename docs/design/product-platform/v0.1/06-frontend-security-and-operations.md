@@ -99,7 +99,7 @@ web-platform/
 /admin/activity
 /admin/monitoring
 /admin/recycle-bin
-/admin/settings
+/admin/settings（v0.1 仅展示本 Account 基本信息占位，不承载正式功能）
 
 /platform/accounts
 /platform/accounts/$accountId/users

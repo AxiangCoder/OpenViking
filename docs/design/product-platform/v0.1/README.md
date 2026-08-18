@@ -1,6 +1,6 @@
 # OpenViking 产品化平台 Design v0.1
 
-> 状态：讨论中（曾冻结于 `design-v0.1.0`，2026-08-18 解除）<br>
+> 状态：Design Frozen（标签 `design-v0.1.0`，2026-08-18 重新冻结）<br>
 > 上游源码基线：OpenViking v0.4.12<br>
 > 基线提交：`c1d38eb47ff2ebf9ff4cee46756728893fd8caf3`<br>
 > 目标读者：产品负责人、前端工程师、后端工程师、运维与安全负责人
@@ -93,3 +93,4 @@
 | 2026-08-18 | Design v0.1 管理与个人设置契约 | 新增 13 号文档：认证、个人设置、API Key、MCP OAuth 连接、管理后台与平台管理页面级契约；记录 3 个冻结前缺口（Account Provisioning 重试 API、个人 Session 列表 API、/admin/settings 占位）。 |
 | 2026-08-18 | Design v0.1 冻结 | 设计审查 19 项全部闭合（12 号清单）；13 号文档引用按 11 号重编号校正；状态改为 Design Frozen，标签 `design-v0.1.0`。 |
 | 2026-08-18 | Design v0.1 冻结解除 | 按用户要求解除冻结，状态回到讨论中；标签 `design-v0.1.0` 已删除。 |
+| 2026-08-18 | Design v0.1 重新冻结 | 闭合 13 号文档 3 个冻结前缺口：05 §12.6 补 Provisioning 重试接口（13 §89.2 同步页面动作）、`/admin/settings` 定为仅展示 Account 基本信息占位（06 §13.2 标注）、Session 列表维持仅 logout-all 决策；按源码核对修正 5 处引用偏差（01 §4.1/§4.2、08 §28.1、10 §51、12 号行号）；状态改回 Design Frozen，打标签 `design-v0.1.0`。 |

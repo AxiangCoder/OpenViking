@@ -503,6 +503,7 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys` | `credential.read.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys/{credential_id}` | `credential.revoke.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
+| POST | `/api/platform/v1/platform/accounts/{account_id}/provisioning/retry` | `account.manage.platform` | 重试失败的 Account/首位 Account Admin Provisioning；幂等，仅 `provisioning/failed` 状态可重试 |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/deletion-preview` | `account.delete` |
 | GET | `/api/platform/v1/platform/audit-events` | 平台审计读取权限 |
 | GET | `/api/platform/v1/platform/activity` | `task.read.platform`；可按目标 Account 过滤 |
