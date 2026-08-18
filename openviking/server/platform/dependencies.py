@@ -1,10 +1,13 @@
 """认证/授权 FastAPI 依赖（05 §11.1 依赖链，14 号计划 §96.3）。
 
-- `get_current_principal`：`__Host-ov_session` Cookie → Session → Principal，
-  每次请求顺延 `last_seen_at`/空闲到期（03 §8.1，04 §10.7）；
+- `get_current_principal`：统一 Principal Resolver（P1-E4）——
+  `__Host-ov_session` Cookie 优先（失效不自动回退 Bearer），
+  `Authorization: Bearer` 与 `X-Api-Key` 同一解析器（03 §8.4）；
+  Session 路径每次请求顺延 `last_seen_at`/空闲到期（03 §8.1，04 §10.7）；
 - `require_permission`：403 `PERMISSION_NOT_GRANTED`（权限实时计算，P1-E2）；
 - `verify_csrf`：非安全方法校验 Origin/Referer + `X-CSRF-Token`（03 §8.2）；
-  无 Token 写请求被拒；非 Session 凭据（session_id 为空）不能执行 CSRF 写；
+  无 Token 写请求被拒；非 Session 凭据（session_id 为空，如 API Key）不能
+  执行 CSRF 写（验收 ⑧，14 号计划 §96.4）；
 - `apply_session_cookie`：登录/改密轮换后下发新 Cookie（05 §12.3 回填发现）。
 
 app.state 注入（create_app 挂载时由 P5-E1 统一设置，本模块不持全局单例）：
@@ -24,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openviking.server.platform.auth.csrf import origin_allowed
 from openviking.server.platform.auth.principals import (
     AuthenticatedUserPrincipal,
-    resolve_session_principal,
+    resolve_principal,
 )
 from openviking.server.platform.auth.service import AuthService
 from openviking.server.platform.auth.sessions import SessionService
@@ -60,12 +63,26 @@ async def get_current_principal(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> AuthenticatedUserPrincipal:
-    """Cookie → Principal；每次请求顺延空闲到期。"""
-    raw_token = request.cookies.get(platform_config.cookie_name)
+    """统一认证依赖（05 §11.4：Session/API Key 产出同一 Principal）。
+
+    - Cookie 优先、失效不自动回退 Bearer（03 §8.4）；
+    - `Authorization: Bearer` 与 `X-Api-Key` 进入同一解析器；
+    - Session 路径每次请求顺延空闲到期（04 §10.7）。
+    """
     services = get_iam_services(request)
+    raw_token = request.cookies.get(platform_config.cookie_name)
+    bearer = None
+    authorization = request.headers.get("authorization")
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer = authorization[7:].strip()
     try:
-        principal = await resolve_session_principal(
-            session, services.repository, services.rbac, raw_token or ""
+        principal = await resolve_principal(
+            session,
+            services.repository,
+            services.rbac,
+            session_token=raw_token or None,
+            bearer_key=bearer,
+            x_api_key=request.headers.get("x-api-key"),
         )
     except AuthenticationError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail={"code": exc.code}) from exc
