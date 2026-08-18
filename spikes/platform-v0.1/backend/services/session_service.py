@@ -52,7 +52,7 @@ class SessionService:
     async def rotate_session(
         self, user: IamUser, old_session_id: uuid.UUID | None, ip_hash: str | None = None
     ) -> tuple[str, str, uuid.UUID]:
-        """Password change/login elevation rotates the current login session (03 §8.1/§8.3)."""
+        """Password change rotates the current login session (03 §8.1/§8.3); role elevation does NOT rotate (only used by password/change, not by promote_to_account_admin)."""
         if old_session_id is not None:
             await self.session.execute(
                 update(IamSession)
