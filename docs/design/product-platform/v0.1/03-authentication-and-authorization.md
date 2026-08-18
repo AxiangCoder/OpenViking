@@ -89,6 +89,7 @@
 - v0.1 不提供独立 Key Scope，避免形成第二套权限系统；未来若增加限制性 Scope，最终权限只能是 `用户有效权限 ∩ Key Scope`。
 - 产品网页登录不使用 API Key。用户在设置页主动创建时可以看到一次明文，但前端不得写入 `localStorage`、`sessionStorage`、日志或埋点。
 - API 接受 `Authorization: Bearer <key>`；为适配 OpenViking 客户端也可接受 `X-Api-Key`，两者进入同一解析器。
+- 请求同时携带登录 Session Cookie 与 API Key 时，**Cookie 优先**；Cookie 已失效**不自动回退** Bearer（防凭据混淆攻击，避免一个通道的失效扩大另一个通道的信任）。插件/MCP/SDK 客户端请求通常不带 Cookie，不受该优先级影响（技术验证确认）。
 
 ### 8.5 插件、MCP 与 OAuth 的身份语义
 
@@ -279,6 +280,8 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 管理员查看他人数据属于授权的数据范围访问，不称为“冒充登录”。每次访问都必须记录 Actor、Subject、Action、Scope、Request ID 和结果；查看权限不能自动推导出写入、导出或删除权限。
 
 Platform Super Admin 的内置角色包含 Account 共享对象的平台级修改、导出和删除 Permission 以及 Account 级管理；修改、导出或删除其他用户私有数据属于预留的独立高风险 Permission，v0.1 不提供平台 API 端点。Skill 是明确例外，只授予跨 Account 读取，不授予写入、发布、恢复或使用。Account Admin 默认不包含修改、导出或删除他人数据的 Permission，`skill.user_private.publish.account` 仅允许经确认和审计的 Skill 归属转换。
+
+Platform Super Admin 的内置角色权限**不能通过直接继承 Account Admin 权限集合实现**：种子实现必须显式剔除全部 Skill 写/用权限（`skill.user_private.manage.self`、`skill.user_private.publish.account`、`skill.account_shared.use.account`、`skill.account_shared.manage.account`），否则平台角色会意外获得 Skill 管理能力（技术验证确认）。
 
 普通 User 的“只读共享 Resource”包括列表、详情、检索和在其自己的会话/工作流中引用，不包括新增、覆盖正文、改名、移动、打标签、归档、恢复或删除。“使用共享 Skill”表示在被允许的执行入口调用 Skill，不等于修改 Skill 定义。Account Admin 的共享管理权只在自己固定所属的 Account 生效。
 

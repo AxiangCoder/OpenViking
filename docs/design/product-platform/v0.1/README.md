@@ -95,3 +95,4 @@
 | 2026-08-18 | Design v0.1 冻结解除 | 按用户要求解除冻结，状态回到讨论中；标签 `design-v0.1.0` 已删除。 |
 | 2026-08-18 | Design v0.1 重新冻结 | 闭合 13 号文档 3 个冻结前缺口：05 §12.6 补 Provisioning 重试接口（13 §89.2 同步页面动作）、`/admin/settings` 定为仅展示 Account 基本信息占位（06 §13.2 标注）、Session 列表维持仅 logout-all 决策；按源码核对修正 5 处引用偏差（01 §4.1/§4.2、08 §28.1、10 §51、12 号行号）；状态改回 Design Frozen，打标签 `design-v0.1.0`。 |
 | 2026-08-18 | Design v0.1 角色等级回填 | 技术验证发现：04 §10.4 角色表补 `rank` 字段（3/2/1）；03 §8.3 明确等级比较只用平台 `iam_roles.rank`，禁止混用 OpenViking `Role` 内置 rank（0/1/2）；03 §9.4 声明 OpenViking 原始角色权限体系不改动、平台 RBAC 为唯一业务授权来源。 |
+| 2026-08-18 | Design v0.1 技术验证回填 | 03 §8.4 补凭证优先级语义（Cookie 优先、失效不自动回退 Bearer）；05 §12.3 补改密轮换必须同步 Set-Cookie 的实现约束；03 §9.3 补 Platform 角色权限不能继承 Account Admin、必须剔除 Skill 写/用权限。 |
