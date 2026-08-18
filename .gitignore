@@ -19,6 +19,9 @@ lib/
 !examples/opencode-plugin/lib/**
 !examples/pi-coding-agent-extension/lib/
 !examples/pi-coding-agent-extension/lib/**
+# web-platform 前端 lib/ 是正式源码（P3-E1 冻结点），非 Python 构建产物。
+!web-platform/src/lib/
+*.tsbuildinfo
 lib64/
 parts/
 sdist/
