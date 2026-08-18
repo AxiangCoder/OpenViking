@@ -38,7 +38,7 @@
 | Service Account | 独立于自然人的非人类访问主体 | 程序自己的账号；v0.1 不提供 |
 | Peer | User 下的交互对象或 Agent 视图 | 和这个用户交互的客户、Agent 或对象，不是权限角色 |
 | Root | OpenViking 实例级最高控制身份 | 系统密钥，不是普通可分配用户角色 |
-| Platform Super Admin | 产品平台的人类超级管理员 | 可以管理和查看所有 Account、用户及数据，但不等于 Root API Key |
+| Platform Super Admin | 产品平台的人类超级管理员 | 可以管理 Account、用户和大部分平台数据；对 Skill 明确只读，且不等于 Root API Key |
 | Actor | 实际发起操作的登录用户 | 谁在看、谁在操作 |
 | Subject | 被访问或操作的数据主体，可以是 User，也可以是 Account | 正在看谁的私有数据，或正在操作哪个团队的共享数据 |
 | User 私有数据 | 归属于一个确定 User，只允许本人及被明确授权的管理员按数据范围访问 | 某个用户自己的资料，不会因为在同一 Account 就自动让其他普通用户看到 |
@@ -51,7 +51,7 @@
 | --- | --- | --- | --- |
 | `/app/*` | 普通用户 | 记忆、资源、检索、会话、个人设置 | 是 |
 | `/admin/*` | Account 管理员 | 用户管理、内置角色与权限查看、凭据、审计 | 是 |
-| `/platform/*` | Platform Super Admin | 全部 Account、用户、数据和平台审计 | 是 |
+| `/platform/*` | Platform Super Admin | 全部 Account、用户、数据和平台审计；Skill 页面只读 | 是 |
 | `/studio/*` | 运维、开发（仅私网） | 原始 URI、底层任务、监控和调试 | 否，可选保留，生产公网默认不挂载 |
 
 `/app`、`/admin`、`/platform` 与 `/studio` 是并列路由空间，不是基于 `/studio` 继续开发。前三者共同构成正式产品，并承接用户、Account 管理员和平台管理员需要的稳定业务能力；`/studio` 只是保留现有 bundle 的维护入口，不进入产品导航、产品 RBAC 页面或业务验收范围。
@@ -134,8 +134,8 @@
 | --- | --- | --- | --- | --- |
 | `viking://user/{ov_user_id}/resources/**` | User 私有 Resource | 管理自己的 | 管理自己的；可读本 Account 其他用户 | 可按平台权限读取或执行高风险管理 |
 | `viking://resources/**` | Account 共享 Resource | 只读本 Account | 管理本 Account | 管理任意目标 Account |
-| `viking://user/{ov_user_id}/skills/**` | User 私有 Skill | 读取、使用、管理自己的 | 同左；可读本 Account 其他用户 | 可按平台权限读取或执行高风险管理 |
-| `viking://agent/skills/**` | Account 共享 Skill | 读取、使用本 Account | 管理本 Account | 管理任意目标 Account |
+| `viking://user/{ov_user_id}/skills/**` | User 私有 Skill | 读取、使用、管理自己的 | 管理自己的；可读并发布本 Account 其他用户 | 只读任意目标 Account/User |
+| `viking://agent/skills/**` | Account 共享 Skill | 读取、使用本 Account | 读取、使用、管理本 Account | 只读任意目标 Account |
 | `viking://user/{ov_user_id}/memories/**`、`sessions/**`、`privacy/**`、`peers/**` | User 私有业务数据 | 访问自己的 | 按现有 Actor/Subject 规则读取本 Account | 按平台规则访问目标 Account/User |
 | `viking://agent/endpoints/**`、`tools/**`、`payments/**` | OpenViking Account 级技术命名空间 | 产品 API 默认不开放 | 产品 API 默认不开放 | 仅经另行定义的控制面权限开放 |
 | `temp`、`queue`、`upload`、`_system` 等内部目录 | 系统内部数据 | 不开放 | 不开放 | 不通过产品数据 API 开放 |

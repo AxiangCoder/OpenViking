@@ -195,15 +195,12 @@ skill.user_private.read.self
 skill.user_private.use.self
 skill.user_private.manage.self
 skill.user_private.read.account
-skill.user_private.manage.account
+skill.user_private.publish.account
 skill.user_private.read.platform
-skill.user_private.manage.platform
 skill.account_shared.read.account
 skill.account_shared.use.account
 skill.account_shared.manage.account
 skill.account_shared.read.platform
-skill.account_shared.use.platform
-skill.account_shared.manage.platform
 
 audit.read
 monitoring.read
@@ -233,12 +230,14 @@ task.cancel.platform
 - Search、Relations 和 Watch 不以“换一个入口”获得独立数据权限：Search/Relations 对每个结果或关系端点重新检查读取权限；Watch 的查看继承目标 Resource 的读取权限，新增、修改、触发和取消继承目标 Resource 的写权限。
 - `task.*` 只控制任务记录的查看和取消，不能替代目标对象权限。取消任务时必须同时满足 Task Permission、任务可取消状态和目标对象当前写权限。
 - `privacy_config.*.self` 只允许用户管理自己的 Skill 私密配置；管理员的数据查看权限不自动包含读取他人 Secret 的权限。
+- `skill.user_private.publish.account` 是 Account Admin 改变 Skill 归属的独立高风险权限，不包含编辑、删除或恢复其他 User 私有 Skill。
+- Platform Super Admin 的 Skill 权限固定为 `skill.user_private.read.platform` 与 `skill.account_shared.read.platform`，不从平台最高角色推导任何 Skill 写入、发布、恢复或使用权限。
 
 ### 9.2 内置角色与数据范围
 
 | 角色 | OpenViking Base Role | 数据范围 | 用途 |
 | --- | --- | --- | --- |
-| `platform_super_admin` | 不直接映射为 `root` | 全平台 | 管理并查看所有 Account、用户和数据 |
+| `platform_super_admin` | 不直接映射为 `root` | 全平台 | 管理并查看 Account、用户和大部分数据；Skill 只读 |
 | `account_admin` | `admin` | 当前 Account | 管理当前 Account 用户和 Account 共享 Resource/Skill，并查看当前 Account 全部用户数据 |
 | `user` | `user` | 自己 + 当前 Account 共享只读/使用 | 管理自己的私有数据，读取共享 Resource、读取和使用共享 Skill，不能切换 Account |
 
@@ -262,14 +261,18 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | 修改其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 导出、删除其他用户数据 | 独立高风险 Permission | 默认无 |  |
 | 管理自己的 User 私有 Resource | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
-| 查看其他用户的私有 Resource/Skill | 全部 Account | 当前 Account |  |
-| 修改或删除其他用户的私有 Resource/Skill | 独立高风险 Permission | 默认无 |  |
+| 查看其他用户的私有 Resource | 全部 Account | 当前 Account |  |
+| 修改或删除其他用户的私有 Resource | 独立高风险 Permission | 默认无 |  |
+| 修改、删除或恢复其他用户的私有 Skill | 禁止 | 禁止 |  |
 | Account 共享 Resource 读取 | 全部 Account | 当前 Account | 当前 Account |
 | Account 共享 Resource 写入、删除 | 全部 Account | 当前 Account |  |
 | 将自己的私有 Resource 发布为共享副本 | 不适用 | 当前 Account |  |
-| 管理自己的 User 私有 Skill | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
-| Account 共享 Skill 读取、使用 | 全部 Account | 当前 Account | 当前 Account |
-| Account 共享 Skill 管理 | 全部 Account | 当前 Account |  |
+| 管理自己的 User 私有 Skill | 不适用；Platform 对 Skill 只读 | ✓ | ✓ |
+| 查看其他 User 私有 Skill | 全部 Account 只读 | 当前 Account 只读 |  |
+| 将 User 私有 Skill 发布为 Account 共享 | 禁止 | 当前 Account 任意 User | 禁止 |
+| Account 共享 Skill 读取 | 全部 Account 只读 | 当前 Account | 当前 Account |
+| Account 共享 Skill 使用 | 禁止 | 当前 Account | 当前 Account |
+| Account 共享 Skill 管理 | 禁止 | 当前 Account |  |
 | 管理自己的 API Key |  | ✓ | ✓ |
 | 管理自己的 MCP 客户端授权 |  | ✓ | ✓ |
 | 查看并撤销其他用户的 API Key 元数据 | 全部 Account | 当前 Account |  |
@@ -281,7 +284,7 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 
 管理员查看他人数据属于授权的数据范围访问，不称为“冒充登录”。每次访问都必须记录 Actor、Subject、Action、Scope、Request ID 和结果；查看权限不能自动推导出写入、导出或删除权限。
 
-Platform Super Admin 的内置角色包含平台级修改、导出和删除 Permission；之所以仍拆成独立 Permission，是为了逐项校验、确认弹窗和审计，而不是降低其最高权限。Account Admin 默认不包含修改、导出或删除他人数据的 Permission。
+Platform Super Admin 的内置角色通常包含平台级修改、导出和删除 Permission；Skill 是明确例外，只授予跨 Account 读取，不授予写入、发布、恢复或使用。Account Admin 默认不包含修改、导出或删除他人数据的 Permission，`skill.user_private.publish.account` 仅允许经确认和审计的 Skill 归属转换。
 
 普通 User 的“只读共享 Resource”包括列表、详情、检索和在其自己的会话/工作流中引用，不包括新增、覆盖正文、改名、移动、打标签、归档、恢复或删除。“使用共享 Skill”表示在被允许的执行入口调用 Skill，不等于修改 Skill 定义。Account Admin 的共享管理权只在自己固定所属的 Account 生效。
 

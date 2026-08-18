@@ -562,4 +562,4 @@ Resource 页面不复刻 Studio 的文件管理器。它由四个用户可理解
 3. 资料当前是否可用，最近一次处理是否成功。
 4. 稳定远程资料是否需要自动同步。
 
-底层 URI、目录创建、解析模式、原始 Task、原始 Watch、Content 写入和 Reindex 都由系统内部处理。下一份页面级设计应继续讨论 Skill，因为 Skill 同时涉及私有/共享、使用权限、文件结构和 User 私密配置。
+底层 URI、目录创建、解析模式、原始 Task、原始 Watch、Content 写入和 Reindex 都由系统内部处理。Skill 的私有/共享、创建上传、名称、发布、文件结构和调用边界见 [Skill 页面与产品契约](10-skill-product-contract.md)。

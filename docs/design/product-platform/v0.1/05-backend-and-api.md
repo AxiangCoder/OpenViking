@@ -194,8 +194,9 @@ v0.1 不定义 Service Account 的 repository、resolver 或 credential type。�
 | 读取/检索 `viking://resources/**` | 当前 Account 使用 `resource.account_shared.read.account`；平台管理使用 `.platform` |
 | 任何会改变 `viking://resources/**` 的动作 | `resource.account_shared.write.account/platform`；删除使用对应 `.delete.*` |
 | 读取、使用、管理自己的 User 私有 Skill | `skill.user_private.read.self`、`.use.self`、`.manage.self` |
-| 查看或管理其他 User 的私有 Skill | 对应 `.read.account/platform`；修改/删除还需独立 `.manage.account/platform`，v0.1 不授予 Account Admin |
-| 读取、使用、管理 `viking://agent/skills/**` | 对应 `skill.account_shared.*.account/platform` |
+| 查看其他 User 的私有 Skill | Account Admin 使用 `.read.account`；Platform Super Admin 使用 `.read.platform`，两者均不获得编辑、删除或恢复 |
+| 发布其他 User 的私有 Skill | 仅 Account Admin 使用 `skill.user_private.publish.account`；保持 ID/名称不变并转为 Account 共享 |
+| 读取、使用、管理 `viking://agent/skills/**` | 普通 User/Account Admin 按 `.read/.use.account`；仅 Account Admin 有 `.manage.account`；Platform 只有 `.read.platform` |
 | 访问 `agent/endpoints/tools/payments` 或内部根 | 产品/用户集成默认拒绝；必须另行定义控制面 Permission |
 
 “会改变”包括但不限于 `add_resource`、`write`、`mkdir`、`mv` 的源与目标、`set_tags`、归档、导入、恢复和批量操作；不能只保护 POST 创建接口。跨可见性移动不得作为普通 `mv` 放行，必须走“复制/发布为新对象”业务动作。
@@ -389,18 +390,20 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | GET | `/api/platform/v1/account/resources/{id}/watch` | `resource.account_shared.read.account` | 共享 Resource Watch 状态 |
 | PUT/POST/DELETE | `/api/platform/v1/account/resources/{id}/watch/*` | `resource.account_shared.write.account` | Account Admin 配置、暂停、恢复、触发或删除共享 Watch |
 | GET | `/api/platform/v1/me/skills` | `skill.user_private.read.self` | 当前 User 私有 Skill |
-| POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 新建自己的私有 Skill |
-| PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 修改自己的私有 Skill |
+| POST | `/api/platform/v1/me/skills` | `skill.user_private.manage.self` | 在线创建或上传自己的私有 Skill；Account 范围名称唯一 |
+| GET | `/api/platform/v1/me/skills/{id}` | `skill.user_private.read.self` | 自己的私有 Skill 详情 |
+| PUT | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 整体修改自己的私有 Skill；名称不可变 |
 | DELETE | `/api/platform/v1/me/skills/{id}` | `skill.user_private.manage.self` | 软删除自己的私有 Skill |
-| POST | `/api/platform/v1/me/skills/{id}/execute` | `skill.user_private.use.self` | 使用自己的私有 Skill |
+| POST | `/api/platform/v1/me/skills/{id}/restore` | `skill.user_private.manage.self` | 恢复自己的私有 Skill；同名已占用时失败 |
 | GET | `/api/platform/v1/me/skill-configs/{skill_id}` | `privacy_config.read.self` + Skill read/use | 读取自己为私有或共享 Skill 保存的配置状态和脱敏值，不返回可恢复 Secret |
 | PUT | `/api/platform/v1/me/skill-configs/{skill_id}` | `privacy_config.write.self` + Skill read/use | 写入新版本的个人 Skill 私密配置 |
 | POST | `/api/platform/v1/me/skill-configs/{skill_id}/versions/{version}/activate` | `privacy_config.write.self` + Skill read/use | 激活自己的历史配置版本 |
 | GET | `/api/platform/v1/account/skills` | `skill.account_shared.read.account` | 当前 Account 共享 Skill |
-| POST | `/api/platform/v1/account/skills/{id}/execute` | `skill.account_shared.use.account` | 使用当前 Account 共享 Skill |
+| GET | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.read.account` | 当前 Account 共享 Skill 详情 |
 | POST | `/api/platform/v1/account/skills` | `skill.account_shared.manage.account` | Account Admin 新建共享 Skill |
-| PUT | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 修改共享 Skill |
+| PUT | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 整体修改共享 Skill；名称不可变 |
 | DELETE | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 软删除共享 Skill |
+| POST | `/api/platform/v1/account/skills/{id}/restore` | `skill.account_shared.manage.account` | Account Admin 恢复共享 Skill；同名已占用时失败 |
 | GET | `/api/platform/v1/sessions` | `session.read.self` | current user sessions |
 | POST | `/api/platform/v1/sessions` | `session.write.self` | create session |
 | GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | Session、消息和状态的产品 DTO |
@@ -417,6 +420,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 产品 API 返回产品 DTO，不原样泄露内部绝对文件路径、系统目录和控制字段。普通用户请求永远不能切换 Account；`auth/me` 的 Account 是固定归属，不提供 Account 切换列表。
 
 不提供含义不清的通用写接口 `/api/platform/v1/resources` 或 `/api/platform/v1/skills`。`/me/*` 明确表示 User 私有目标，`/account/*` 明确表示 Account 共享目标；后端仍根据对象引用和 canonical URI 二次校验，不能只相信路径名称。
+
+Skill 不提供独立 `/execute` API。详情页的“在新 Session 中使用”只把稳定 `skill_id` 带入 Session 创建流程，真正使用时由 Session/Agent 链路再次鉴权；具体 DTO 由 Session 产品契约固定。
 
 ### 12.6 管理 API
 
@@ -439,6 +444,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | GET | `/api/platform/v1/admin/users/{id}/resources` | `resource.user_private.read.account` |
 | GET | `/api/platform/v1/admin/users/{id}/resources/{resource_id}` | `resource.user_private.read.account`；只读预览，不提供下载/导出 |
 | GET | `/api/platform/v1/admin/users/{id}/skills` | `skill.user_private.read.account` |
+| GET | `/api/platform/v1/admin/users/{id}/skills/{skill_id}` | `skill.user_private.read.account` |
+| POST | `/api/platform/v1/admin/users/{id}/skills/{skill_id}/publish` | `skill.user_private.publish.account`；原地转为共享，不需要所属 User 审批 |
 | GET | `/api/platform/v1/admin/users/{id}/api-keys` | `credential.read.account` |
 | DELETE | `/api/platform/v1/admin/users/{id}/api-keys/{credential_id}` | `credential.revoke.account` |
 | GET | `/api/platform/v1/admin/recycle-bin` | Account 范围恢复权限 |
@@ -458,7 +465,6 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/resources` | `resource.user_private.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/resources/{resource_id}` | `resource.user_private.read.platform`；默认只读预览 |
-| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills` | `skill.user_private.read.platform` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/resources` | `resource.account_shared.read.platform` |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/resource-uploads` | `resource.account_shared.write.platform` |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/resources/imports` | `resource.account_shared.write.platform` |
@@ -466,8 +472,10 @@ Platform Super Admin 使用独立的平台级接口：
 | PATCH | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.write.platform` |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}/refresh` | `resource.account_shared.write.platform` |
 | DELETE | `/api/platform/v1/platform/accounts/{account_id}/resources/{id}` | `resource.account_shared.delete.platform` |
-| GET/POST | `/api/platform/v1/platform/accounts/{account_id}/skills` | `skill.account_shared.read.platform/skill.account_shared.manage.platform` |
-| PUT/DELETE | `/api/platform/v1/platform/accounts/{account_id}/skills/{id}` | `skill.account_shared.manage.platform` |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/skills` | `skill.account_shared.read.platform`；只读 |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/skills/{id}` | `skill.account_shared.read.platform`；只读 |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills` | `skill.user_private.read.platform`；只读 |
+| GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills/{id}` | `skill.user_private.read.platform`；只读 |
 | POST | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/password/reset` | `user.password.reset.platform`；禁止目标为 Platform Super Admin |
 | PUT | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/role` | `role.assign.platform`；仅 `user -> account_admin` |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/api-keys` | `credential.read.platform` |

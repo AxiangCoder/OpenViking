@@ -76,7 +76,10 @@ web-platform/
 /app/resources/shared/$resourceId
 /app/skills
 /app/skills/private
+/app/skills/private/new
+/app/skills/private/$skillId
 /app/skills/shared
+/app/skills/shared/$skillId
 /app/sessions
 /app/activity
 /app/recycle-bin
@@ -91,6 +94,9 @@ web-platform/
 /admin/shared-resources
 /admin/shared-resources/$resourceId
 /admin/shared-skills
+/admin/shared-skills/new
+/admin/shared-skills/$skillId
+/admin/users/$userId/skills/$skillId
 /admin/roles
 /admin/audit
 /admin/activity
@@ -103,6 +109,8 @@ web-platform/
 /platform/accounts/$accountId/resources
 /platform/accounts/$accountId/resources/$resourceId
 /platform/accounts/$accountId/skills
+/platform/accounts/$accountId/skills/$skillId
+/platform/accounts/$accountId/users/$userId/skills/$skillId
 /platform/accounts/$accountId/users/$userId/data
 /platform/accounts/$accountId/users/$userId/resources/$resourceId
 /platform/accounts/$accountId/users/$userId/api-keys
@@ -137,6 +145,8 @@ web-platform/
 Resource 新增页不显示 Viking URI、`visibility`、父目录、`create_parent` 或 `processing_mode`。页面入口已经决定目标：私有页只能创建私有 Resource，共享管理页只能创建当前 Account 共享 Resource。解析后的目录树、正文、Abstract 和 Overview 在 v0.1 中只读；更新内容通过替换上传文件或 Refresh 稳定远程来源完成。
 
 Account Admin 只能把自己的私有 Resource 发布为共享副本，不能利用“可读取成员数据”把其他 User 的私有 Resource 复制到共享区。完整页面、字段、状态和 Watch 交互以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准。
+
+Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名称全局唯一，只有 Account Admin 可以把本 Account 任意 User 的私有 Skill 原地转换为共享 Skill，Skill ID 和名称不变，私有区不保留副本且不能取消发布。普通 User 不能发布；Platform Super Admin 的 Skill 页面全部只读。在线 Skill 可编辑名称以外的字段，ZIP Skill 更新时整体重新上传；详情页只提供“在新 Session 中使用”，不提供独立运行器。完整规则以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准。
 
 共享列表可展示创建者和更新时间帮助追溯，但不能显示“只有创建者可编辑”的暗示；v0.1 中共享对象归 Account，由有权限的管理员统一管理。
 
@@ -287,7 +297,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 - Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 默认先软删除。
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
 - Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
-- User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但默认不能恢复、修改或删除其他用户的私有数据；Platform Super Admin 可按独立平台级高风险 Permission 恢复全平台范围对象。
+- User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但不能恢复、修改或删除其他用户的私有 Skill。Platform Super Admin 可按独立平台级高风险 Permission 恢复其他类型的全平台范围对象，但对 Skill 始终只读。
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
 - 审计事件独立保留，不随业务对象物理清理。
 

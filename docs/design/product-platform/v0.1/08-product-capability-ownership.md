@@ -100,8 +100,8 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | 对话 Session 与上下文提交 | User Experience | User 私有 OpenViking Session | User；系统 Worker 执行异步提交 | `/app`、MCP、SDK/CLI | 正式产品能力 |
 | User 私有 Resource | User Experience | `viking://user/{ov_user_id}/resources/**` | User；Account Admin/Platform 按数据范围读取，修改/删除需独立 Permission | `/app`、用户集成入口 | 正式产品能力 |
 | Account 共享 Resource | Account Collaboration | `viking://resources/**` | Account Admin；Platform Super Admin 可平台代管 | `/app` 读取/引用、`/admin` 管理、`/platform` 代管 | 正式产品能力 |
-| User 私有 Skill | User Experience | `viking://user/{ov_user_id}/skills/**` | User；Account Admin/Platform 按数据范围读取，管理需独立 Permission | `/app`、用户集成入口 | 正式产品能力 |
-| Account 共享 Skill | Account Collaboration | `viking://agent/skills/**` | Account Admin；Platform Super Admin 可平台代管 | `/app` 读取/使用、`/admin` 管理、`/platform` 代管 | 正式产品能力 |
+| User 私有 Skill | User Experience | `viking://user/{ov_user_id}/skills/**` | User 管理自己的；Account Admin 可读并发布本 Account 任意 User 的；Platform 只读 | `/app`、`/admin` 成员只读/发布、`/platform` 只读 | 正式产品能力 |
+| Account 共享 Skill | Account Collaboration | `viking://agent/skills/**` | Account Admin 管理；Platform Super Admin 只读 | `/app` 读取/使用、`/admin` 管理、`/platform` 只读 | 正式产品能力 |
 | 检索与召回 | Engine Capability + Product Facade | 当前 User 私有区 + 当前 Account 共享区 | Product Facade 根据 Actor/Subject 控制范围 | `/app`、Platform API、MCP、SDK/CLI | 正式产品能力；不暴露任意根目录 |
 | Resource 导入与同步 | Account/User 按目标归属 | 默认 User 私有；显式共享目标为 Account | User 管理私有导入；Account Admin 管理共享导入；Worker 执行同步 | `/app`、用户集成入口、受控任务状态 | 正式产品能力；共享目标必须显式授权 |
 | 个人 API Key | User + Platform IAM | User 凭证元数据和密钥哈希 | User 自主管理；Platform IAM 签发、撤销、审计 | `/app/profile/api-keys`、Platform API | 正式产品能力 |
@@ -167,7 +167,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `/studio/home` | Dashboard、Token、Context Commit 摘要 | `/app` 个人摘要；`/admin/monitoring` Account 摘要；`/platform/monitoring` 平台摘要 | 原始 Token/Commit 调试明细 |
 | `/studio/playground` | VikingFS 浏览、内容编辑、Resource 导入、终端、Agent Chat | Resource 详情/导入与 `/app/sessions` Chat | 任意 URI 浏览、原始命令终端、底层 Session 命令 |
 | `/studio/retrieval` | find/search/grep/glob 与原始范围过滤 | `/app/search` 的受控统一检索 | 任意根 URI、调试过滤器和原始结果结构 |
-| `/studio/skills` | 私有/共享 Skill 浏览 | `/app/skills`、`/admin/shared-skills`、平台代管页 | 原始文件结构和引擎调试信息 |
+| `/studio/skills` | 私有/共享 Skill 浏览 | `/app/skills`、`/admin/shared-skills`、平台只读页 | 原始文件结构和引擎调试信息 |
 | `/studio/sessions` | Session 列表、Chat、删除、Context/Archive | `/app/sessions`；管理员按 Subject 只读查看 | extract、tool-result 原始调试和任意底层操作 |
 | `/studio/tasks` | 所有 QueueFS Task | `/app/activity` 及受控管理摘要 | 系统任务、迁移、恢复、清理和原始错误堆栈 |
 | `/studio/request-logs` | HTTP Request Audit | Platform Audit 页面使用新的业务审计模型 | 原始请求日志 |
@@ -278,13 +278,13 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 1. `viking://user/{ov_user_id}/memories/**`、`sessions/**`、`peers/**`、`privacy/**`、User 私有 Resource 和 User 私有 Skill 都归 User。
 2. `viking://resources/**` 的 Account 共享 Resource 归当前 Account，不归创建者；`created_by_actor_user_id` 只做审计。
 3. `viking://agent/skills/**` 的 Account 共享 Skill 归当前 Account，不归创建者。
-4. Account 共享对象的管理权来自 Account/Platform Permission；普通 User 的读取和使用权不改变数据归属。
+4. Account 共享 Resource 的管理权来自 Account/Platform Permission；Account 共享 Skill 只由 Account Admin 管理，Platform Super Admin 只读。普通 User 的读取和使用权不改变数据归属。
 5. `temp`、`upload`、`queue`、内部锁、任务状态、VectorDB 索引和 Worker 中间产物属于 System Operations Plane，不通过业务 API 作为 User/Account 内容返回。
 6. API Key 的 secret 归 User 使用，但密钥生命周期归 Platform IAM 控制；审计记录必须同时保留 Actor 和 Subject。
 7. Watch、异步 Task 和索引 Job 由 System Worker 执行，任务的业务控制范围继承被监控或被处理对象的归属。
-8. 从 User 私有区发布到 Account 共享区不是修改对象的 `visibility` 字段，而是一次显式的复制/发布动作，产生新的产品对象和审计记录。
+8. Resource 从 User 私有区发布到 Account 共享区是显式复制新建，产生新的产品对象；Skill 发布是例外，由 Account Admin 把本 Account 任意 User 私有 Skill 原地转换为共享，保持 ID/名称，不保留副本。两者都必须独立授权和审计。
 9. “共享”只表示当前 Account 内共享，不表示互联网公开、跨 Account 共享或没有权限控制。
-10. Platform Super Admin 可以按平台权限访问 Account 数据，但平台控制权不等于业务数据所有权。
+10. Platform Super Admin 可以按平台权限访问 Account 数据，但平台控制权不等于业务数据所有权；对 Skill 明确只有跨 Account 读取权限，不得创建、修改、发布、删除、恢复或使用。
 11. Skill 私密配置始终归配置它的 User；共享 Skill 不会让该 User 的 Secret 变成 Account 共享数据，Account Admin/Platform Super Admin 的内容读取权也不能读取 Secret 明文。
 12. MCP OAuth Grant 归授权 User；OAuth Client 只是软件标识，不是 Principal。授权页使用登录 Session 识别人，Access Token 调用时仍以该 User 为 Actor。
 

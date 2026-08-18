@@ -40,6 +40,10 @@
 - User A 可管理自己的私有 Resource/Skill，但不能读取 User B 的私有 Resource/Skill。
 - 普通 User 可读取 Account 共享 Resource、读取和使用共享 Skill，但所有共享新增、写入、改名、移动、标签、恢复和删除操作均返回 403。
 - Account Admin 可管理本 Account 的共享 Resource/Skill，不能管理其他 Account 的共享内容，也不能默认修改其他用户的私有内容。
+- Account Admin 可以读取并发布本 Account 任意 User 的私有 Skill，但不能编辑、删除或恢复该私有 Skill；发布保持 ID/名称不变并原地转为 Account 共享。
+- Platform Super Admin 可以读取任意 Account 的私有/共享 Skill，但 Skill 的创建、上传、编辑、发布、删除、恢复和使用全部返回 403。
+- 同一 Account 内所有未删除 Skill 名称全局唯一；跨 User 或跨私有/共享创建同名 Skill 均被拒绝，且错误不泄露占用者。
+- Skill 名称创建后不可修改；ZIP 更新必须整体替换且 `SKILL.md` 名称保持不变。
 - Account 共享对象删除创建者后仍保留，且授权不取决于 `created_by`。
 - Account Admin 能读取当前 Account 成员数据，但不能修改、导出或删除他人数据。
 - Account Admin 不能访问其他 Account；Platform Super Admin 可以按平台权限读取任意 Account/User 数据。
@@ -54,6 +58,7 @@
 - 上传来源不能启用 Watch；远程 Resource 的 Watch 暂停、恢复、触发和删除均继承目标写权限。
 - Account Admin 只能发布自己的私有 Resource，共享副本使用新 ID，不能发布其他成员私有 Resource。
 - 删除 Resource 立即暂停 Watch；晚到 Task 结果不能重新激活对象；恢复后 Watch 不自动恢复。
+- Skill 软删除后名称立即释放；恢复时若名称已被新 Skill 占用则失败，不能改名或覆盖。
 
 ### 18.3 凭证与集成测试
 
@@ -66,6 +71,7 @@
 - MCP 与 REST 复用同一 Principal Resolver 和 AuthorizationService。
 - 同一普通 User 通过 `/api/platform/v1`、`/api/v1`、MCP、SDK/CLI 或插件访问相同 URI 时得到一致的共享/私有授权结果。
 - `/api/v1` 的 `write/rm/mv/set_tags/add_resource` 及对应 MCP Tool 不能绕过共享区只读策略；`mv` 的源和目标都要授权。
+- `/api/v1`、SDK 和 CLI 的 `add_skill/update/delete` 不能绕过 Account 范围名称唯一、普通 User 共享写禁止、Account Admin 独立发布权限或 Platform Skill 只读策略。
 - 搜索只返回调用者自己的私有根与当前 Account 共享根，不返回同 Account 其他 User 私有数据或其他 Account 数据。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。
@@ -79,6 +85,10 @@
 - Platform Super Admin 可从 `/platform` 查看所有 Account、用户和数据，页面始终保留当前 Actor 身份。
 - 普通用户没有 Account 切换入口。
 - Resource/Skill 页面明确分为“我的”和“Account 共享”；普通 User 的共享页没有写入、删除或恢复入口。
+- Skill 页面支持在线创建、上传 `SKILL.md`/ZIP 和整体替换；名称不可编辑，ZIP 文件树没有逐文件写入入口。
+- Account Admin 可从成员 Skill 只读详情发起发布；确认弹窗显示归属改变、共享范围、原私有区不保留和不可取消发布。
+- Platform Skill 页面只有查看能力，不显示创建、编辑、发布、删除、恢复或“在 Session 中使用”入口。
+- Skill 详情的“在新 Session 中使用”跳转 Session 并携带稳定 Skill ID；不存在独立 Skill Runner 页面。
 - 新增 Resource 默认进入“我的 Resource”；管理员发布到共享区时页面明确展示目标 Account，并创建独立共享对象。
 - Resource 表单不显示 Viking URI、`visibility`、`create_parent` 或 `processing_mode`；文件、网页和 Git 只显示各自适用字段。
 - Resource 详情的解析内容只读，内部控制文件和绝对路径不可见；替换/Refresh 期间旧成功版本保持可读。
@@ -208,7 +218,7 @@
 10. 所有管理和高风险操作产生脱敏审计记录。
 11. Account/User Provisioning 失败可见、可重试、不会产生重复对象。
 12. 已完成备份恢复和版本回滚演练。
-13. Account、User 和业务数据软删除后 30 天内可恢复，期满物理清理且审计仍保留。
+13. Account、User 和业务数据软删除后进入 30 天恢复窗口，期满物理清理且审计仍保留；Skill 恢复时若名称已被占用则按明确冲突规则失败。
 14. 普通用户和 Account Admin 均不能切换到其他 Account。
 15. 用户可为不同插件创建并分别撤销具名 API Key，完整明文只展示一次，禁用用户会立即阻断全部 Key。
 16. v0.1 不存在 Service Account、Service Account Key 或可由外部使用的机器 Principal。
@@ -217,8 +227,11 @@
 19. 密码重置只允许严格上级操作下级；同级重置被拒绝，成功后只撤销目标登录 Session，不删除 OpenViking 对话数据或自动撤销 API Key。
 20. Resource/Skill 在页面、产品 API、低层 API、MCP 和审计中都能明确区分 User 私有与 Account 共享，不出现把 Account 共享称为互联网“公共”的含糊语义。
 21. 普通 User 默认新增 Resource/Skill 到自己的私有区，只读共享 Resource、读取/使用共享 Skill；任何渠道均不能写入或删除 Account 共享区。
-22. Account Admin 可管理本 Account 共享 Resource/Skill；Platform Super Admin 可管理目标 Account；共享对象不因创建者变化而改变授权或被自动删除。
-23. 产品只提供本地邮箱密码登录，不存在 OIDC/企业登录接口、页面、Provider 配置、身份映射表或后续版本占位设计；MCP OAuth 仍仅用于客户端授权。
+22. Account Admin 可管理本 Account 共享 Resource/Skill；Platform Super Admin 可管理目标 Account 的 Resource，但对所有 Skill 只读；共享对象不因创建者变化而改变授权或被自动删除。
+23. 同一 Account 的未删除 Skill 名称全局唯一且创建后不可修改；删除释放名称，恢复同名冲突时失败。
+24. 仅 Account Admin 可把本 Account 任意 User 私有 Skill 原地发布为共享 Skill；发布保持 ID/名称、不保留私有副本、不需 User 审批且不能取消发布。
+25. Skill 页面支持在线创建与 `SKILL.md`/ZIP 上传，ZIP 只支持整体替换；Skill 只能通过新 Session 使用，不提供独立执行器。
+26. 产品只提供本地邮箱密码登录，不存在 OIDC/企业登录接口、页面、Provider 配置、身份映射表或后续版本占位设计；MCP OAuth 仍仅用于客户端授权。
 
 ## 22. 关键架构决策记录
 
@@ -245,6 +258,10 @@
 | Service Account | v0.1 不提供 | 当前没有独立于自然人的 Account 级共享机器主体需求 |
 | Resource/Skill 可见性 | `user_private` 与 `account_shared` | “共享”严格限定在同一 Account；不使用含糊的“公共”表示跨租户或互联网可见 |
 | 普通 User 的共享权限 | Resource 只读；Skill 可读、可使用、不可管理 | 团队共享内容由 Account Admin 维护，避免所有成员直接改写共同知识 |
+| Skill 名称 | 同一 Account 的全部未删除 Skill 全局唯一，创建后不可改名 | 消除私有/共享和跨 User 的名称歧义；删除后允许立即复用 |
+| Skill 发布 | Account Admin 可把任意成员私有 Skill 原地转为共享，ID/名称不变 | 发布是明确的归属转换；不复制、不保留私有副本、不支持取消发布 |
+| Platform Skill 权限 | 全平台只读 | Platform Super Admin 负责平台控制，但不介入 Skill 内容操作 |
+| Skill 使用 | 在新 Session 中预选 Skill | 当前源码没有通用 Skill Runner，v0.1 不扩展独立执行模型 |
 | 默认新增位置 | User 私有区 | 当前源码 Resource 默认落入共享根，不符合产品最小权限原则；服务端必须显式覆盖 |
 | 共享对象所有权 | 归 Account，不归创建者 | `created_by` 只审计，不引入 v0.1 的贡献者/内容所有者权限模型 |
 | 多入口授权 | Platform API、低层 API、MCP 共用 Principal Resolver、URI Policy 和 RBAC | API Key、SDK/CLI 或插件只是调用渠道，不能成为权限旁路 |
@@ -255,4 +272,4 @@
 
 ## 23. 设计收敛状态
 
-IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 页面字段、来源、状态、Watch、发布和删除恢复契约已经收敛。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。
+IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 页面字段、来源、状态、Watch、发布和删除恢复契约已经收敛；Skill 创建上传、名称、角色权限、原地发布、整体替换、Session 调用和恢复冲突契约以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。

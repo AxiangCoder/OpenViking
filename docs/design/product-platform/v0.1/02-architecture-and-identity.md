@@ -122,7 +122,7 @@ class DataAccessContext:
 
 - User 私有数据：User 只能访问 `actor_account_id == subject_account_id` 且 `actor_user_id == subject_user_id` 的对象；Account Admin 可读取本 Account 内任意 Subject，Platform Super Admin 可按平台范围读取任意 Subject。
 - Account 共享数据：User/Account Admin 只能访问 `actor_account_id == subject_account_id` 的共享对象；Platform Super Admin 可选择任意目标 Account。
-- 普通 User 对 Account 共享 Resource 只有读取权限，对 Account 共享 Skill 只有读取和使用权限；共享写入、删除和 Skill 管理由 Account Admin 或 Platform Super Admin 的独立 Permission 控制。
+- 普通 User 对 Account 共享 Resource 只有读取权限，对 Account 共享 Skill 只有读取和使用权限。共享 Resource 的写入、删除可由 Account Admin 或 Platform Super Admin 的独立 Permission 控制；共享 Skill 只能由 Account Admin 管理，Platform Super Admin 对 Skill 只读。
 - 对他人数据的写入、导出和删除不从“可读取”自动推导，必须检查独立 Permission。
 - `canonical_ov_uri` 必须由服务端构造或规范化，并与 `visibility`、Subject 做一致性校验；客户端提交的 `visibility/account_id/user_id` 不能单独成为授权依据。
 - `subject_*` 是 PostgreSQL 产品 ID，供 RBAC、数据范围和审计使用；`subject_ov_*` 只能由服务端通过 IAM 映射得到，供 OpenViking 执行使用。客户端不能提交 `ov_account_id/ov_user_id` 参与授权。

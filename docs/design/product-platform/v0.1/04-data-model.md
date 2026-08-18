@@ -197,7 +197,8 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | `visibility` | `user_private/account_shared` |
 | `owner_user_id` | User 私有对象的所属 User；Account 共享对象必须为空 |
 | `ov_uri` | 规范化后的 OpenViking URI，在 Account 内唯一；不直接由前端指定 |
-| `display_name` | 产品展示名称；不参与 URI，修改名称不移动底层内容 |
+| `canonical_name` | Skill 必填的稳定名称，Resource 可空；Skill 按当前 `validate_skill_name` 规范化后写入，创建后不可修改 |
+| `display_name` | Resource 的产品展示名称；Skill v0.1 与 `canonical_name` 一致且不可单独修改 |
 | `description` | 产品说明，可空 |
 | `tags` | JSONB 产品标签；Resource 最多 20 个，需同步到 OpenViking Search Tags |
 | `source_type` | Resource 使用 `upload/web/git`；Skill 可使用自己的来源枚举 |
@@ -220,16 +221,17 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - `visibility=account_shared` 时 `owner_user_id IS NULL`，Resource URI 必须位于 `viking://resources/**`，Skill URI 必须位于 `viking://agent/skills/**`。
 - 客户端提交的可见性不能直接落库；服务端根据操作入口、已授权目标与 canonical URI 共同判定，并在事务中校验。
 - Account 共享对象属于 Account，不属于创建它的 User。删除或禁用创建者不自动删除共享对象，也不会改变其他成员的读取权限。
-- v0.1 不支持把对象在 `user_private` 与 `account_shared` 间直接改字段转换。发布到共享区或复制回私有区是显式的新建动作，生成新产品 ID、执行对应写权限检查并分别审计。
+- Resource 不支持在 `user_private` 与 `account_shared` 间直接改字段转换；发布 Resource 是显式复制新建，生成新产品 ID。Skill 是明确例外：Account Admin 发布本 Account 任意 User 私有 Skill 时保持同一产品 ID 和 `canonical_name`，把 `visibility/owner_user_id/ov_uri` 一并转换为 Account 共享值并审计；v0.1 不支持反向转换。
 - 产品 API、对外开放的低层 API 与 MCP 创建 Resource/Skill 时都必须通过同一个 Content Registry Service 写入该表，不能产生只存在于 OpenViking、没有产品引用记录的外部内容。
-- `ov_uri` 在对象首次进入 `active` 后不可因展示名称变化而修改；用户重命名只更新 `display_name`。
+- Resource 的 `ov_uri` 在对象首次进入 `active` 后不可因展示名称变化而修改；Resource 重命名只更新 `display_name`。Skill 名称不可修改，只有已授权发布动作可以在名称不变、ID 不变时把 `ov_uri` 从 User 私有根迁入 Account 共享根。
+- 同一 Account 下未删除 Skill 的 `canonical_name` 全局唯一，范围同时覆盖所有 User 私有 Skill 与 Account 共享 Skill。软删除记录不参与唯一约束，因此删除后名称可以立即复用。
 - Resource 的稳定远程来源使用 Secret Manager 中的应用密钥做 Envelope Encryption，只在抓取 Worker 内存中短暂解密。包含 Query 的一次性 URL 可在导入 Operation 期间加密保存，任务终态后清除，且不能创建 Watch。
 - Outbox、OpenViking Task Meta、Watch JSON、审计和日志只保存 Resource ID、脱敏 `source_display` 与 `source_fingerprint`，不能复制完整来源。Watch Scheduler 通过 Resource ID 向 Product Facade 解析来源，而不是持久化明文 `path`。
 - `latest_operation_id` 只做快速关联，Operation 的真实状态仍以 `platform_operation_refs` 为准。Refresh 期间 Resource 保持 `active`，继续指向上一次成功版本。
 - Operation 成功提交时只有其 `generation` 仍是目标最新待处理代数，且对象不在删除中，才能原子更新 `active_generation`；旧任务晚到只能记录终态，不能切换内容。
 - 产品标签与 OpenViking Search Tags 的同步使用 Outbox/Reconciler；前端不能直接调用底层 `set_tags` 形成双写分叉。
 
-索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。
+索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。Skill 另建等价于 `UNIQUE (account_id, canonical_name) WHERE object_type='skill' AND deleted_at IS NULL` 的部分唯一约束；名称冲突响应不得泄露占用者。
 
 ### 10.11 `iam_deletion_jobs`
 
@@ -252,6 +254,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 
 - 软删除后对象从正常查询隐藏；Account/User 同时禁止登录并撤销相关登录 Session。
 - 回收期内按数据范围授权恢复；恢复动作必须写审计。
+- Skill 软删除立即释放 Account 名称占用；恢复前重新检查同 Account 未删除 Skill 名称。若已被占用，恢复返回名称冲突并保持删除状态，不改名、不覆盖现对象。
 - 到达 `purge_after` 后由后台 Worker 幂等清理 OpenViking 数据，再将状态置为 `purged`。
 - 审计事件不随业务数据物理清理。
 - `resource_id` 引用 `platform_content_refs.id`；删除任务中的 `ov_uri` 只供受控 Worker 使用，不能替代创建任务时的可见性与 Permission 校验。
