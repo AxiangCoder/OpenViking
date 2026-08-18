@@ -46,23 +46,7 @@
 - Account Admin 和 User 创建后固定归属一个 Account，不建立多 Account membership，也不提供 Account 切换。
 - `account_id IS NULL` 只允许 `platform_super_admin`，并由数据库约束或 service invariant 强制。
 
-### 10.3 `iam_identities`
-
-用于密码之外的外部登录身份：
-
-| 字段 | 说明 |
-| --- | --- |
-| `id` | UUID 主键 |
-| `user_id` | 内部用户外键 |
-| `provider` | `oidc/wechat_work/...` |
-| `issuer` | Provider issuer |
-| `subject` | Provider 内稳定 subject |
-| `profile` | JSONB，非敏感展示信息 |
-| `created_at/last_used_at` | 时间 |
-
-唯一约束：`(provider, issuer, subject)`。
-
-### 10.4 `iam_api_credentials`
+### 10.3 `iam_api_credentials`
 
 保存 Account User 为 SDK、CLI、插件和 MCP 创建的个人 API Key。v0.1 的每条记录必须归属于一个 `account_id` 非空的用户，不支持 Platform Super Admin Key、`service_account_id` 或其他机器主体。
 
@@ -90,7 +74,7 @@
 - 删除用户进入回收期时立即撤销其全部 Key；恢复用户不自动恢复已撤销 Key。
 - v0.1 不建 `iam_service_accounts`、`service_account_roles` 或 Service Account Credential 表。
 
-### 10.5 `iam_roles`
+### 10.4 `iam_roles`
 
 v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色，不开放自定义 Role CRUD。
 
@@ -106,7 +90,7 @@ v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色�
 | `status` | `active/disabled` |
 | `created_at/updated_at` | 时间 |
 
-### 10.6 `iam_permissions`
+### 10.5 `iam_permissions`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -118,7 +102,7 @@ v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色�
 
 Permission 由代码和 migration 注册，不允许普通管理员任意创建未知 Permission Code。
 
-### 10.7 关联表
+### 10.6 关联表
 
 `iam_role_permissions`：
 
@@ -136,7 +120,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 
 v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联形式只是为了权限查询和未来扩展，不在首版开放多角色叠加。
 
-### 10.8 `iam_sessions`
+### 10.7 `iam_sessions`
 
 本表只保存网页登录的登录 Session/认证会话，不保存 OpenViking 对话 Session。管理员重置密码时批量填写目标用户未撤销记录的 `revoked_at/revoked_reason`，业务对话数据不受影响。
 
@@ -156,7 +140,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 
 索引：`token_hash`、`(user_id, revoked_at)`、`absolute_expires_at`。
 
-### 10.9 `iam_audit_events`
+### 10.8 `iam_audit_events`
 
 | 字段 | 说明 |
 | --- | --- |
@@ -185,7 +169,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 
 由于 v0.1 允许管理员复制并长期知道新建/重置后的用户密码，密码交接完成前后的 Actor 只表示“使用了哪个用户凭证”，不能提供自然人不可抵赖证明；这是已接受的产品限制。审计必须记录创建者/重置者、目标用户和时间，但绝不记录生成的密码。
 
-### 10.10 `iam_outbox`
+### 10.9 `iam_outbox`
 
 用于 PostgreSQL 与 OpenViking Provisioning 的可靠同步：
 
@@ -201,7 +185,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | `last_error` | 脱敏错误 |
 | `created_at/completed_at` | 时间 |
 
-### 10.11 `platform_content_refs`
+### 10.10 `platform_content_refs`
 
 该表保存产品稳定 ID、授权元数据与 OpenViking URI 的映射，不复制业务内容正文。OpenViking 仍是内容事实来源，PostgreSQL 是可见性、归属与审计关联的事实来源。
 
@@ -229,7 +213,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 
 索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。
 
-### 10.12 `iam_deletion_jobs`
+### 10.11 `iam_deletion_jobs`
 
 统一跟踪 Account、User、Memory、OpenViking 对话 Session、Resource 和 Skill 的软删除、恢复和期满清理：
 

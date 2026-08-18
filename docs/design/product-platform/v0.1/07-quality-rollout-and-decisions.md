@@ -78,6 +78,7 @@
 - 用户可创建、复制一次、查看元数据和撤销自己的具名 API Key，页面刷新后不能再次获取明文。
 - 管理员创建或重置低级别用户时可复制一次系统生成的密码；该密码可长期登录，首次登录不强制修改。
 - 产品中不存在注册、邀请、激活和自助找回密码页面。
+- `/login` 只提供邮箱和密码，不显示企业登录按钮，也不存在 OIDC Provider 配置、登录回调或自动创建用户流程。
 
 ### 18.5 安全测试
 
@@ -138,11 +139,9 @@
 
 ### Phase 6：可选增强
 
-- OIDC/企业微信等外部登录。
 - 用户 API Key 的限制性 Scope，且只允许缩小用户有效权限。
 - Service Account；仅在出现 Account 级共享、独立生命周期的机器集成需求后另行设计。
 - Platform Super Admin 的部署侧紧急恢复/Break-glass 机制。
-- Studio SSO。
 - 多实例 Redis 限流和缓存。
 
 ## 20. 预计源码改动边界
@@ -199,6 +198,7 @@
 20. Resource/Skill 在页面、产品 API、低层 API、MCP 和审计中都能明确区分 User 私有与 Account 共享，不出现把 Account 共享称为互联网“公共”的含糊语义。
 21. 普通 User 默认新增 Resource/Skill 到自己的私有区，只读共享 Resource、读取/使用共享 Skill；任何渠道均不能写入或删除 Account 共享区。
 22. Account Admin 可管理本 Account 共享 Resource/Skill；Platform Super Admin 可管理目标 Account；共享对象不因创建者变化而改变授权或被自动删除。
+23. 产品只提供本地邮箱密码登录，不存在 OIDC/企业登录接口、页面、Provider 配置、身份映射表或后续版本占位设计；MCP OAuth 仍仅用于客户端授权。
 
 ## 22. 关键架构决策记录
 
@@ -211,6 +211,7 @@
 | 浏览器认证 | 不透明服务端登录 Session | 可立即撤销，权限变更即时生效 |
 | 用户开通 | 管理员直接创建 | v0.1 不提供注册、邀请、邮件和激活流程 |
 | 登录标识 | 全局唯一邮箱 | 登录时无需客户端指定 Account，一个用户固定属于一个 Account |
+| 产品网页登录 | 仅本地邮箱密码 | 不提供 OIDC、企业微信或企业单点登录，也不列入后续版本计划 |
 | 初始密码 | 系统生成、一次展示、可复制并长期使用 | 管理员自行线下交接，用户不被强制首次修改；接受管理员可能长期知晓密码的审计限制 |
 | 密码重置 | 只允许严格上级重置下级 | 禁止同级控制；成功后撤销目标全部登录 Session |
 | 最高管理员恢复 | v0.1 不提供网页恢复 | 部署侧 Break-glass 留待后续版本 |
@@ -234,9 +235,8 @@
 
 ## 23. 实施前必须确认的产品决策
 
-这些问题不阻塞架构设计，但在编码前必须定稿：
+该问题不阻塞架构设计，但在生产部署前必须定稿：
 
-1. 是否需要第一阶段即支持企业微信/OIDC。
-2. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理 SSO。
+1. Studio 的生产访问边界是 VPN、Tailscale、IP allowlist 还是反向代理访问认证。
 
-在这些决策确认前，可以先实现与产品策略无关的底座：PostgreSQL schema、登录 Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约测试。
+在该决策确认前，不影响 PostgreSQL schema、登录 Session、用户 API Key、统一 Principal Resolver、CSRF、Permission Engine、Provisioning Bridge 和集成契约设计。

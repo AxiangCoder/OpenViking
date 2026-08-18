@@ -141,7 +141,7 @@ web-platform/
 - 第一阶段只允许受控网络、VPN 或管理员访问。
 - Studio 继续使用 API Key 连接模型，但用户凭证必须由新 IAM 签发；Root API Key 只允许受控运维人员在隔离环境使用。
 - Root 管理密钥不预置进公开静态资源。
-- 后续可用反向代理 SSO 给 `/studio` 再加一层访问保护。
+- 生产环境可在反向代理层为 `/studio` 增加独立访问认证；它不接入产品 OIDC 或产品用户登录体系。
 
 ### 13.7 管理员直接创建用户与密码交接
 
@@ -314,7 +314,7 @@ postgresql（生产可使用托管 RDS）
 }
 ```
 
-数据库 URL、Cookie 签名密钥、邮件 Provider 密钥和 Root API Key 必须通过环境变量或 Secret Manager 注入。
+数据库 URL、Cookie 签名密钥和 Root API Key 必须通过环境变量或 Secret Manager 注入。
 
 ### 16.4 Redis 决策
 

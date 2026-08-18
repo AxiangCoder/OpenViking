@@ -67,18 +67,11 @@
 
 已接受的 v0.1 风险：创建者可能保存并长期知道目标用户的初始密码，因此审计中的 Actor 能证明“使用了哪个用户凭证”，不能绝对证明键盘前一定是该自然人。若用户主动修改密码，这一风险从修改成功后消除。
 
-### 8.4 OIDC/企业登录
+产品网页登录固定使用本地邮箱和密码。设计中不定义 OIDC、企业微信登录、企业单点登录、外部身份绑定或自动 Provisioning；因此不需要 Identity Provider、Issuer、Subject 映射和相关登录回调接口。
 
-第二阶段增加外部身份绑定：
+当前 `openviking/server/oauth` 只服务于 MCP 客户端授权，不用于产品网页登录。
 
-- `password`、`oidc`、`wechat_work` 等 Provider 写入 `iam_identities`。
-- 外部 Provider 返回的 subject 映射到内部 `(account_id, user_id)`。
-- 外部登录不能直接指定 OpenViking Account/User。
-- v0.1 的用户必须先由管理员创建；外部登录是否允许自动 Provisioning 留到对应后续版本单独决定。
-
-当前 `openviking/server/oauth` 是 MCP 客户端授权服务，不应直接当成产品用户登录系统复用。
-
-### 8.5 用户 API Key
+### 8.4 用户 API Key
 
 用户 API Key 是绑定到一个 Account User 的长期 API 访问凭证，也可称为个人访问凭证。它用于 SDK、CLI、Codex/OpenClaw/OpenCode 等插件和非交互式 MCP 连接，但不创建新的程序身份。Platform Super Admin 在 v0.1 不签发平台级个人 API Key，只使用网页登录 Session。
 
@@ -95,7 +88,7 @@
 - 产品网页登录不使用 API Key。用户在设置页主动创建时可以看到一次明文，但前端不得写入 `localStorage`、`sessionStorage`、日志或埋点。
 - API 接受 `Authorization: Bearer <key>`；为适配 OpenViking 客户端也可接受 `X-Api-Key`，两者进入同一解析器。
 
-### 8.6 插件、MCP 与 OAuth 的身份语义
+### 8.5 插件、MCP 与 OAuth 的身份语义
 
 - 插件、MCP、SDK 和 CLI 是调用渠道，不是 Principal 类型。
 - 客户端使用用户 API Key 时，属于“用户委托型集成”：服务端 Actor 始终是 Key 所属用户。
@@ -104,7 +97,7 @@
 - 相同用户通过登录 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
 - 系统内部 Worker 使用内部 `SystemPrincipal`，不借用用户 API Key，也不对外暴露系统凭证。
 
-### 8.7 Service Account 决策
+### 8.6 Service Account 决策
 
 v0.1 不提供 Service Account、Service Account Key、机器角色或相关管理页面。当前产品场景是每个用户为自己的插件/MCP 配置个人 API Key，没有已确认的 Account 级共享机器主体需求。
 

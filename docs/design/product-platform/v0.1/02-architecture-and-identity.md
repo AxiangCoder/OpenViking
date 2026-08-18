@@ -82,7 +82,7 @@ class AuthenticatedUserPrincipal:
 - `actor_user_id/actor_account_id` 是 PostgreSQL 产品 ID，用于授权和审计；`actor_ov_user_id/actor_ov_account_id` 是调用 OpenViking 时使用的映射 ID，不能混用。
 - Platform Super Admin 可使用独立的平台登录主体，其 `actor_account_id` 和两个 `actor_ov_*` 字段可为空；上例表示 Account 用户调用路径。
 - Account Admin 和 User 的 `actor_account_id` 在登录后固定，产品不提供 Account 切换。
-- `authentication_method` 只说明“通过什么方式证明身份”，不影响角色和数据范围。
+- `authentication_method` 只说明“通过什么方式证明身份”，不影响角色和数据范围；其中 `oauth` 仅指 MCP 客户端授权，不是产品 OIDC/企业登录。
 - `session_id` 仅登录 Session 认证时存在；`credential_id` 用于 API Key/OAuth 凭证审计，任何位置都不保存明文密钥。
 - `role_codes` 用于页面展示和审计，不直接作为授权判断。
 - `permissions` 按当前用户状态和角色实时计算；API Key 不保存独立角色，也不能扩大此集合。

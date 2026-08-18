@@ -18,7 +18,7 @@ openviking/server/platform/
     password.py
     sessions.py
     api_credentials.py
-    oauth_principal.py
+    mcp_oauth_principal.py
     csrf.py
     service.py
 

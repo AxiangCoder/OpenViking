@@ -23,6 +23,7 @@
 - 权限层级包含 Platform Super Admin、Account Admin 和 User。
 - 邮箱是必填且全局唯一的登录标识，一个 User 只属于一个 Account。
 - Platform Super Admin 创建 Account 和首位 Account Admin；Account Admin 直接创建本 Account 的普通 User，不提供注册、邀请或激活流程。
+- 产品网页登录只支持本地邮箱和密码；不提供 OIDC、企业微信登录或其他企业单点登录，也不列入后续版本计划。
 - 创建用户或由上级重置密码时，系统生成可复制的初始密码并只展示一次；该密码可长期使用，用户不被强制修改，由管理员在线下自行交接。
 - 管理员只能重置严格低级别用户的密码，不能重置同级；重置后撤销目标用户全部登录 Session，但不删除 OpenViking 对话 Session，也不自动撤销 API Key。
 - 管理员跨用户读取必须同时保留 Actor（操作者）与 Subject（数据归属者）。
@@ -45,8 +46,8 @@
 | 2026-08-18 | Design v0.1 凭证修订 | 明确插件/MCP 为用户委托型集成，用户 API Key 统一继承 RBAC；Service Account 和旧门禁兼容均不进入 v0.1。 |
 | 2026-08-18 | Design v0.1 用户创建与密码修订 | 取消注册和邀请流程；明确管理员直建用户、长期初始密码手工交接、禁止同级重置及登录 Session 撤销。 |
 | 2026-08-18 | Design v0.1 数据可见性修订 | 根据 v0.4.12 源码核对 Resource/Skill 命名空间；明确 Account 共享与 User 私有边界、默认写入位置及全入口统一授权。 |
+| 2026-08-18 | Design v0.1 登录方式收敛 | 删除 OIDC、企业微信和企业单点登录设计及后续计划；产品网页登录固定为本地邮箱密码。 |
 
 ## 待继续讨论
 
-- OIDC/企业登录进入哪个设计版本。
 - Studio 的生产访问边界。

@@ -81,9 +81,10 @@
 - 不在 v0.1 引入 Service Account、Service Account Key 或 Account 级共享机器身份。
 - 不导入或继续接受旧 Account/User/API Key registry 中的凭证；v0.1 从新的 IAM 数据开始。
 - 不提供开放注册、邀请码、邀请链接、邀请邮件、邮箱激活或用户自助找回密码。
+- 不提供 OIDC、企业微信登录、企业单点登录或其他外部身份提供商登录；产品网页登录只使用本地邮箱和密码，且不列入后续版本计划。
 - 不在 v0.1 提供 Platform Super Admin 的网页紧急恢复或 Break-glass 通道；作为后续迭代处理。
 - 不在第一阶段实现双人审批或强制重新输入密码的高风险操作确认流程。
-- 不强制改造现有 Studio 为账号密码登录；Studio SSO 放在后续阶段。
+- 不改造现有 Studio 为产品账号密码登录；Studio 通过独立的生产访问边界保护。
 
 ## 4. 当前源码基线
 
@@ -96,7 +97,6 @@
 | FastAPI 服务与 Router 聚合 | `openviking/server/app.py` | 在同一进程注册 Platform Router |
 | Request 身份上下文 | `openviking/server/identity.py` | Platform 身份转换为现有 `RequestContext` |
 | `dev/api_key/trusted` 认证模式 | `openviking/server/auth/plugins/` | 复用认证入口结构，`api_key` 改为解析产品 IAM 用户凭证 |
-| 认证插件扩展点 | `openviking/server/auth/plugin.py` | 后续可增加 OIDC/JWT 直连模式 |
 | Account/User 管理 API | `openviking/server/routers/admin.py` | 第一阶段作为 Provisioning Bridge 复用 |
 | Root/Admin/User 角色 | `openviking/server/identity.py` | 作为 OpenViking Base Role 保留 |
 | User API Key | `openviking/server/api_keys/` | 源码证明当前 Key 表示 `(account_id, user_id)`；v0.1 保留“代表用户”的语义，但凭证存储与授权改接 PostgreSQL IAM |
