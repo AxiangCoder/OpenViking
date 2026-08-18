@@ -76,6 +76,8 @@
 - Search 页面只有类型、标签和时间筛选；结合会话检索只能选择当前 User 自己的 Session。伪造 `target_uri/filter/score_threshold/level/include_provenance/limit` 等字段必须被 Product API 拒绝，不能静默透传。
 - Search 的 `since/until` 始终按 `updated_at` 生效；客户端提交 `time_field=created_at` 或其他时间字段必须被 Product API 拒绝。
 - Search Product DTO 不包含 URI、分数、层级、Query Plan、Provenance、Relations 或原始 JSON；Resource/Skill 详情跳转只使用产品 ID。Memory 点击后只展示响应内摘要与匹配原因，不触发底层原始文件读取。
+- Search 结果卡片不额外查询标签/更新时间；筛选条件保留在结果区上方。
+- Session Chat 的 OpenViking 同步失败必须进入 `sync_pending/failed` 并可幂等重试，不能像 Studio 当前实现一样静默忽略；Tool 卡片不得回显原始 URI、宿主机路径或 Secret。
 - Resource/Skill 标签只接受 `key=value`；空 key/value、多个 `=`、超过数量或长度限制均返回字段错误。大小写和首尾空白规范化后去重，多标签 Search 只返回同时具备全部标签的结果。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。
@@ -276,4 +278,4 @@
 
 ## 23. 设计收敛状态
 
-IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 页面字段、来源、状态、Watch、发布和删除恢复契约已经收敛；Skill 创建上传、名称、角色权限、原地发布、整体替换、Session 调用和恢复冲突契约以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。
+IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 契约以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准；Skill 契约以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准；Memory、Search、Session 与 VikingBot 的页面、API、状态和验收规则以 [Memory、Search、Session 与 VikingBot 产品契约](11-memory-search-session-product-contract.md) 为准。当前只剩该文档第 72 节的受信任 Bot Session/Skill 绑定与服务端标题冲突未决。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。

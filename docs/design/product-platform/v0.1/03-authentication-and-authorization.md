@@ -156,17 +156,8 @@ role.read
 role.assign.platform
 
 memory.read.self
-memory.write.self
-memory.delete.self
-memory.export.self
 memory.read.account
 memory.read.platform
-memory.write.account
-memory.write.platform
-memory.export.account
-memory.export.platform
-memory.delete.account
-memory.delete.platform
 
 resource.user_private.read.self
 resource.user_private.write.self
@@ -258,8 +249,9 @@ v0.1 只提供以上三个内置角色，不开放自定义角色创建、编辑
 | 重置同级密码 | 禁止 | 禁止 | 禁止 |
 | 查看自己的记忆与对话 Session | ✓ | ✓ | ✓ |
 | 查看其他用户的记忆与对话 Session | 全部 Account | 当前 Account |  |
-| 修改其他用户数据 | 独立高风险 Permission | 默认无 |  |
-| 导出、删除其他用户数据 | 独立高风险 Permission | 默认无 |  |
+| 修改其他用户 Resource | 独立高风险 Permission | 默认无 |  |
+| 导出、删除其他用户 Resource | 独立高风险 Permission | 默认无 |  |
+| 修改、删除或恢复其他用户 Memory/Session | v0.1 禁止 | 禁止 |  |
 | 管理自己的 User 私有 Resource | 不适用；可按平台范围管理目标对象 | ✓ | ✓ |
 | 查看其他用户的私有 Resource | 全部 Account | 当前 Account |  |
 | 修改或删除其他用户的私有 Resource | 独立高风险 Permission | 默认无 |  |

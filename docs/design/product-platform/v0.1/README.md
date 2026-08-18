@@ -22,6 +22,7 @@
 8. [产品能力归属设计](08-product-capability-ownership.md)
 9. [Resource 页面与产品契约](09-resource-product-contract.md)
 10. [Skill 页面与产品契约](10-skill-product-contract.md)
+11. [Memory、Search、Session 与 VikingBot 产品契约](11-memory-search-session-product-contract.md)
 
 ## 已确认设计决策
 
@@ -51,6 +52,8 @@
 - Search 基础筛选只有内容类型；结合会话检索额外选择当前 User 自己的 Session。结构化标签和更新时间范围放入“更多筛选”；时间固定按 `updated_at`，分数阈值、索引层级、来源追踪、结果数量和自定义 URI 均由后端控制，不进入产品 UI。
 - Resource、Skill 与 Search 统一使用源码兼容的 `key=value` 结构化标签；标签规范化为小写并去重，多个检索标签采用 AND 关系，不建立普通标签到检索标签的转换层。
 - Search 结果复用 Studio 的“结果列表 + 右侧详情抽屉”交互；Resource/Skill 跳转产品详情，Memory 只在抽屉显示摘要和匹配原因。产品页面不显示 URI、分数、索引层级、检索计划、来源追踪或原始 JSON。
+- Search 结果卡片不额外补查标签和更新时间；当前筛选条件显示在结果区上方，Resource/Skill 的完整元数据进入详情页查看。
+- `/app/sessions` 复用 Studio 双栏聊天、SSE、消息/Tool 展示、历史归档加载和 Memory Impact；手工 Commit/Extract/Used、原始 Tool Result/Context/Archive 只留 Studio。消息同步失败必须显式进入待重试状态，不能静默丢失。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
 - MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
@@ -81,3 +84,4 @@
 | 2026-08-18 | Design v0.1 标签模型收敛 | Resource、Skill 与 Search 统一采用 `key=value` 结构化标签，多标签检索要求全部匹配。 |
 | 2026-08-18 | Design v0.1 Search 时间语义收敛 | 时间范围固定按 `updated_at` 筛选，页面不提供创建时间/更新时间切换。 |
 | 2026-08-18 | Design v0.1 源码复用原则与 Search 结果 | 明确已有合规能力直接复用；Search 复用列表和详情抽屉，同时移除引擎诊断字段。 |
+| 2026-08-18 | Design v0.1 Memory/Search/Session 详细契约 | 完成页面、API、权限、Chat Stream、自动 Commit、Memory Impact、软删除、错误与验收规则；保留 Bot Session/Skill 绑定与服务端标题这一组源码冲突。 |

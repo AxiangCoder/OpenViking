@@ -358,6 +358,8 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 | `06-frontend-security-and-operations.md` | 定义 `/app`、`/admin`、`/platform` 页面和安全规则；本文提供页面能力目录的来源和边界 |
 | `07-quality-rollout-and-decisions.md` | 定义测试、实施和验收；本文的验收标准应进入 Phase 0 能力目录冻结和后续权限测试 |
 | `09-resource-product-contract.md` | 将本文确定的 Resource、Watch、Task 能力边界细化为页面字段、状态机、动作、API 和异常流程 |
+| `10-skill-product-contract.md` | 细化 Skill 创建上传、发布、使用、权限和恢复规则 |
+| `11-memory-search-session-product-contract.md` | 细化 Memory、Search、Session、VikingBot Chat、自动 Commit、Memory Impact 和删除恢复规则 |
 
 ## 35. 本轮收敛结论
 
@@ -370,4 +372,4 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 5. WebDAV 因当前实现直接映射 Account 共享根且支持写、删、移动，v0.1 生产禁用。
 6. Studio 继续是可选私网维护入口；它现有的业务能力必须拆入正式产品页面，底层调试能力不得借 Studio 身份进入产品权限模型。
 
-以上是能力边界，不是开发计划。Resource 页面契约已经在 09 号文档中继续细化；其他页面也应按同样方式讨论字段、状态、动作和异常流程，而不是继续按源码 Router 增加菜单。
+以上是能力边界，不是开发计划。Resource、Skill、Memory、Search、Session 和 VikingBot Chat 已分别在 09、10、11 号文档中细化；后续页面继续采用“先复用源码，只有真实冲突再决策”的方式收敛字段、状态、动作和异常流程，而不是按源码 Router 增加菜单。

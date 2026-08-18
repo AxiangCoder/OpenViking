@@ -172,6 +172,7 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 - 登录 Session Token。
 - 密码。
 - 权限快照作为安全依据。
+- 从用户消息截取的 Session 标题或其他业务正文。
 
 `/app/profile/api-keys` 允许用户显式创建个人 API Key。创建成功后通过专用一次性结果页展示完整 Key，并明确提示立即复制；离开页面后不能再次查看。前端只在当前内存状态中短暂持有明文，不写入任何 Web Storage、URL、错误上报、埋点或剪贴板历史管理逻辑。
 
@@ -195,9 +196,11 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 - 相似度分数阈值、索引层级、来源追踪开关、结果数量和自定义 URI 不显示在产品页面，也不能通过 URL Query 或浏览器请求透传到底层 API。
 - `recall` 不显示为页面模式，只供 VikingBot/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
 - Search 结果复用 Studio 现有的“结果列表 + 右侧详情抽屉”交互。列表按引擎返回顺序展示类型、产品显示名称、我的/Account 共享归属和摘要；点击 Resource/Skill 可进入对应产品详情，点击 Memory 只打开抽屉展示 Memory 类型、摘要和匹配原因。
+- Search 结果卡片不为标签和更新时间追加二次查询；当前标签/更新时间筛选显示在结果区上方，Resource/Skill 的完整元数据进入详情页查看。
 - Search 列表和抽屉不展示 Viking URI、相似度分数、L0/L1/L2、Query Plan、Provenance、Relations、原始 JSON，也不提供“在 Playground 打开”。Memory 抽屉不读取原始文件，不显示编辑、删除、恢复或下载动作。
 - 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
 - `/app/sessions` 复用现有 Studio Session 的完整聊天方向，但使用产品登录 Session 和统一 RBAC。VikingBot 是 v0.1 必选部署组件；OpenViking Session 保存消息、归档、上下文及 Memory 提取状态，VikingBot 负责生成 AI 回复，前端不直接持有或转发 User API Key。
+- Session 复用双栏列表、文本 Composer、SSE、消息/Reasoning/Tool 状态、取消生成、Archive 历史拼装和 Memory Impact；原始 Tool 参数/结果必须脱敏并移除 URI。手工 Commit/Extract/Used、Tool Result、Context/Archive 调试不进入产品页面。
 - `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。
 - Resource 自动同步不建立独立顶级 Watch 菜单。用户在自己的 Resource 详情页设置同步周期、查看最近同步和手动触发；Account Admin 在共享 Resource 详情页执行相同操作。
 - 取消 Task 或 Watch 前展示目标 Resource、任务类型、当前状态和影响；后端再次校验 Task Permission、目标 Resource 写权限和可取消状态。

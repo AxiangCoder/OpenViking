@@ -242,7 +242,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | --- | --- |
 | `id` | UUID/ULID 主键 |
 | `account_id` | 数据所属 Account |
-| `resource_type/resource_id` | 被删除对象及产品 ID |
+| `resource_type/resource_id` | 被删除对象类型及稳定 ID；按类型引用 IAM、Session 或 Content 对象 |
 | `ov_uri` | 对应 OpenViking URI；可空且不返回前端 |
 | `deleted_by` | 执行软删除的 Actor |
 | `deleted_at` | 进入回收期时间 |
@@ -258,7 +258,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - Skill 软删除立即释放 Account 名称占用；恢复前重新检查同 Account 未删除 Skill 名称。若已被占用，恢复返回名称冲突并保持删除状态，不改名、不覆盖现对象。
 - 到达 `purge_after` 后由后台 Worker 幂等清理 OpenViking 数据，再将状态置为 `purged`。
 - 审计事件不随业务数据物理清理。
-- `resource_id` 引用 `platform_content_refs.id`；删除任务中的 `ov_uri` 只供受控 Worker 使用，不能替代创建任务时的可见性与 Permission 校验。
+- Resource/Skill 的 `resource_id` 引用 `platform_content_refs.id`；Account/User 引用对应 IAM ID；Session 使用当前 User 下的稳定 Session ID，不为 Memory 建立删除任务。删除任务中的 `ov_uri` 只供受控 Worker 使用，不能替代创建任务时的可见性与 Permission 校验。
 
 ### 10.12 `platform_operation_refs`
 
