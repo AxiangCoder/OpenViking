@@ -19,7 +19,7 @@
 ### 79.2 通用页面规则
 
 - 路由 Guard 依据 Permission 隐藏或阻止页面；按钮依据 Permission 隐藏或禁用；后端重复鉴权（06 §13.4）。
-- 管理员查看成员数据的页面为 **Subject 数据视图**：页面固定显示「操作者（Actor）」与「数据所属（Subject）」横幅，隐藏全部修改、导出、Watch、发布、删除按钮（09 §38.2、11 §67）。
+- 管理员查看成员数据的页面为 **Subject 数据视图**：页面固定显示「操作者（Actor）」与「数据所属（Subject）」横幅，隐藏全部修改、导出、Watch、发布、删除按钮（09 §38.2、11 §73）。
 - 页面与 DTO 不返回密码、Cookie、API Key 明文或完整 hash、登录 Session Token、OAuth Code/Token、完整凭证 hash 与业务正文（06 §14.4、§17）。
 - 收到 401 时刷新 `/auth/me`；会话过期则回登录页且不丢失安全状态（06 §13.4）。
 - 本地存储只允许非敏感偏好；禁止保存 Key、Token、密码、权限快照、标题等（06 §13.5）。
@@ -207,7 +207,7 @@
 ### 84.2 Subject 数据视图
 
 - `/admin/users/{userId}/*` 数据页固定显示「操作者与数据所属用户」横幅。
-- 成员数据只读：检索、Session 历史、Memory Impact、Resource/Skill 只读预览；不提供下载/导出、修改、删除、发布（11 §67、09 §38.2）。
+- 成员数据只读：检索、Session 历史、Memory Impact、Resource/Skill 只读预览；不提供下载/导出、修改、删除、发布（11 §73、09 §38.2）。
 - 管理员只读查看不授予修改、导出或删除能力；查看权限不能自动推导写入权限（03 §9.3）。
 
 ### 84.3 通用交互
@@ -367,7 +367,7 @@
 | 删除预览 | `GET /api/platform/v1/platform/accounts/{account_id}/deletion-preview` | `account.delete` |
 | 删除 | `DELETE /api/platform/v1/platform/accounts/{account_id}` | `account.delete` |
 
-- 列表字段：名称、`code`、状态（`provisioning/active/suspended/failed/pending_deletion`）、成员数、创建时间；按状态筛选。
+- 列表字段：名称、`code`、状态（`provisioning/active/suspended/failed/pending_deletion`）、成员数、创建时间；按状态筛选。`suspended` 状态只展示不操作（v0.1 无暂停/恢复产品端点，暂停以软删除表达，04 §10.1）。
 - 创建表单：Account 名称、`code`、首位 Account Admin 的邮箱与显示名；成功后一次性展示首位 Admin 的初始密码（05 §12.6）。
 - 页面不提供创建或重置另一个 Platform Super Admin 的入口（03 §9.2）。
 - 删除确认弹窗展示影响范围（成员数、共享内容、30 天恢复截止时间）。
@@ -382,7 +382,7 @@
 | 查看 API Key | `GET .../users/{user_id}/api-keys` | `credential.read.platform` |
 | 撤销 API Key | `DELETE .../users/{user_id}/api-keys/{credential_id}` | `credential.revoke.platform` |
 
-- 成员数据页为 Subject 视图（同 84.2），可进入检索、Session、Resource、Skill 只读查看（05 §12.6、11 §68）。
+- 成员数据页为 Subject 视图（同 84.2），可进入检索、Session、Resource、Skill 只读查看（05 §12.6、11 §73）。
 - 提升与重置密码确认弹窗遵循 06 §13.9 规则（分级校验、退出登录设备提示、一次密码展示）。
 
 ## 90. `/platform` 审计、Activity、监控与回收站
@@ -425,6 +425,6 @@
 
 冻结前需补齐的缺口（已记录于 12 号清单的处置上下文，随一致性检查处理）：
 
-1. **Account 暂停/恢复 API 缺失**：08 §29.3 声称「Account 创建、暂停、恢复、删除和 Provisioning 重试」，但 05 §12.6 平台 API 表只有 GET/POST accounts、DELETE 与 deletion-preview，无暂停/恢复/Provisioning 重试接口。建议在冻结一致性检查中为 05 补 `PUT /api/platform/v1/platform/accounts/{account_id}`（status：`suspended/active`）与重试动作，或明确从 v0.1 范围移除。
+1. **Account Provisioning 重试接口缺失**：08 §29.3 声称 `/platform` 承载「Account 创建、软删除与恢复、Provisioning 重试」，05 §11.3 也要求「管理页面展示 `provisioning/failed` 并支持安全重试」，但 05 §12.6 平台 API 表无对应接口。建议在冻结一致性检查中为 05 补充 `POST /api/platform/v1/platform/accounts/{account_id}/provisioning/retry`（`account.manage.platform`），或明确从 v0.1 范围移除重试表述（Account `suspended` 已按并行修订明确为「状态保留、无产品操作端点」，删除/恢复以 30 天软删除表达）。
 2. **个人登录 Session 列表 API 缺失**：v0.1 明确只提供「退出所有设备」（`logout-all`），不做单会话列表/撤销。
 3. **`/admin/settings` 路由占位**：06 §13.2 存在该路由但无对应内容定义；v0.1 标记为不承载正式功能（可移除或仅展示本 Account 基本信息）。

@@ -4,7 +4,7 @@
 
 | 设计版本 | 上游源码基线 | 状态 | 入口 |
 | --- | --- | --- | --- |
-| Design v0.1 | OpenViking v0.4.12 / `c1d38eb47ff2ebf9ff4cee46756728893fd8caf3` | 讨论中 | [v0.1](v0.1/README.md) |
+| Design v0.1 | OpenViking v0.4.12 / `c1d38eb47ff2ebf9ff4cee46756728893fd8caf3` | Design Frozen（`design-v0.1.0`） | [v0.1](v0.1/README.md) |
 
 版本号含义：
 
