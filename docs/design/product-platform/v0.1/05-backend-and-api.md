@@ -262,8 +262,8 @@ RESTORE_WINDOW_EXPIRED
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | POST | `/api/platform/v1/auth/login` | 无 | 登录并签发登录 Session Cookie |
-| POST | `/api/platform/v1/auth/logout` | 登录 Session | 撤销当前登录会话并清 Cookie |
-| POST | `/api/platform/v1/auth/logout-all` | 登录 Session | 撤销当前用户全部登录会话 |
+| POST | `/api/platform/v1/auth/logout` | 登录 Session + CSRF | 撤销当前登录会话并清 Cookie |
+| POST | `/api/platform/v1/auth/logout-all` | 登录 Session + CSRF | 撤销当前用户全部登录会话 |
 | GET | `/api/platform/v1/auth/me` | 登录 Session | 返回当前用户、角色、权限摘要 |
 | POST | `/api/platform/v1/auth/password/change` | 登录 Session + CSRF | 修改密码：请求体必填 `old_password` 与 `new_password`；旧密码校验失败返回统一 `LOGIN_FAILED` 并计入登录限流；成功后轮换当前登录会话 |
 
@@ -401,7 +401,7 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | DELETE | `/api/platform/v1/account/skills/{id}` | `skill.account_shared.manage.account` | Account Admin 软删除共享 Skill |
 | POST | `/api/platform/v1/account/skills/{id}/restore` | `skill.account_shared.manage.account` | Account Admin 恢复共享 Skill；同名已占用时失败 |
 | GET | `/api/platform/v1/sessions` | `session.read.self` | current user sessions |
-| POST | `/api/platform/v1/sessions` | `session.write.self` | create session |
+| POST | `/api/platform/v1/sessions` | `session.write.self` | 创建 Session：请求体含客户端标识与幂等键（`client_name/idempotency_key`），不接收身份、URI、Memory Policy；返回产品 Session ID（幂等重试返回同一 Session） |
 | GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | Session、消息和状态的产品 DTO |
 | GET | `/api/platform/v1/sessions/{id}/messages` | `session.read.self` | 组装 Archive 与当前 Context 后的完整消息历史，不返回 URI |
 | POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | 插件/MCP/SDK/API 幂等追加消息；产品网页不调用 |
@@ -469,8 +469,8 @@ Search Product Facade 复用源码分组结果，但必须转换为产品 DTO：
 | POST | `/api/platform/v1/admin/users/{id}/skills/{skill_id}/publish` | `skill.user_private.publish.account`；原地转为共享，不需要所属 User 审批 |
 | GET | `/api/platform/v1/admin/users/{id}/api-keys` | `credential.read.account` |
 | DELETE | `/api/platform/v1/admin/users/{id}/api-keys/{credential_id}` | `credential.revoke.account` |
-| GET | `/api/platform/v1/admin/recycle-bin` | Account 范围恢复权限 |
-| POST | `/api/platform/v1/admin/recycle-bin/{id}/restore` | Account 范围恢复权限 |
+| GET | `/api/platform/v1/admin/recycle-bin` | 按对象类型校验（见下注） |
+| POST | `/api/platform/v1/admin/recycle-bin/{id}/restore` | 按对象类型校验（见下注） |
 
 Account Admin API 的 Account 固定来自当前登录 Session；路径中的用户只作为 Subject，且必须属于该 Account。读取其他用户数据不授予修改、导出或删除能力。管理员只能查看 API Key 的名称、掩码、状态和使用时间并执行撤销，不能获取明文，也不能代用户创建 Key。
 
@@ -508,8 +508,10 @@ Platform Super Admin 使用独立的平台级接口：
 | GET | `/api/platform/v1/platform/activity` | `task.read.platform`；可按目标 Account 过滤 |
 | POST | `/api/platform/v1/platform/activity/{id}/cancel` | `task.cancel.platform` + 目标对象写权限；内部任务仍禁止取消 |
 | GET | `/api/platform/v1/platform/monitoring` | `monitoring.read`；平台聚合业务摘要 |
-| GET | `/api/platform/v1/platform/recycle-bin` | 平台范围恢复权限 |
-| POST | `/api/platform/v1/platform/recycle-bin/{id}/restore` | 平台范围恢复权限 |
+| GET | `/api/platform/v1/platform/recycle-bin` | 按对象类型校验（见下注） |
+| POST | `/api/platform/v1/platform/recycle-bin/{id}/restore` | 按对象类型校验（见下注） |
+
+注（回收站恢复权限）：恢复接口必须按对象类型分别校验权限，不存在单一的「Account/平台范围恢复权限」放行所有类型——Account 共享 Resource/Skill 恢复用各自的共享管理恢复权限；自己的私有 Resource/Skill 恢复用 self 权限；Account 共享 Skill 发布后已归 Account，只能由 Account Admin 恢复；其他 User 的私有 Skill 不允许恢复；Session 恢复只允许属主本人（管理员不能恢复他人 Session）；User/Account 恢复分别由 Account 范围与平台级恢复权限控制（详见各资源契约与 06 §14.6）。
 
 Platform Super Admin 选择目标 Account 是管理浏览行为，不是把登录用户切换成该 Account 成员。每个管理请求都保留原 Actor，并将目标 Account/User 记录为 Subject。
 

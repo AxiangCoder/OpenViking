@@ -174,8 +174,8 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `/studio/monitoring` | Queue、VectorDB、模型、锁、检索、文件系统、系统 | 产品只提供脱敏业务健康摘要 | 全部组件级调试和修复入口 |
 | `/studio/settings` | Base URL、Root/User API Key 连接 | `/app/profile/api-keys`、`/app/profile/connections` | Studio 自身连接设置和 Root Key |
 | `/studio/users` | 旧 Account/User/Role/Key 管理及身份切换 | `/admin/users`、`/platform/accounts`，全部改用新 IAM | 旧 Key 生成、Root/Account Switcher 和旧门禁操作 |
-| `/studio/oauth/consent` | MCP 同设备授权 | `/oauth/consent`，使用产品登录 Session | 无 |
-| `/studio/oauth/verify` | MCP 跨设备验证码授权 | `/oauth/verify`，使用产品登录 Session | 无 |
+| `/studio/oauth/consent` | MCP 同设备授权（Studio 内路由为 `/oauth/consent`，挂载 `/studio` 后为 `/studio/oauth/consent`） | `/oauth/consent`，使用产品登录 Session | 无 |
+| `/studio/oauth/verify` | MCP 跨设备验证码授权（Studio 内路由为 `/oauth/verify`，挂载 `/studio` 后为 `/studio/oauth/verify`） | `/oauth/verify`，使用产品登录 Session | 无 |
 
 这里的“拆分”不是把 Studio 页面换一个 URL，而是重新设计产品 DTO、Permission 和交互。比如 `/studio/playground` 的终端能执行原始 `write/mv/delete/session extract`，因此不能整体搬到 `/app`。
 

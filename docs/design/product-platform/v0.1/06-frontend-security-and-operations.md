@@ -23,7 +23,6 @@ web-platform/
       app/
         home/
         search/
-        memories/
         resources/
         skills/
         sessions/
@@ -185,7 +184,7 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 - 用户、共享内容、凭据、审计、监控等正式能力必须按角色进入对应产品页面；不能保留“只有 Studio 能完成”的正式业务流程。
 - 原始 URI 操作、底层任务调试和实验性设置可继续只存在于 Studio，它们是运维能力，不计入产品页面功能覆盖。
 - Studio 被启用时继续使用 API Key 连接模型；用户凭证必须由新 IAM 签发，Root API Key 只允许受控运维人员在隔离环境使用。
-- 当前 Studio 中的 `/studio/oauth/consent` 和 `/studio/oauth/verify` 不再作为产品 OAuth 入口；对应页面迁入 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，并以产品登录 Session 授权，避免 MCP OAuth 依赖不对公网开放的 Studio。
+- 当前 Studio 中的 `/oauth/consent` 和 `/oauth/verify`（挂载 `/studio` 后 URL 为 `/studio/oauth/consent`、`/studio/oauth/verify`）不再作为产品 OAuth 入口；对应页面迁入 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，并以产品登录 Session 授权，避免 MCP OAuth 依赖不对公网开放的 Studio。
 - Root 管理密钥不预置进公开静态资源。
 
 ### 13.7 首页、检索、活动与 Resource Watch
@@ -304,6 +303,7 @@ IDOR 是“改一下 URL 里的 ID 就读到别人数据”的漏洞。防护要
 
 - Account、User、OpenViking 对话 Session、Resource 和 Skill 默认先软删除。Memory 不提供独立删除或恢复入口，其生命周期由 Session Commit 提取流程管理。
 - 恢复窗口固定为 30 天，删除后从正常列表隐藏并进入回收站。
+- 回收站恢复按对象类型分别校验权限，不允许用单一「Account 范围恢复权限」放行所有类型：Account 共享 Resource/Skill 由 Account Admin（或平台代管）恢复；User 只恢复自己的私有 Resource/Skill；其他 User 的私有 Skill 不允许恢复；Session 恢复只允许属主本人；User/Account 恢复按数据范围权限执行（05 §12.6 注）。
 - Account/User 进入回收期时立即禁止登录、撤销登录 Session，并停止新的业务写入。
 - User 可恢复自己误删且仍在回收期内的私有数据；Account Admin 可恢复本 Account 的共享 Resource/Skill 和自己的私有数据，但不能恢复、修改或删除其他用户的私有 Skill。Platform Super Admin 可按独立平台级高风险 Permission 恢复其他类型的全平台范围对象，但对 Skill 始终只读。
 - 期满后后台 Worker 执行幂等物理清理；清理失败不延长对象可访问性，但必须告警并重试。
@@ -438,6 +438,8 @@ postgresql（生产可使用托管 RDS）
 - 后台 Provisioning Task。
 
 管理员跨用户或跨 Account 访问时，HTTP 日志只记录脱敏标识；Platform Audit Event 必须记录 `actor_user_id`、`actor_account_id`、`authentication_method`、脱敏的 `actor_credential_id`、`subject_account_id`、`subject_user_id`、`action`、`scope` 和结果。通过插件/MCP 使用用户 API Key 时，Actor 仍是该用户，`actor_credential_id` 用于区分具体设备或插件。
+
+OpenViking 底层请求日志、QueueFS 与 Task Meta 中记录的 user 是执行上下文身份（Subject 或 `platform-gateway`），仅用于排障与链路追踪，不作为产品审计结论；管理员跨用户访问的产品审计一律以 Platform Audit Event 的 Actor/Subject 为准。
 
 不把 `user_id`、邮箱等高基数字段无条件放进 Prometheus Label。需要 Account 维度时沿用现有 allowlist 和数量上限思想。
 

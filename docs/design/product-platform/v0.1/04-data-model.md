@@ -27,7 +27,7 @@
 | `id` | UUID | 主键 |
 | `account_id` | UUID | 外键 `iam_accounts.id`；Platform Super Admin 可空，其他用户必须且只能属于一个 Account |
 | `ov_user_id` | VARCHAR(64) | 映射 OpenViking `user_id`；Platform Super Admin 可空 |
-| `username` | VARCHAR(128) | Account 内唯一 |
+| `username` | VARCHAR(128) | Account 内唯一；即 `auth/me` 返回的 `code`，展示用途，创建后不可修改 |
 | `email` | VARCHAR(320) | 必填，规范化后全局唯一，作为登录标识 |
 | `display_name` | VARCHAR(128) | 可空 |
 | `password_hash` | TEXT | v0.1 必填，Argon2id；不保存或恢复明文 |
@@ -76,13 +76,13 @@
 
 ### 10.4 `iam_roles`
 
-v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色，不开放自定义 Role CRUD。
+v0.1 只种子化 `platform_super_admin/account_admin/user` 三个内置角色，不开放自定义 Role CRUD。三个内置角色均为**全局单行定义**（`account_id` 可空），不按 Account 复制；角色与用户的 Account 一致性由 `iam_user_roles` 绑定校验（见 §10.6）。
 
 | 字段 | 说明 |
 | --- | --- |
 | `id` | UUID 主键 |
-| `account_id` | Account 外键；仅平台级 System Role 可为空 |
-| `code` | Account 内稳定唯一代码 |
+| `account_id` | Account 外键；三个内置角色均为全局单行，`account_id` 可空；仅预留未来 Account 级自定义角色时才必填 |
+| `code` | 全局唯一稳定代码 |
 | `name` | 展示名称 |
 | `description` | 描述 |
 | `ov_base_role` | `user` 或 `admin`；Platform Super Admin 为 `NULL` |
@@ -118,7 +118,7 @@ Permission 由代码和 migration 注册，不允许普通管理员任意创建�
 - `assigned_at`
 - 复合主键 `(user_id, role_id)`
 
-v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联形式只是为了权限查询和未来扩展，不在首版开放多角色叠加。
+v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联形式只是为了权限查询和未来扩展，不在首版开放多角色叠加。绑定校验：`account_admin/user` 角色全局单行（`account_id` 可空），授予时校验角色适用的 Account 范围——Account Admin/User 的用户必须与目标 Account 一致，`platform_super_admin` 角色只能由平台初始化路径授予。
 
 ### 10.7 `iam_sessions`
 
@@ -229,7 +229,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - Outbox、OpenViking Task Meta、Watch JSON、审计和日志只保存 Resource ID、脱敏 `source_display` 与 `source_fingerprint`，不能复制完整来源。Watch Scheduler 通过 Resource ID 向 Product Facade 解析来源，而不是持久化明文 `path`。
 - `latest_operation_id` 只做快速关联，Operation 的真实状态仍以 `platform_operation_refs` 为准。Refresh 期间 Resource 保持 `active`，继续指向上一次成功版本。
 - Operation 成功提交时只有其 `generation` 仍是目标最新待处理代数，且对象不在删除中，才能原子更新 `active_generation`；旧任务晚到只能记录终态，不能切换内容。
-- Resource、Skill 与 Search 共用 OpenViking 的结构化标签语义：每项必须恰好包含一个 `=`，key/value 均非空，去除首尾空白后整体转为小写并去重；每项最多 40 字符、每个对象最多 20 项。产品不另存一套普通自由标签。
+- Resource、Skill 与 Search 共用 OpenViking 的结构化标签语义：每项必须恰好包含一个 `=`，key/value 均非空，去除首尾空白后整体转为小写并去重；每项最多 40 字符、每个对象最多 20 项。产品不另存一套普通自由标签。该数量与长度限制由 Product Facade/Content Registry 强制（`key=value` 格式校验是引擎既有规则，20/40 上限是产品新增约束，引擎本身无此限制）。
 - PostgreSQL `tags` 与 OpenViking `search_tags` 的同步使用 Outbox/Reconciler；Skill Frontmatter 中的 `tags` 也必须通过同一校验，并由 Product Facade 同步到 Skill 索引记录。前端不能直接调用底层 `set_tags` 形成双写分叉。
 
 索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。Skill 另建等价于 `UNIQUE (account_id, canonical_name) WHERE object_type='skill' AND deleted_at IS NULL` 的部分唯一约束；名称冲突响应不得泄露占用者。

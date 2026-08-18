@@ -298,6 +298,8 @@ Skill 详情页只负责查看和管理，不执行 Skill，也不创建网页 S
 | POST | `/api/platform/v1/me/skills` | 在线创建或消费已上传的 `upload_id`；目标固定为 Actor 私有区 |
 | GET | `/api/platform/v1/me/skills/{id}` | 私有 Skill 详情 |
 | PUT | `/api/platform/v1/me/skills/{id}` | 整体更新自己的 Skill；名称不可变 |
+
+注（PUT 请求体）：在线 Skill 提交 `description/tags/allowed_tools/content` JSON（与创建一致，`name` 不接受）；ZIP Skill 提交新的 `upload_id` 整体替换，新包 `SKILL.md` 的 `name` 必须等于当前名称，否则返回 `SKILL_NAME_IMMUTABLE`。
 | DELETE | `/api/platform/v1/me/skills/{id}` | 软删除自己的 Skill |
 | POST | `/api/platform/v1/me/skills/{id}/restore` | 30 天内恢复；同名占用时失败 |
 

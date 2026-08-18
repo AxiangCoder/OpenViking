@@ -97,7 +97,7 @@
 - 相同用户通过登录 Session、API Key 或 OAuth 调用同一动作时，授权结果必须一致；审计额外记录认证方式和凭证 ID。
 - 系统内部 Worker 使用内部 `SystemPrincipal`，不借用用户 API Key，也不对外暴露系统凭证。
 
-MCP OAuth 是“用户把自己的 OpenViking 权限授权给一个 MCP 客户端”，不是产品登录，也不是企业单点登录。当前 v0.4.12 源码把同意页和跨设备验证码页放在 `/studio/oauth/consent`、`/studio/oauth/verify`，并依赖 Studio 中已配置的 API Key；这一实现不能进入产品 v0.1，因为生产公网不挂载 Studio，浏览器也不应保存 User API Key。
+MCP OAuth 是“用户把自己的 OpenViking 权限授权给一个 MCP 客户端”，不是产品登录，也不是企业单点登录。当前 v0.4.12 源码把同意页和跨设备验证码页放在 Studio 的 `/oauth/consent`、`/oauth/verify` 路由（web-studio 是独立 SPA，挂载 `/studio` 后 URL 为 `/studio/oauth/consent`、`/studio/oauth/verify`），并依赖 Studio 中已配置的 API Key；这一实现不能进入产品 v0.1，因为生产公网不挂载 Studio，浏览器也不应保存 User API Key。
 
 产品化后的 OAuth 授权规则：
 
