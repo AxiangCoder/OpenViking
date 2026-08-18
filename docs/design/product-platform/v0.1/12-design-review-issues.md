@@ -88,12 +88,12 @@
 
 ### 12. `platform-gateway` 方案可行但双层审计不一致
 
-- **证据**：`viking://resources/**` 在源码中无条件放行（`viking_fs.py:2959-2960`、`namespace.py:271-272`），且整条访问链不校验 user 是否注册，因此 `platform-gateway` 执行占位可行。
+- **证据**：`viking://resources/**` 在源码中无条件放行（`viking_fs.py:2961-2962`、`namespace.py:271-272`），且整条访问链不校验 user 是否注册，因此 `platform-gateway` 执行占位可行。
 - **影响**：OpenViking 层日志/审计记录的是 `platform-gateway` 或 Subject 身份，只有产品审计保留 Actor/Subject（02 §7.3）。双层审计不一致需确认可接受，并在排障时说明。
 
 ### 13. `agent/endpoints|tools|payments` 源码默认全局可读
 
-- **证据**：`viking_fs.py:2971-2974` 对新格式 `agent/skills|endpoints|tools|payments` 子路径全局可读（account scope）。
+- **证据**：`viking_fs.py:2972-2975` 对新格式 `agent/skills|endpoints|tools|payments` 子路径全局可读（account scope）。
 - **影响**：设计（02 §7.5）将 `agent/endpoints|tools|payments` 列为 `internal` 拒绝，产品层必须通过 Target Policy 强制覆盖源码的放行行为——这是硬依赖，低层 API 一旦漏接即形成旁路。
 
 ## 四、表述与编号小问题

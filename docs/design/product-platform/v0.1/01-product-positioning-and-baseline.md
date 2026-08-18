@@ -108,8 +108,8 @@
 | Codex/OpenClaw/OpenCode 集成 | `examples/*-plugin/` | 当前均可配置用户 API Key，确认这些插件属于用户委托型集成 |
 | account 物理路径隔离 | `openviking/storage/viking_fs.py` | 继续作为核心数据隔离层 |
 | user/peer URI ACL | `openviking/core/namespace.py` | 继续阻止客户端绕过 Platform 授权直接跨用户读取 |
-| User 私有目录 | `openviking/core/directories.py` | `viking://user/{ov_user_id}/resources/**` 与 `.../skills/**` 分别作为私有 Resource/Skill 区 |
-| Account 共享 Resource | `openviking/core/directories.py`、`openviking/storage/viking_fs.py` | `viking://resources/**` 作为当前 Account 共享区 |
+| User 私有目录 | 绝对根常量见 `openviking/core/namespace.py`（`canonical_user_root`）；`user/` 下 `resources/skills` 子目录预设见 `openviking/core/directories.py` | `viking://user/{ov_user_id}/resources/**` 与 `.../skills/**` 分别作为私有 Resource/Skill 区 |
+| Account 共享 Resource | 绝对根见 `openviking/core/namespace.py`（`visible_roots`）、`openviking/storage/viking_fs.py` | `viking://resources/**` 作为当前 Account 共享区 |
 | Account 共享 Skill | `openviking/utils/skill_processor.py`、`openviking/server/routers/skills.py` | `viking://agent/skills/**` 作为当前 Account 共享 Skill 区 |
 | OAuth 2.1 | `openviking/server/oauth/` | 复用 MCP 授权协议，最终仍解析为授权用户主体 |
 | Web Studio | `web-studio/` | 源码与 bundle 可选保留；仅在开发环境或私网维护入口挂载 `/studio` |
@@ -127,7 +127,7 @@
 7. 当前 API Key 与 Account/User registry、Base Role 绑定，尚未与产品 PostgreSQL RBAC 统一，也没有独立 Service Account 主体。
 8. 当前 `viking://resources/**` 对 Account 内已认证用户可访问，`content.write`、Resource 添加和文件删除等低层写接口没有按产品角色区分共享区写权限；仅依赖当前 Namespace ACL 不能实现“普通 User 只读共享区”。
 9. 当前 Resource 默认添加目标是 `viking://resources`，而 Skill 默认写入 `viking://user/{ov_user_id}/skills`；若不覆盖 Resource 默认目标，普通用户通过 API/MCP 添加的内容会误入 Account 共享区。
-10. 源码中的 `PUBLIC_SCOPES` 表示可以作为公开 API URI 使用的根路径集合，不等于产品业务上的“所有人公开可见”，产品文档不得据此把 Account 共享数据称为互联网公共数据。
+10. 源码中的 `PUBLIC_SCOPES`（`openviking_cli/utils/uri.py` 的 `VikingURI.PUBLIC_SCOPES`，另见 `openviking/core/uri_validation.py`）表示可以作为公开 API URI 使用的根路径集合，不等于产品业务上的“所有人公开可见”，产品文档不得据此把 Account 共享数据称为互联网公共数据。
 11. 当前 OpenViking Admin 身份不会自动获得其他 User 私有 URI 的读取能力；Account Admin/Platform Super Admin 查看他人私有数据仍需要 Product Facade 在保留原 Actor 的同时构造目标 Subject 上下文。
 
 ### 4.3 v0.1 数据可见性映射

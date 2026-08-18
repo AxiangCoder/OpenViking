@@ -12,7 +12,7 @@
 
 OpenViking v0.4.12 当前具备以下能力：
 
-- `POST /api/v1/skills` 接受完整 `SKILL.md` 字符串、结构化 Skill 数据或临时上传文件。
+- `POST /api/v1/skills`（注意：定义于 `server/routers/resources.py`，`server/routers/skills.py` 只含列表、find、validate 与 `{skill_name}` 路由）接受完整 `SKILL.md` 字符串、结构化 Skill 数据或临时上传文件。
 - 结构化输入若符合 MCP Tool 数据格式，`SkillProcessor` 可以把它转换为 Skill；这只是输入格式转换，不表示 MCP 已有 `add_skill` Tool。
 - 上传内容可以是单个 `SKILL.md` 或 ZIP；ZIP 根目录或唯一一级子目录中必须存在 `SKILL.md`。
 - Skill 包中的其他文件作为辅助文件写入 Skill 目录。
