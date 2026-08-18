@@ -41,7 +41,7 @@ OpenViking v0.4.12 当前具备以下能力：
 12. Skill 名称创建后不可修改；可以修改描述、标签、正文和 `allowed-tools`。
 13. Skill 软删除后名称立即释放，可以创建、上传或发布同名 Skill。
 14. 恢复旧 Skill 时若名称已被占用，v0.1 返回名称冲突，不改名、不覆盖新 Skill；更复杂的冲突处理留到后续版本。
-15. Skill 页面提供“在新 Session 中使用”，不提供独立的“运行/测试 Skill”执行器。
+15. Skill 页面不提供“在新 Session 中使用”或独立“运行/测试 Skill”执行器；实际使用发生在 Codex、其他 Agent、插件或 MCP 客户端。
 16. 发布只处理 Skill 归属和 URI，不迁移、共享或删除任何 User 私密配置。
 
 ## 53. 产品信息架构
@@ -95,7 +95,7 @@ OpenViking v0.4.12 当前具备以下能力：
 - 文件：脚本、参考资料和其他辅助文件清单。
 - 工具范围：`allowed-tools` 声明。
 - 私密配置入口：仅当前 User 管理自己的配置；不在发布流程中处理迁移。
-- “在新 Session 中使用”动作。
+- 使用提示：说明可由已连接的 Codex、其他 Agent、插件或 MCP 客户端按权限检索和读取。
 
 `allowed-tools` 是 Skill 声明希望使用的工具范围，不是 Platform Permission，也不能替代 Agent/客户端运行时的工具授权。
 
@@ -193,16 +193,16 @@ ZIP 导入的 Skill 可以浏览其文件清单和允许读取的文件内容，
 
 本次设计不新增 Skill 版本切换、发布代数、处理期间可见性或失败回退产品规则。v0.1 沿用 OpenViking 当前新增与整体替换处理方式；若后续需要稳定的多版本发布能力，另行设计，不从 Resource 的 generation 模型自动类推。
 
-## 57. “在新 Session 中使用”
+## 57. Skill 使用边界
 
-Skill 详情页不执行 Skill。点击“在新 Session 中使用”只完成以下产品动作：
+Skill 详情页只负责查看和管理，不执行 Skill，也不创建网页 Session。Codex、其他 Agent、插件或 MCP 客户端在运行时通过 Search/Read 等受控接口发现并加载 Skill：
 
-1. 校验 Actor 对目标 Skill 有 `use` 权限。
-2. 跳转到新建 Session 页面。
-3. 通过稳定 `skill_id` 预选该 Skill，不使用名称或客户端提交的 URI 猜测目标。
-4. 由 Session/Agent 调用链在真正使用时再次校验 Skill 仍存在且 Actor 仍有权限。
+1. 客户端使用当前 User API Key 或用户委托型 OAuth Token。
+2. 服务端按稳定产品对象映射解析 Skill，不接受任意 URI 越权读取。
+3. 每次读取或使用前重新校验 Skill 仍存在、未删除且当前 User 仍有 read/use Permission。
+4. Agent Runtime 自己决定如何把 Skill 放入对话上下文；OpenViking 产品网页不代理模型执行。
 
-具体 Session 创建 DTO、消息执行和 Skill 引用持久化由后续 Session 产品契约固定。本设计明确不增加 `/skills/{id}/execute` 或服务器通用 Skill Runner。
+本设计不增加 `/skills/{id}/execute`、服务器通用 Skill Runner 或“在新 Session 中使用”按钮。
 
 ## 58. 发布为 Account 共享 Skill
 
@@ -360,7 +360,7 @@ Skill 上传使用绑定 Actor、Account 和目标入口的一次性 `upload_id`
 9. 发布不需要所属 User 审批，但展示影响范围并完整审计；v0.1 不支持取消发布。
 10. 删除立即释放名称；恢复遇到同名时失败，不改名也不覆盖当前 Skill。
 11. ZIP Skill 只能整体重新上传，产品页面不能逐文件写入底层 Skill 目录。
-12. Skill 页面只有“在新 Session 中使用”，不存在独立 Skill `execute` API 或通用运行器。
+12. Skill 页面不提供“在新 Session 中使用”、独立 Skill `execute` API 或通用运行器；接入客户端按权限检索和读取 Skill。
 13. 发布流程不迁移、共享或删除 User 私密配置。
 14. 页面与 DTO 不泄露 Viking URI、内部控制文件、绝对路径或其他 User 的私密配置。
 

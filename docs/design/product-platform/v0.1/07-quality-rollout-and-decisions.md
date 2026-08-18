@@ -77,7 +77,7 @@
 - Search 的 `since/until` 始终按 `updated_at` 生效；客户端提交 `time_field=created_at` 或其他时间字段必须被 Product API 拒绝。
 - Search Product DTO 不包含 URI、分数、层级、Query Plan、Provenance、Relations 或原始 JSON；Resource/Skill 详情跳转只使用产品 ID。Memory 点击后只展示响应内摘要与匹配原因，不触发底层原始文件读取。
 - Search 结果卡片不额外查询标签/更新时间；筛选条件保留在结果区上方。
-- Session Chat 的 OpenViking 同步失败必须进入 `sync_pending/failed` 并可幂等重试，不能像 Studio 当前实现一样静默忽略；Tool 卡片不得回显原始 URI、宿主机路径或 Secret。
+- 插件/MCP/SDK/API 的 Session 写入失败必须明确返回并可从最后确认游标幂等重试，不能像 Studio 演示链路一样静默忽略；已同步 Tool 事件不得回显原始 URI、宿主机路径或 Secret。
 - Resource/Skill 标签只接受 `key=value`；空 key/value、多个 `=`、超过数量或长度限制均返回字段错误。大小写和首尾空白规范化后去重，多标签 Search 只返回同时具备全部标签的结果。
 - 系统不接受 Service Account Principal 或 Service Account Key；Root API Key 不能作为产品用户凭证。
 - 生产公网访问 `/studio` 返回 404；在显式启用的开发/私网环境中，Studio 仍可使用受控 API Key 完成底层排障。
@@ -94,7 +94,7 @@
 - Skill 页面支持在线创建、上传 `SKILL.md`/ZIP 和整体替换；名称不可编辑，ZIP 文件树没有逐文件写入入口。
 - Account Admin 可从成员 Skill 只读详情发起发布；确认弹窗显示归属改变、共享范围、原私有区不保留和不可取消发布。
 - Platform Skill 页面只有查看能力，不显示创建、编辑、发布、删除、恢复或“在 Session 中使用”入口。
-- Skill 详情的“在新 Session 中使用”跳转 Session 并携带稳定 Skill ID；不存在独立 Skill Runner 页面。
+- Skill 详情不提供“在新 Session 中使用”或独立 Skill Runner；Skill 由已连接的 Agent/插件/MCP 按权限检索和读取。
 - 新增 Resource 默认进入“我的 Resource”；管理员发布到共享区时页面明确展示目标 Account，并创建独立共享对象。
 - Resource 表单不显示 Viking URI、`visibility`、`create_parent` 或 `processing_mode`；文件、网页和 Git 只显示各自适用字段。
 - Resource 详情的解析内容只读，内部控制文件和绝对路径不可见；替换/Refresh 期间旧成功版本保持可读。
@@ -150,13 +150,13 @@
 
 - Provisioning outbox/worker/reconciler。
 - `AuthenticatedUserPrincipal -> RequestContext`。
-- Search、Resource、OpenViking 对话 Session 与 VikingBot Chat 产品 Facade API；不建立独立 Memory CRUD API。
+- Search、Resource、OpenViking Session 查看管理与插件/MCP/SDK/API 接入；不建立网页 Chat 或独立 Memory CRUD API。
 - 跨 Account/User 隔离测试。
 
 ### Phase 3：产品前端
 
 - 新建 `web-platform`。
-- 登录、产品首页、统一检索、资源、Skill、OpenViking 对话 Session 与完整聊天。
+- 登录、产品首页、统一检索、资源、Skill 和 OpenViking Session 查看管理。
 - 个人设置中的 API Key 管理与一次性明文展示。
 - 基于 Permission 的路由与按钮控制。
 
@@ -236,7 +236,7 @@
 22. Account Admin 可管理本 Account 共享 Resource/Skill；Platform Super Admin 可管理目标 Account 的 Resource，但对所有 Skill 只读；共享对象不因创建者变化而改变授权或被自动删除。
 23. 同一 Account 的未删除 Skill 名称全局唯一且创建后不可修改；删除释放名称，恢复同名冲突时失败。
 24. 仅 Account Admin 可把本 Account 任意 User 私有 Skill 原地发布为共享 Skill；发布保持 ID/名称、不保留私有副本、不需 User 审批且不能取消发布。
-25. Skill 页面支持在线创建与 `SKILL.md`/ZIP 上传，ZIP 只支持整体替换；Skill 只能通过新 Session 使用，不提供独立执行器。
+25. Skill 页面支持在线创建与 `SKILL.md`/ZIP 上传，ZIP 只支持整体替换；Skill 由接入 Agent/插件/MCP 按权限检索和读取，网页不提供执行器。
 26. 产品只提供本地邮箱密码登录，不存在 OIDC/企业登录接口、页面、Provider 配置、身份映射表或后续版本占位设计；MCP OAuth 仍仅用于客户端授权。
 
 ## 22. 关键架构决策记录
@@ -267,7 +267,7 @@
 | Skill 名称 | 同一 Account 的全部未删除 Skill 全局唯一，创建后不可改名 | 消除私有/共享和跨 User 的名称歧义；删除后允许立即复用 |
 | Skill 发布 | Account Admin 可把任意成员私有 Skill 原地转为共享，ID/名称不变 | 发布是明确的归属转换；不复制、不保留私有副本、不支持取消发布 |
 | Platform Skill 权限 | 全平台只读 | Platform Super Admin 负责平台控制，但不介入 Skill 内容操作 |
-| Skill 使用 | 在新 Session 中预选 Skill | 当前源码没有通用 Skill Runner，v0.1 不扩展独立执行模型 |
+| Skill 使用 | 由 Agent/插件/MCP 检索并读取 | 产品网页不创建对话，也不扩展独立执行模型 |
 | 默认新增位置 | User 私有区 | 当前源码 Resource 默认落入共享根，不符合产品最小权限原则；服务端必须显式覆盖 |
 | 共享对象所有权 | 归 Account，不归创建者 | `created_by` 只审计，不引入 v0.1 的贡献者/内容所有者权限模型 |
 | 多入口授权 | Platform API、低层 API、MCP 共用 Principal Resolver、URI Policy 和 RBAC | API Key、SDK/CLI 或插件只是调用渠道，不能成为权限旁路 |
@@ -278,4 +278,4 @@
 
 ## 23. 设计收敛状态
 
-IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 契约以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准；Skill 契约以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准；Memory、Search、Session 与 VikingBot 的页面、API、状态和验收规则以 [Memory、Search、Session 与 VikingBot 产品契约](11-memory-search-session-product-contract.md) 为准。当前只剩该文档第 72 节的受信任 Bot Session/Skill 绑定与服务端标题冲突未决。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。
+IAM、RBAC、数据可见性、认证方式、Studio 边界和首版能力归属均已收敛。Watch 只作为 Resource 子功能，Relations/Graph 只作为引擎内部增强，Snapshot/Pack/Backup/Import/Restore 只留私网运维，WebDAV 在 v0.1 生产禁用；MCP OAuth 授权页面属于 `web-platform`，不依赖 Studio。Resource 契约以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准；Skill 契约以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准；Memory、Search 与 Session 的页面、API、状态和验收规则以 [Memory、Search 与 Session 产品契约](11-memory-search-session-product-contract.md) 为准。VikingBot 与 Codex、其他 Agent 并列为可选接入方，不是产品网页依赖。若某个部署需要启用私网 Studio，可自行选择 VPN、Tailscale 或固定 IP，不改变产品架构与权限模型。

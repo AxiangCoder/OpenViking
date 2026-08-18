@@ -404,7 +404,8 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 | POST | `/api/platform/v1/sessions` | `session.write.self` | create session |
 | GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | Session、消息和状态的产品 DTO |
 | GET | `/api/platform/v1/sessions/{id}/messages` | `session.read.self` | 组装 Archive 与当前 Context 后的完整消息历史，不返回 URI |
-| POST | `/api/platform/v1/sessions/{id}/chat/stream` | `session.write.self` | 经受控 VikingBot 网关生成回复并持久化消息；VikingBot 是 v0.1 必选部署组件 |
+| POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | 插件/MCP/SDK/API 幂等追加消息；产品网页不调用 |
+| POST | `/api/platform/v1/sessions/{id}/commit` | `session.write.self` | 集成客户端归档并触发 Memory 提取；产品网页不显示按钮 |
 | GET | `/api/platform/v1/sessions/{id}/memory-impact` | `session.read.self` | 脱敏 Commit/Memory Diff，只读 |
 | DELETE | `/api/platform/v1/sessions/{id}` | `session.delete.self` | 软删除；30 天后 delete session |
 | GET | `/api/platform/v1/activity` | `task.read.self`；共享项另需 `task.read.account_shared` | 当前用户私有对象任务和当前 Account 共享对象任务 |
@@ -416,11 +417,11 @@ MCP OAuth 的协议端点（Discovery、Dynamic Client Registration、Authorize�
 
 不提供含义不清的通用写接口 `/api/platform/v1/resources` 或 `/api/platform/v1/skills`。`/me/*` 明确表示 User 私有目标，`/account/*` 明确表示 Account 共享目标；后端仍根据对象引用和 canonical URI 二次校验，不能只相信路径名称。
 
-Skill 不提供独立 `/execute` API。详情页的“在新 Session 中使用”只把稳定 `skill_id` 带入 Session 创建流程，真正使用时由 Session/Agent 链路再次鉴权；具体 DTO 由 Session 产品契约固定。
+Skill 不提供独立 `/execute` API，也不提供网页“在新 Session 中使用”。Codex、其他 Agent、插件或 MCP 在运行时检索/读取 Skill，并按当前 User 凭证实时鉴权。
 
-Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 OpenViking 现有的同步归档与异步 Memory 提取流程；产品只通过 Search 返回有权查看的 Memory 结果，并在 Session 详情返回脱敏的 Memory Impact。底层 Memory 文件写接口不进入 Product API。手工 Commit/Extract/Used/Tool Result/Context/Archive 也不作为浏览器 Product API，完整契约见 [Memory、Search、Session 与 VikingBot 产品契约](11-memory-search-session-product-contract.md)。
+Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 OpenViking 现有的同步归档与异步 Memory 提取流程；产品只通过 Search 返回有权查看的 Memory 结果，并在 Session 详情返回脱敏的 Memory Impact。底层 Memory 文件写接口不进入 Product API。Commit 是集成客户端能力但不显示为网页按钮；Extract/Used/Tool Result/Context/Archive 也不作为浏览器 Product API，完整契约见 [Memory、Search 与 Session 产品契约](11-memory-search-session-product-contract.md)。
 
-产品 Search API 不暴露 `target_uri`、任意 `filter`、`level` 或 `include_provenance` 等调试参数，也不暴露 `grep/glob`。`recall` 保留给 VikingBot、MCP 等受控调用链，不作为 `/app/search` 页面动作。
+产品 Search API 不暴露 `target_uri`、任意 `filter`、`level` 或 `include_provenance` 等调试参数，也不暴露 `grep/glob`。`recall` 保留给 Agent、插件、MCP 等受控调用链，不作为 `/app/search` 页面动作。
 
 两个 Search Product API 只接受稳定产品字段：
 

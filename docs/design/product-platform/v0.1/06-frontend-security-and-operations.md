@@ -144,7 +144,7 @@ Resource 新增页不显示 Viking URI、`visibility`、父目录、`create_pare
 
 Account Admin 只能把自己的私有 Resource 发布为共享副本，不能利用“可读取成员数据”把其他 User 的私有 Resource 复制到共享区。完整页面、字段、状态和 Watch 交互以 [Resource 页面与产品契约](09-resource-product-contract.md) 为准。
 
-Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名称全局唯一，只有 Account Admin 可以把本 Account 任意 User 的私有 Skill 原地转换为共享 Skill，Skill ID 和名称不变，私有区不保留副本且不能取消发布。普通 User 不能发布；Platform Super Admin 的 Skill 页面全部只读。在线 Skill 可编辑名称以外的字段，ZIP Skill 更新时整体重新上传；详情页只提供“在新 Session 中使用”，不提供独立运行器。完整规则以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准。
+Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名称全局唯一，只有 Account Admin 可以把本 Account 任意 User 的私有 Skill 原地转换为共享 Skill，Skill ID 和名称不变，私有区不保留副本且不能取消发布。普通 User 不能发布；Platform Super Admin 的 Skill 页面全部只读。在线 Skill 可编辑名称以外的字段，ZIP Skill 更新时整体重新上传；详情页不提供“在新 Session 中使用”或独立运行器，实际使用发生在接入 Agent 中。完整规则以 [Skill 页面与产品契约](10-skill-product-contract.md) 为准。
 
 共享列表可展示创建者和更新时间帮助追溯，但不能显示“只有创建者可编辑”的暗示；v0.1 中共享对象归 Account，由有权限的管理员统一管理。
 
@@ -194,13 +194,13 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 - `/app/search` 提供“快速检索”和“结合会话检索”两个模式，分别调用源码 `find` 与 `search`。快速检索是默认模式；结合会话检索要求用户选择自己有权读取的 Session。两种模式的默认范围均为“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
 - Search 主表单只显示检索词、模式和内容类型（全部、Memory、Resource、Skill）；选择“结合会话检索”后显示当前 User 自己的 Session 选择器。“更多筛选”只包含结构化标签和“更新时间范围”。标签输入提示使用 `key=value`，例如 `project=openviking`；多个标签表示必须全部匹配。页面不提供创建时间/更新时间切换。
 - 相似度分数阈值、索引层级、来源追踪开关、结果数量和自定义 URI 不显示在产品页面，也不能通过 URL Query 或浏览器请求透传到底层 API。
-- `recall` 不显示为页面模式，只供 VikingBot/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
+- `recall` 不显示为页面模式，只供 Agent/插件/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
 - Search 结果复用 Studio 现有的“结果列表 + 右侧详情抽屉”交互。列表按引擎返回顺序展示类型、产品显示名称、我的/Account 共享归属和摘要；点击 Resource/Skill 可进入对应产品详情，点击 Memory 只打开抽屉展示 Memory 类型、摘要和匹配原因。
 - Search 结果卡片不为标签和更新时间追加二次查询；当前标签/更新时间筛选显示在结果区上方，Resource/Skill 的完整元数据进入详情页查看。
 - Search 列表和抽屉不展示 Viking URI、相似度分数、L0/L1/L2、Query Plan、Provenance、Relations、原始 JSON，也不提供“在 Playground 打开”。Memory 抽屉不读取原始文件，不显示编辑、删除、恢复或下载动作。
 - 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
-- `/app/sessions` 复用现有 Studio Session 的完整聊天方向，但使用产品登录 Session 和统一 RBAC。VikingBot 是 v0.1 必选部署组件；OpenViking Session 保存消息、归档、上下文及 Memory 提取状态，VikingBot 负责生成 AI 回复，前端不直接持有或转发 User API Key。
-- Session 复用双栏列表、文本 Composer、SSE、消息/Reasoning/Tool 状态、取消生成、Archive 历史拼装和 Memory Impact；原始 Tool 参数/结果必须脱敏并移除 URI。手工 Commit/Extract/Used、Tool Result、Context/Archive 调试不进入产品页面。
+- `/app/sessions` 是已经由 Codex、其他 Agent、插件、MCP、SDK/API 或可选 VikingBot 写入的 Session 查看与管理页；OpenViking 保存消息、归档、上下文及 Memory 提取状态，不生成 AI 回复。
+- Session 复用双栏列表、只读消息展示、Archive 历史拼装和 Memory Impact；删除文本 Composer、SSE、取消生成和模型配置。原始 Tool 参数/结果必须脱敏并移除 URI；网页不提供 Commit/Extract/Used、Tool Result、Context/Archive 调试。
 - `/app/activity` 聚合当前 User 私有对象的导入、索引、Session Commit 等异步 Task，以及其有权查看的 Account 共享对象 Task。原始 Task ID、内部堆栈和 Worker 路径不展示。
 - Resource 自动同步不建立独立顶级 Watch 菜单。用户在自己的 Resource 详情页设置同步周期、查看最近同步和手动触发；Account Admin 在共享 Resource 详情页执行相同操作。
 - 取消 Task 或 Watch 前展示目标 Resource、任务类型、当前状态和影响；后端再次校验 Task Permission、目标 Resource 写权限和可取消状态。

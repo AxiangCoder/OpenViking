@@ -1,6 +1,6 @@
-# Memory、Search、Session 与 VikingBot 产品契约
+# Memory、Search 与 Session 产品契约
 
-> 状态：除“Product Session 如何稳定绑定 VikingBot/OpenViking Session、注入预选 Skill 并安全保存标题”外，其余 v0.1 规则已按 OpenViking v0.4.12 源码收敛。
+> 状态：v0.1 规则已按 OpenViking v0.4.12 源码收敛。2026-08-18 更正：正式产品不提供网页聊天，VikingBot 不是必选组件。
 > 源码基线：`server/routers/search.py`、`server/routers/sessions.py`、`server/routers/bot.py`、`service/session_service.py`、`session/session.py`、`web-studio/src/routes/retrieval`、`web-studio/src/routes/sessions`、`bot/vikingbot`。
 
 ## 60. 术语与组件责任
@@ -9,8 +9,8 @@
 | --- | --- | --- |
 | 登录 Session | Platform IAM 保存的网页登录状态 | 浏览器“已经登录” |
 | OpenViking Session | 对话消息、上下文、归档、摘要和 Memory 提取的业务对象 | AI 对话记录和长期沉淀来源 |
-| VikingBot Session | VikingBot 保存的 Agent 运行历史、工具事件和渠道状态 | AI 当前怎么聊、怎么调用工具的运行记录 |
-| VikingBot | 模型推理、工具调用、Skill 执行和流式回复的 Agent Runtime | 真正生成回复、干活的 AI |
+| Agent/Client Session | Codex、其他 Agent 或客户端自身保存的运行历史 | 用户实际与 AI 聊天的地方 |
+| VikingBot | 源码附带的一种可选 Agent Runtime，也是 OpenViking 的客户端之一 | 可选聊天机器人，不是本产品网页聊天后端 |
 | Commit | 把 OpenViking Session 当前消息归档，并异步生成摘要和提取 Memory | 把一段聊天整理归档，沉淀为长期记忆 |
 | Memory Impact | 某次 Commit 对 Memory 的新增、更新和删除差异 | 这段对话让系统记住、改掉或忘掉了什么 |
 
@@ -19,24 +19,27 @@
 组件责任固定为：
 
 ```text
+Codex / 其他 Agent / 插件 / MCP / SDK
+  -> Product API / MCP Endpoint（用户凭证、RBAC、Actor/Subject）
+      -> OpenViking Session（接收消息、归档、上下文、Commit、Memory Diff）
+
 产品浏览器
-  -> Product Session Facade（登录、RBAC、Actor/Subject、产品 DTO）
-      -> VikingBot（模型、工具、流式事件、运行态 Session）
-      -> OpenViking Session（消息、归档、上下文、Commit、Memory Diff）
+  -> Product Facade（登录、RBAC、产品 DTO）
+      -> 查看和管理已经写入的 Session
       -> Search（Resource / Memory / Skill 统一检索）
 ```
 
-VikingBot 是 v0.1 必选部署组件。OpenViking Session 不生成 AI 回复；VikingBot 不替代 OpenViking 的长期归档与 Memory 提取。
+OpenViking 不负责生成 AI 回复。对话发生在 Codex、其他 Agent 或可选 VikingBot 中；这些客户端通过插件、MCP、SDK 或 API 把消息和 Commit 写入 OpenViking。VikingBot 与 Codex 是并列接入方，v0.1 可以不部署 VikingBot。
 
 ## 61. v0.1 能力边界
 
 ### 61.1 正式产品能力
 
 - `/app/search`：快速检索、结合会话检索、受控筛选、产品化结果列表与详情抽屉。
-- `/app/sessions`：Session 列表、创建、完整聊天、历史加载、流式状态、Memory Impact、软删除。
+- `/app/sessions`：已接入 Session 的列表、历史查看、Memory Impact、软删除和恢复；不提供消息输入框。
 - `/admin/users/{userId}/data`：Account Admin 按 Subject 只读检索本 Account 成员 Memory，并查看其 Session。
 - `/platform/accounts/{accountId}/users/{userId}/data`：Platform Super Admin 按 Subject 只读检索 Memory，并查看 Session。
-- VikingBot 与 Product Session Facade 的受控 Chat/Stream 链路。
+- 插件、MCP、SDK、CLI 和 API 使用同一用户身份与权限写入 Session、触发 Commit。
 
 ### 61.2 不进入正式产品
 
@@ -44,6 +47,7 @@ VikingBot 是 v0.1 必选部署组件。OpenViking Session 不生成 AI 回复�
 - Search `grep/glob`、任意 URI、自定义原始 Filter、分数阈值、层级、Provenance 和 Query Plan。
 - Session 手工 Commit、Extract、Used、Tool Result 原始读取/搜索、Token Budget、任意 Archive ID 和原始 Context。
 - VikingBot Compile、Health、Gateway Token、运行配置和底层 Session 管理页面。
+- 网页 Chat/Stream、Composer、模型选择、Reasoning/Tool 实时流和“停止生成”。
 - Studio 的原始 URI、Playground 跳转、调试 JSON 和命令终端。
 
 这些底层能力可继续存在于源码、SDK 或私网 Studio，但不成为 `/app` 页面动作。产品 API 与低层 API 仍经过统一 Principal Resolver、RBAC 和 URI Target Policy。
@@ -55,7 +59,7 @@ VikingBot 是 v0.1 必选部署组件。OpenViking Session 不生成 AI 回复�
 | 搜索自己的私有 Memory/Resource/Skill | 允许 | 允许 | 不适用 |
 | 搜索当前 Account 共享 Resource/Skill | 允许 | 允许 | 按目标 Account 只读 |
 | 查看自己的 Session/Memory Impact | 允许 | 允许 | 不适用 |
-| 创建 Session、聊天、取消生成 | 允许自己的 | 允许自己的 | 不提供产品聊天 |
+| 通过插件/MCP/API 创建和追加自己的 Session | 允许自己的 | 允许自己的 | 不提供代用户写入 |
 | 软删除/恢复自己的 Session | 允许 | 允许 | 不适用 |
 | 查看其他 User Memory/Session | 禁止 | 本 Account 只读 | 全平台按 Account/User 只读 |
 | 修改、删除、恢复他人 Memory/Session | 禁止 | 禁止 | v0.1 禁止 |
@@ -75,7 +79,7 @@ Memory 永远是 User 私有对象，不存在 Account 共享 Memory。Account �
 | 快速检索 | `POST /api/v1/search/find` | 默认模式，不使用 Session 上下文 |
 | 结合会话检索 | `POST /api/v1/search/search` | 必须选择当前 User 自己且未删除的 Session；启用时结合 Session 和 Intent Analysis |
 
-`recall` 只供 VikingBot/MCP 等受控调用链使用，不显示为页面模式。`grep/glob` 只留私网 Studio，不向产品 MCP 凭证发布。
+`recall` 只供 Agent/插件/MCP 等受控调用链使用，不显示为页面模式。`grep/glob` 只留私网 Studio，不向产品 MCP 凭证发布。
 
 ### 63.2 筛选
 
@@ -126,31 +130,26 @@ Memory 永远是 User 私有对象，不存在 Account 共享 Memory。Account �
 
 ### 64.1 页面结构
 
-直接复用 Studio 双栏布局：
+复用 Studio 的双栏浏览结构，但删除聊天功能：
 
-- 左栏：Session 数量、新建按钮、按最近活动时间倒序的 Session 列表、删除入口。
-- 右栏：当前 Session 标题、Memory Impact、消息历史、流式消息区和文本 Composer。
-- 没有选中 Session 时显示空状态和新建提示。
-- 保留 `Ctrl/Cmd + N` 新建 Session。
-
-v0.1 Composer 复用现有 Studio，只支持文本输入；VikingBot HTTP API 已有图片能力，但当前产品页面不新增附件上传交互。
+- 左栏：Session 数量、来源客户端、最近活动时间、Session 列表和删除入口。
+- 右栏：Session 标识、来源、同步状态、Memory Impact 和完整消息历史。
+- 没有选中 Session 时提示用户先在 Codex、其他 Agent、插件或 MCP 客户端中连接 OpenViking。
+- 页面没有“新建会话”、Composer、发送、停止生成、模型选择或附件上传。
 
 ### 64.2 Session 标题
 
-当前源码没有服务端标题字段，Studio 使用当前身份隔离的 `localStorage`，首轮消息前 20 个字符作为标题。该行为与本设计“Web Storage 只保存非敏感偏好”的规则冲突，因为首条用户消息可能包含隐私，不能直接复用。
+v0.1 不新增标题字段。列表优先显示接入客户端提交且经过脱敏校验的 `display_name`；缺失时显示来源客户端名称与 Session ID 的短标识。Studio 从首条消息截取标题并写入 `localStorage` 的行为不进入正式产品。
 
-- 决策前，新 Session 可安全回退显示“新对话”或 Session ID。
-- 标题不得写入 `localStorage/sessionStorage`，不得用于授权或审计对象定位。
-- 服务端标题方案与 Session ID/Skill 绑定一起在第 72 节确认。
+显示名称不得参与授权、数据归属、Session 唯一性或底层 URI，也不得由产品浏览器从消息正文派生后持久化。
 
-无论采用何种标题方案，标题都不参与授权、数据归属、Session 唯一性或底层 URI。
+### 64.3 接入与打开
 
-### 64.3 创建与打开
-
-- 新建调用 Product Session Facade，由服务端生成 Session ID；浏览器不能指定 URI、User、Account 或 Memory Policy。
-- 缺失 Session 不使用 `auto_create=true`；只有显式新建或发送到已经授权的 Session 才能创建。
+- Session 由插件、MCP、SDK、CLI、API 或可选 VikingBot 以当前 User 身份创建和追加，不由产品浏览器创建。
+- 每个接入方维护自己的客户端 Session 标识，并通过产品接入层映射到唯一 OpenViking Session。
 - 列表只返回当前 User 未删除 Session，按 `mod_time/updated_at` 降序。
 - URL 只携带产品 Session ID，不携带 Viking URI。
+- 浏览器不能指定 User、Account、目标 URI、消息、Commit 参数或 Memory Policy。
 
 ### 64.4 历史加载
 
@@ -166,65 +165,48 @@ v0.1 Composer 复用现有 Studio，只支持文本输入；VikingBot HTTP API �
 
 ### 64.5 消息展示
 
-直接复用当前组件行为：
+复用当前历史消息的只读展示能力：
 
-- User 与 Assistant 气泡、相对时间、复制文本。
+- User 与 Assistant 消息、相对时间和复制文本。
 - Markdown、代码块、表格、引用等渲染。
-- Reasoning 默认折叠，生成中可展开查看。
-- Iteration 分隔、Tool 名称与运行/成功/失败状态。
-- 流式 Typing、取消生成和自动滚动。
+- 已同步的 Reasoning、Iteration 和 Tool 事件仅在接入协议明确提供时展示。
+- 不展示流式 Typing，不提供取消生成；生成过程属于外部 Agent 客户端。
 
 产品版不得在 Tool 卡片中显示原始 Viking URI、任意宿主机路径、完整 Secret 或未经脱敏的底层 JSON。Tool 参数/结果由服务端按 Tool Schema 生成产品摘要；不能安全转换的内容只显示状态和脱敏错误，原始调试内容留私网 Studio。
 
-### 64.6 Chat Stream
+### 64.6 外部写入链路
 
-浏览器调用：
+1. Codex、其他 Agent、插件或 MCP 客户端使用 User API Key 或用户委托型 OAuth Token 接入。
+2. Principal Resolver 解析当前 User 和 Account；请求不能切换 Subject。
+3. 接入方创建 Session、追加消息并在适当时机 Commit；服务端校验 Session 归属和幂等标识。
+4. OpenViking 保存消息、归档、上下文及 Memory 提取结果。
+5. 产品页面只读取最终已同步状态，不代理模型请求，也不持有 Agent Runtime 的 Gateway Token。
 
-```text
-POST /api/platform/v1/sessions/{session_id}/chat/stream
-Content-Type: application/json
-Accept: text/event-stream
-
-{"message": "...", "request_id": "客户端幂等 ID"}
-```
-
-服务端流程：
-
-1. 从登录 Session 解析 Actor，不接受 Account/User/Role/API Key。
-2. 校验 Session 属于当前 User 且未删除。
-3. 以 `request_id + session_id + actor_user_id` 做幂等控制，同一 Session 同时只允许一个生成请求。
-4. 将当前 User Principal 转为只在服务端使用的短期委托身份，注入 VikingBot request-scoped OpenViking connection；浏览器不持有 User API Key。
-5. 调用 VikingBot `/bot/v1/chat/stream`，复用 `iteration/reasoning_delta/content_delta/tool_call/tool_result/response` SSE 事件。
-6. 最终消息进入 VikingBot 运行 Session，并同步到对应 OpenViking Session；同步状态可观察、失败可重试。
-7. SSE 结束事件返回 `response_id`、保存状态和可重试标识。
-
-Product Facade 不向浏览器开放 `disabled_tools`、`openviking_connection`、`user_id`、`channel_id` 或 Gateway Token。
+VikingBot 若被部署，也严格走同一用户接入链路；它不能因为是源码内置组件而获得 Root 权限或特殊数据范围。
 
 ### 64.7 保存可靠性
 
-Studio 当前实现会在流结束后分别追加 User/Assistant 消息，并静默忽略保存失败。产品版不得复用这一失败语义：
+接入客户端负责确认写入结果，不能像 Studio 演示链路一样静默忽略失败：
 
-- User 消息或最终 Assistant 消息同步失败必须返回可见状态，不能显示为“已保存”。
-- Bot 本地 Session metadata 保留最后同步下标、最后 Commit 下标、Pending Token、同步状态和脱敏错误；重试只追加尚未同步消息。
-- 使用源码 `get_unsynced_messages` 与索引游标实现增量、幂等同步，不能每次重复追加整段历史。
-- 基础聊天已经生成但长期同步失败时，页面保留回复并显示“同步待重试”；后台按同一 Session 重试，不能让用户重复发送才能保存。
-- 同步恢复后刷新 Session Meta、消息历史和 Activity；失败详情不包含 API Key、完整 Tool Output 或内部路径。
+- 创建、追加和 Commit 都必须返回稳定幂等结果。
+- 支持增量同步的客户端记录最后成功游标，重试只追加未同步消息，不能重复提交整段历史。
+- 写入失败时，产品页可以显示该 Session 最后成功同步时间；不能把客户端本地尚未上传的内容伪装为已保存。
+- 失败详情不包含 API Key、完整 Tool Output 或内部路径。
 
-### 64.8 取消与并发
+### 64.8 并发与幂等
 
-- 用户点击停止时中止当前 SSE；已生成的部分内容按 VikingBot 已持久化状态显示。
-- 同一 User 的不同 Session 可以并发；同一 Session 同时只允许一个 Chat Stream。
-- 重复 `request_id` 返回原执行状态或重放已完成结果，不重复调用模型。
-- Bot 超时、断线或 5xx 映射为产品错误并允许重试；不能自动切换到 Root 身份。
+- 不同 Session 可以并发写入；同一 Session 的追加操作按服务端序列号或幂等键去重并保持顺序。
+- 重复请求返回原写入结果，不重复追加消息或触发 Commit。
+- 客户端断线后从最后确认游标续传；不得切换到 Root 身份重试。
 
 ## 65. Commit、Archive 与 Memory
 
 ### 65.1 自动提交
 
-产品页面不提供手工 Commit/Extract。直接复用 VikingBot/OpenViking 自动流程：
+产品页面不提供手工 Commit/Extract。接入客户端直接复用 OpenViking 流程：
 
-- VikingBot 增量同步未同步消息。
-- 达到 `commit_token_threshold`、消息窗口阈值或显式记忆提交时执行 Commit。
+- 插件、MCP、SDK、CLI、API 或可选 VikingBot 增量同步未同步消息。
+- 接入客户端达到自身提交阈值、会话阶段结束或收到显式记忆请求时调用 Commit。
 - 使用源码 Turn-aware Retention：默认保留最近 3 个逻辑 Turn、6000 Token 预算、至少 1 个最新 Assistant Step。
 - 旧 `keep_recent_count` 不作为产品配置或页面字段。
 
@@ -232,7 +214,7 @@ Commit Phase 1 同步完成归档并返回 Task；Phase 2 异步生成 Working M
 
 ### 65.2 显式“记住”
 
-用户在对话中明确要求“记住”时，由 VikingBot 现有 `openviking_memory_commit` 工具同步并 Commit 当前 Session。产品不增加 Memory 创建表单，也不允许浏览器指定 Memory URI、类型或正文文件。
+用户在 Codex 或其他 Agent 中明确要求“记住”时，由对应插件/MCP Tool 调用现有 `openviking_memory_commit`，同步并 Commit 当前 Session。VikingBot 只是可使用该工具的客户端之一。产品不增加 Memory 创建表单，也不允许浏览器指定 Memory URI、类型或正文文件。
 
 ### 65.3 Memory Impact
 
@@ -261,20 +243,20 @@ Memory 的 Add/Merge/Delete 由提取器和 Memory Policy 决定。v0.1 不把 M
 
 源码 `DELETE /api/v1/sessions/{id}` 会立即递归物理删除。产品版必须使用已确认的 30 天软删除：
 
-1. Product Facade 创建 Session 删除任务并从正常列表/Search/Chat 隐藏。
+1. Product Facade 创建 Session 删除任务并从正常列表/Search 隐藏，后续接入写入返回 `SESSION_DELETED`。
 2. 删除确认弹窗显示 Session 标题、消息数量、Commit 数、Memory Impact 记录是否仍可查看以及恢复截止时间。
 3. 回收期内 User 可恢复自己的 Session；管理员不能恢复他人 Session。
 4. 恢复后重新显示历史，但不会回滚该 Session 过去已经产生的 Memory 变更。
 5. 30 天后 Worker 使用 canonical URI 幂等调用源码物理删除。
 
-Session 删除期间禁止继续 Chat、Commit、Extract 或追加消息。重复删除幂等返回当前删除状态。
+Session 删除期间禁止继续 Commit、Extract 或追加消息。重复删除幂等返回当前删除状态。
 
 ## 67. 管理员只读视图
 
 Account Admin 与 Platform Super Admin 的成员数据页复用产品 Search 列表、Session 列表和消息展示组件，但：
 
 - 显示“正在查看 Subject User 数据”，审计同时记录 Actor 与 Subject。
-- 不显示新建 Session、Composer、取消生成、删除、恢复、Commit、Extract、复制完整 Tool Output 或“在 Session 中使用”。
+- 不显示删除、恢复、Commit、Extract、复制完整 Tool Output 等修改动作。
 - Memory 只能通过成员范围快速检索和该成员 Session 的 Memory Impact 查看。
 - Account Admin 只能选择本 Account User；Platform Super Admin 必须先固定 Account，再选择 User。
 
@@ -294,10 +276,11 @@ Account Admin 与 Platform Super Admin 的成员数据页复用产品 Search 列
 | 方法 | 路径 | Permission | 说明 |
 | --- | --- | --- | --- |
 | GET | `/api/platform/v1/sessions` | `session.read.self` | 当前 User 未删除 Session |
-| POST | `/api/platform/v1/sessions` | `session.write.self` | 显式新建，不接受自定义身份/URI/Memory Policy |
+| POST | `/api/platform/v1/sessions` | `session.write.self` | 集成客户端创建；产品网页不调用，不接受自定义身份/URI/Memory Policy |
 | GET | `/api/platform/v1/sessions/{id}` | `session.read.self` | 产品 Meta 和同步/Commit 摘要 |
 | GET | `/api/platform/v1/sessions/{id}/messages` | `session.read.self` | 已组装完整消息历史 |
-| POST | `/api/platform/v1/sessions/{id}/chat/stream` | `session.write.self` | VikingBot SSE Chat |
+| POST | `/api/platform/v1/sessions/{id}/messages` | `session.write.self` | 集成客户端幂等追加消息；产品网页不调用 |
+| POST | `/api/platform/v1/sessions/{id}/commit` | `session.write.self` | 集成客户端归档并触发 Memory 提取；产品网页不显示按钮 |
 | GET | `/api/platform/v1/sessions/{id}/memory-impact` | `session.read.self` | 脱敏 Memory Diff |
 | DELETE | `/api/platform/v1/sessions/{id}` | `session.delete.self` | 30 天软删除 |
 | POST | `/api/platform/v1/recycle-bin/{deletion_id}/restore` | `session.delete.self` | 恢复自己的 Session |
@@ -306,33 +289,29 @@ Account Admin 与 Platform Super Admin 的成员数据页复用产品 Search 列
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions` | `session.read.platform` | 平台只读列表 |
 | GET | `/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/sessions/{id}` | `session.read.platform` | 平台只读历史/Impact |
 
-手工 Commit/Extract/Used/Tool Result/Archive/Context 不属于 Product API；VikingBot、Worker、SDK/MCP 的底层入口可继续调用，但必须使用同一 User Principal 和实时 Permission。
+Extract/Used/Tool Result/Archive/Context 不属于浏览器 Product API。Session Create/Append/Commit 是插件、MCP、SDK、CLI、API 和可选 VikingBot 所需的正式集成能力，但不成为网页按钮；所有渠道必须使用同一 User Principal 和实时 Permission。
 
 ## 69. 状态与错误码
 
-### 69.1 Chat 状态
+### 69.1 Session 同步状态
 
 ```text
-idle -> submitting -> streaming -> saving -> completed
-                     |           |-> sync_pending -> completed
-                     |-> cancelled
-                     |-> failed
+active -> commit_pending -> committing -> active
+                         |-> commit_failed -> retrying
+active -> deletion_pending -> deleted -> purged
 ```
 
-切换 Session 或删除 Session 必须先终止当前流。`sync_pending` 不丢弃已生成回复；后台同步成功后自动转为 `completed`。
+外部 Agent 自己的生成、流式和取消状态不属于 OpenViking Session 状态。产品页只展示最后同步时间、Commit/Memory 提取状态和删除状态。
 
 ### 69.2 稳定错误码
 
 | 错误码 | 含义 |
 | --- | --- |
 | `SESSION_NOT_FOUND` | Session 不存在、已删除或不可见 |
-| `SESSION_BUSY` | 同一 Session 已有进行中的生成 |
 | `SESSION_DELETED` | Session 处于回收期 |
-| `CHAT_REQUEST_DUPLICATE` | request_id 冲突且请求内容不同 |
-| `BOT_UNAVAILABLE` | VikingBot 不可用或超时 |
-| `BOT_STREAM_FAILED` | SSE 在完成前失败 |
-| `SESSION_SYNC_PENDING` | 回复已生成，OpenViking 长期同步待重试 |
-| `SESSION_SYNC_FAILED` | 同步多次失败，需要 Activity 处理 |
+| `SESSION_WRITE_CONFLICT` | 同一 Session 的序列号或幂等键冲突 |
+| `SESSION_SYNC_FAILED` | 集成客户端写入或续传失败 |
+| `SESSION_COMMIT_FAILED` | Commit 或异步 Memory 提取失败 |
 | `SEARCH_UNAVAILABLE` | 检索引擎不可用 |
 | `INVALID_SEARCH_FILTER` | 标签、时间或类型筛选不合法 |
 
@@ -343,8 +322,8 @@ idle -> submitting -> streaming -> saving -> completed
 至少记录：
 
 - Session 创建、软删除、恢复和期满清理。
-- Chat 开始、完成、取消、失败；只记录消息长度、模型/Agent 标识、Tool 名称、耗时和 Token 摘要，不记录完整正文。
-- VikingBot 到 OpenViking 的增量同步、Commit Task 和重试状态。
+- 集成客户端创建 Session、追加消息、Commit 和失败重试；只记录消息数量/长度、客户端标识和耗时摘要，不记录完整正文。
+- 各接入客户端到 OpenViking 的增量同步、Commit Task 和重试状态。
 - 管理员查看成员 Search/Session/Memory Impact 的 Actor、Subject、Account 和理由字段（如页面来源）。
 - Search 模式、类型、标签数量、时间范围和结果数量；不记录原始敏感 Query 时应使用脱敏或 Hash 策略。
 
@@ -357,59 +336,24 @@ idle -> submitting -> streaming -> saving -> completed
 3. Search 筛选只接受内容类型、结构化标签和 `updated_at` 范围，额外调试字段被拒绝。
 4. Search 结果不包含 URI、分数、层级、Query Plan、Provenance、Relations、标签或更新时间。
 5. Resource/Skill 结果跳产品详情；Memory 只显示只读摘要和匹配原因。
-6. `/app/sessions` 可创建、切换、加载归档历史、流式聊天、取消和复制消息。
+6. `/app/sessions` 可切换、加载归档历史、查看 Memory Impact 和复制消息，但不存在网页聊天输入框。
 7. 浏览器网络与存储中不出现 User API Key、Root Key 或 Gateway Token。
-8. 同一 Session 并发 Chat 返回 `SESSION_BUSY`；同一 request_id 不重复调用模型或重复追加消息。
-9. 同步失败不能静默成功；回复保留并显示 `sync_pending`，重试不重复追加历史。
-10. Commit Phase 2 不阻塞聊天；Memory Impact 能区分 pending/completed/failed/空差异。
+8. 插件/MCP/API 重复幂等键不重复追加消息或触发 Commit，同一 Session 消息顺序稳定。
+9. 同步失败不能静默成功；客户端可从最后确认游标续传，产品页不声称本地未上传内容已保存。
+10. Commit Phase 2 不阻塞外部 Agent；Memory Impact 能区分 pending/completed/failed/空差异。
 11. Memory Impact 不返回 Archive/Memory URI，管理员视图只读且同时记录 Actor/Subject。
 12. Session 删除进入 30 天回收期，恢复不回滚已产生的 Memory；期满后才物理删除。
 13. 产品 UI 不出现手工 Commit、Extract、Used、Tool Result、原始 Context/Archive、Compile 或 Playground 跳转。
-14. Tool 卡片不显示原始 URI、宿主机路径、Secret 或未经脱敏的底层 JSON。
+14. 已同步 Tool 事件不显示原始 URI、宿主机路径、Secret 或未经脱敏的底层 JSON。
 
-## 72. 唯一未决冲突包：Session 受信任绑定
+## 72. Studio 与 VikingBot 边界更正
 
-### 72.1 Session ID 双写问题
+Studio 中把 Session 浏览、VikingBot Chat 和浏览器补写放在同一界面，是源码自带的演示/调试组合，不代表正式产品必须采用同一调用链。v0.1 明确不复制这条链路，因此不存在“产品浏览器与 VikingBot 双写”的产品冲突，也不需要为了网页聊天扩展 `openviking_session_id` 或 `selected_skill_id`。
 
-当前 Studio 先创建一个 OpenViking Session，并把该 ID 作为 VikingBot HTTP `session_id`。但 VikingBot 的本地 `SessionKey.safe_name()` 会形成类似 `cli__default__<session_id>` 的 OpenViking 同步 ID；Studio 又在浏览器流结束后向原始 `<session_id>` 追加一份消息，而且会静默忽略追加失败。
+- Studio：可选私网开发与排障工具。
+- VikingBot：可选 Agent 客户端，与 Codex、其他 Agent 并列。
+- 插件/MCP/SDK/API：正式 Session 写入和检索渠道。
+- `/app/sessions`：已同步 Session 的查看与管理页面，不是消息发送页面。
+- Skill 的实际发现、读取和执行发生在有权访问它的 Agent/客户端；产品网页 v0.1 不提供“在新 Session 中使用”或 Skill Runner。
 
-直接照搬会产生两个风险：
-
-- VikingBot 自动同步/Commit 的 Session 与产品页面读取的 Session 不是同一个稳定对象。
-- 浏览器补写与 Bot 自动同步形成双写，可能重复、丢失或出现不同历史。
-
-### 72.2 预选 Skill 缺口
-
-已确认的 Skill 契约要求“在新 Session 中使用”携带稳定 `skill_id`，并在真正使用时再次鉴权；但 v0.4.12 VikingBot `ChatRequest` 只有 `message/images/session_id/disabled_tools/openviking_connection` 等字段，没有 `skill_id` 或受控 Skill 注入字段。
-
-### 72.3 标题存储冲突
-
-Studio 从首条用户消息截取标题并写入 `localStorage`。这会把潜在敏感正文持久化到浏览器，且跨设备不一致；当前 OpenViking `SessionMeta` 又没有 title 字段，因此没有可直接复用且符合安全规则的标题存储方式。
-
-### 72.4 可选方案
-
-方案 A：保持当前 Studio 双写。
-
-- 不修改 VikingBot 请求模型。
-- 浏览器或 Product Facade 继续在流结束后补写原 OpenViking Session。
-- 预选 Skill 只能在 Composer 预填“请使用某 Skill”文本，不能保证加载或按稳定 ID 再鉴权。
-- 标题继续保存在 `localStorage`，或者永久显示 Session ID。
-- 无法消除两个 Session ID、双写和静默失败问题，不满足本文已收敛的保存可靠性规则。
-
-方案 B：扩展受信任的 Product Facade -> VikingBot 请求。
-
-- 增加服务端专用 `openviking_session_id`，强制 VikingBot 本地 Session、自动同步和 Product Session 绑定到同一 OpenViking Session。
-- 增加服务端专用 `selected_skill_id`；Product Facade 先把产品 ID 解析为 canonical Skill、校验 use Permission，再由 Agent Runtime 显式加载。
-- 扩展 OpenViking `SessionMeta.title`（不建立 PostgreSQL Session 影子目录）；初始为“新对话”，首轮完成后由服务端截取或生成，浏览器只读取，不写 Web Storage。
-- 浏览器仍只提交产品 Session ID/普通消息，不接触 URI、User API Key 或这两个受信任字段。
-- 取消浏览器流结束后的手工双写，统一由 VikingBot 增量同步游标负责持久化与 Commit。
-
-这会修改 VikingBot 受信任请求契约，但同时解决两个缺口，并保持已确认的 Session 与 Skill 产品语义。
-
-以下做法不采用：
-
-- 让浏览器提交 `openviking_session_id`、`selected_skill_id` 对应 URI、Account/User 或任何内部身份字段。
-- 使用 Root Key 让 Bot 绕过目标 Session/Skill 的当前 User 权限。
-- 把用户消息派生标题继续写入 `localStorage/sessionStorage`。
-
-在该决策前，Search、Commit、Memory Impact、删除恢复和管理员只读契约均不受影响；Session Chat 的最终调用 DTO 和 Skill 预选链路保持未决。
+如果未来版本要提供平台内置 AI 对话，那是新增的 Agent Chat 产品能力，需要单独设计模型、Tool、Skill、流式协议、计费和 Session 映射，不能直接把当前 Studio Chat 当作既定产品架构。

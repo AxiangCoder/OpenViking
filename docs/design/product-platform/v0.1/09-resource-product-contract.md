@@ -71,7 +71,7 @@
 | 场景 | User | Account Admin | Platform Super Admin |
 | --- | --- | --- | --- |
 | 管理自己的私有 Resource | 查看、导入、改元数据、Refresh/Watch、删除、恢复 | 同 User | 无自身 Account 私有区 |
-| 读取当前 Account 共享 Resource | 查看、检索、预览、下载、在 Session 中使用 | 同 User | 选择 Account 后读取 |
+| 读取当前 Account 共享 Resource | 查看、检索、预览、下载；外部 Agent 可按权限检索/读取 | 同 User | 选择 Account 后读取 |
 | 管理当前 Account 共享 Resource | 不允许 | 导入、改元数据、Refresh/Watch、删除、恢复 | 按目标 Account 代管 |
 | 查看其他 User 私有 Resource | 不允许 | 当前 Account 只读 | 平台范围只读或按独立高风险 Permission 处理 |
 | 修改/删除其他 User 私有 Resource | 不允许 | 默认不允许 | 必须拥有对应平台级高风险 Permission |
@@ -113,7 +113,7 @@
 
 - 点击行进入详情。
 - 有写权限时提供“编辑信息”“Refresh/替换来源”“删除”。
-- 普通共享读者只提供“查看”“在 Session 中使用”和允许时的单文件下载。
+- 普通共享读者只提供“查看”和允许时的单文件下载；外部 Agent 通过集成接口按权限检索/读取。
 - 列表不提供批量移动、批量覆盖、直接改为共享或任意目录操作。
 - v0.1 不做批量删除；共享删除需要逐项展示影响范围。
 
@@ -265,9 +265,9 @@ v0.1 不提供内容版本浏览和回滚页面。系统仅保留“上一次成
 - 可用/处理中/最近同步失败/待删除状态。
 - 最近成功处理时间、更新时间。
 - 标签。
-- 根据 Permission 显示“在 Session 中使用”“编辑信息”“Refresh/替换文件”“自动同步”“删除”。
+- 根据 Permission 显示“编辑信息”“Refresh/替换文件”“自动同步”“删除”。
 
-“复制链接”复制产品 URL，不复制 Viking URI。“在 Session 中使用”创建或打开当前 User 自己的 Session，并记录对该 Resource 的引用，不改变 Resource 所有权。
+“复制链接”复制产品 URL，不复制 Viking URI。产品网页不创建或打开聊天 Session；Codex、其他 Agent、插件或 MCP 客户端通过 Search/Read 等受控接口使用 Resource，不改变 Resource 所有权。
 
 ### 42.2 详情标签页
 
@@ -376,7 +376,7 @@ Resource 详情 Activity 只显示与当前 Resource 绑定的 Operation；`/app
 - Active Watch 是否会被暂停。
 - 当前处理任务是否会请求取消。
 - 30 天恢复截止时间。
-- 共享 Resource 还要显示“当前 Account 成员将无法继续查看和在 Session 中引用”。
+- 共享 Resource 还要显示“当前 Account 成员及其已连接 Agent 将无法继续检索或读取”。
 
 用户只点击确认或取消；不重输密码、Account 名称，也不需要第二个人审批。
 

@@ -78,7 +78,7 @@
 - 不立即拆分 IAM、Platform API 和 OpenViking 为独立微服务。
 - 不替换 OpenViking 的 VikingFS、VectorDB、对话 Session 和 QueueFS。
 - 不建立独立 Memory 页面，不向产品用户提供 Memory 新建、编辑、删除或恢复接口。
-- 不把 VikingBot 作为可选增强；v0.1 的 `/app/sessions` 完整聊天依赖 VikingBot，部署时必须启用。
+- 不把 VikingBot 作为产品网页聊天后端；它与 Codex、其他 Agent 一样是可选接入方，v0.1 部署不依赖 VikingBot。
 - 不让产品前端直接编辑任意 `viking://` URI。
 - 不把 Root API Key 变成普通用户登录凭据。
 - 不在第一阶段实现复杂组织树、部门继承和 ABAC 策略语言。

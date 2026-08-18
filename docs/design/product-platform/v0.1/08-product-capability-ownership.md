@@ -114,7 +114,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | 原始观测、指标与系统修复 | System Operations | Queue、锁、模型、VectorDB、文件系统和实例状态 | 平台运维 | 监控系统、私网 `/studio` | v0.1 私网运维能力 |
 | 低层文件系统与 Content API | Engine Capability | 由目标 URI 决定 | Product Facade / URI Policy；不由原始 Router 自行决定 | 内部 Service；必要时由产品 Facade 暴露 | 非独立产品能力 |
 | MCP、SDK、CLI、插件和 MCP OAuth | Delivery Channel | 继承授权 User 和目标对象归属 | Platform 统一认证授权 | 集成入口、`/oauth/consent`、`/oauth/verify` | v0.1 正式集成能力 |
-| Bot/Agent Chat | Delivery Channel + User Experience | User 私有 Session | User；服务端受控转发 | `/app/sessions` | v0.1 正式产品能力；VikingBot 为必选部署组件 |
+| Bot/Agent Chat | 外部 Delivery Channel | User 私有 Session | 各客户端以 User 凭证接入 | Codex、其他 Agent、插件/MCP、可选 VikingBot | v0.1 不提供网页 Chat；VikingBot 非必选 |
 | WebDAV | Delivery Channel | 当前源码直接映射 Account 共享 Resource | 无合规的产品控制面 | 不挂载 | v0.1 禁用 |
 | Studio | System Operations | 可能触达实例级底层状态 | 运维/开发 | `/studio`，仅开发或私网 | 可选维护入口，不是正式产品能力 |
 
@@ -155,7 +155,7 @@ REST `/api/v1`、Platform API、MCP、SDK、CLI、OAuth、WebDAV、Bot 和 Studi
 | `server/mcp_endpoint.py`、`server/oauth/` | 用户委托型集成 | MCP OAuth/Token 最终解析为 User Principal；授权页迁出 Studio，使用产品登录 Session；与 REST 共用 Principal Resolver、RBAC 和 URI Policy |
 | `examples/*-plugin/`、SDK、CLI | 用户委托型集成 | 使用谁的 User API Key，就代表谁；不生成新的业务身份 |
 | `server/routers/webdav.py` | 外部兼容渠道 | 当前固定映射到 `viking://resources` 且支持写/删/移动；v0.1 生产不挂载，后续如启用必须先另做读写和客户端身份设计 |
-| `server/routers/bot.py` | Bot/Agent 集成渠道 | VikingBot 为 v0.1 必选组件；Chat/Stream 经 Session Product Facade 暴露并解析为当前产品 User，Compile/Health 为内部能力；不得把浏览器 API Key 转发当作产品鉴权 |
+| `server/routers/bot.py` | 可选 Bot/Agent 集成渠道 | 不进入产品网页；VikingBot 若部署，按普通接入客户端解析当前 User，Compile/Health 为内部能力，不得获得 Root 特权 |
 | `web-studio/` 与 `/studio` | 运维维护渠道 | 不进入正式产品导航；生产公网默认不挂载，开发/私网可用于底层排障 |
 
 ### 28.4 Studio 当前页面如何拆分
@@ -359,7 +359,7 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 | `07-quality-rollout-and-decisions.md` | 定义测试、实施和验收；本文的验收标准应进入 Phase 0 能力目录冻结和后续权限测试 |
 | `09-resource-product-contract.md` | 将本文确定的 Resource、Watch、Task 能力边界细化为页面字段、状态机、动作、API 和异常流程 |
 | `10-skill-product-contract.md` | 细化 Skill 创建上传、发布、使用、权限和恢复规则 |
-| `11-memory-search-session-product-contract.md` | 细化 Memory、Search、Session、VikingBot Chat、自动 Commit、Memory Impact 和删除恢复规则 |
+| `11-memory-search-session-product-contract.md` | 细化 Memory、Search、Session 接入、Commit、Memory Impact 和删除恢复规则 |
 
 ## 35. 本轮收敛结论
 
@@ -372,4 +372,4 @@ Platform Super Admin 在选择目标 Account 时只是指定 Subject，不改变
 5. WebDAV 因当前实现直接映射 Account 共享根且支持写、删、移动，v0.1 生产禁用。
 6. Studio 继续是可选私网维护入口；它现有的业务能力必须拆入正式产品页面，底层调试能力不得借 Studio 身份进入产品权限模型。
 
-以上是能力边界，不是开发计划。Resource、Skill、Memory、Search、Session 和 VikingBot Chat 已分别在 09、10、11 号文档中细化；后续页面继续采用“先复用源码，只有真实冲突再决策”的方式收敛字段、状态、动作和异常流程，而不是按源码 Router 增加菜单。
+以上是能力边界，不是开发计划。Resource、Skill、Memory、Search 和 Session 已分别在 09、10、11 号文档中细化；VikingBot 是可选外部接入方。后续页面继续采用“先复用源码，只有真实冲突再决策”的方式收敛字段、状态、动作和异常流程，而不是按源码 Router 增加菜单。

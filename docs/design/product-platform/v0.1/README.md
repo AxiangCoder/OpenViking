@@ -22,7 +22,7 @@
 8. [产品能力归属设计](08-product-capability-ownership.md)
 9. [Resource 页面与产品契约](09-resource-product-contract.md)
 10. [Skill 页面与产品契约](10-skill-product-contract.md)
-11. [Memory、Search、Session 与 VikingBot 产品契约](11-memory-search-session-product-contract.md)
+11. [Memory、Search 与 Session 产品契约](11-memory-search-session-product-contract.md)
 
 ## 已确认设计决策
 
@@ -45,15 +45,15 @@
 - 同一 Account 内所有未删除 Skill 的名称全局唯一且创建后不可修改；软删除立即释放名称，恢复时若已被同名占用则失败。
 - Skill 发布保持产品 ID 和名称不变，直接把归属与 URI 从 User 私有转换为 Account 共享，不保留副本且不支持取消发布；普通 User 和 Platform Super Admin 均无发布权限。
 - Platform Super Admin 对全平台 Skill 只有读取权限，不能创建、上传、编辑、发布、删除、恢复或使用 Skill。
-- Skill 页面支持在线创建、上传 `SKILL.md`/ZIP 和“在新 Session 中使用”；不提供 Git/网页导入、逐文件 ZIP 编辑、独立 Skill Runner 或 MCP Tool JSON 页面。
+- Skill 页面支持在线创建和上传 `SKILL.md`/ZIP；Skill 由 Codex、其他 Agent、插件或 MCP 按权限发现和使用，网页不提供“在新 Session 中使用”或独立 Skill Runner。
 - v0.1 不建立独立 Memory 页面或 Memory CRUD API；Memory 继续由 OpenViking 在 Session Commit 后提取和更新，用户通过 `/app/search` 检索，并在 Session 中查看本次 Commit 的 Memory Impact。
-- VikingBot 是 v0.1 必选部署组件；`/app/sessions` 提供完整聊天能力，OpenViking Session 负责消息、归档、上下文和记忆提取，VikingBot 负责模型与工具执行并生成回复。
-- `/app/search` 提供“快速检索”和“结合会话检索”两个产品模式，分别复用源码 `find` 与 `search`；`recall` 只供 VikingBot/MCP 等调用链使用，`grep/glob` 只留私网 Studio。
+- OpenViking 是 Session、上下文和记忆服务；实际对话发生在 Codex、其他 Agent 或可选 VikingBot 中，并通过插件、MCP、SDK 或 API 同步。VikingBot 不是 v0.1 必选组件。
+- `/app/search` 提供“快速检索”和“结合会话检索”两个产品模式，分别复用源码 `find` 与 `search`；`recall` 只供 Agent/插件/MCP 等调用链使用，`grep/glob` 只留私网 Studio。
 - Search 基础筛选只有内容类型；结合会话检索额外选择当前 User 自己的 Session。结构化标签和更新时间范围放入“更多筛选”；时间固定按 `updated_at`，分数阈值、索引层级、来源追踪、结果数量和自定义 URI 均由后端控制，不进入产品 UI。
 - Resource、Skill 与 Search 统一使用源码兼容的 `key=value` 结构化标签；标签规范化为小写并去重，多个检索标签采用 AND 关系，不建立普通标签到检索标签的转换层。
 - Search 结果复用 Studio 的“结果列表 + 右侧详情抽屉”交互；Resource/Skill 跳转产品详情，Memory 只在抽屉显示摘要和匹配原因。产品页面不显示 URI、分数、索引层级、检索计划、来源追踪或原始 JSON。
 - Search 结果卡片不额外补查标签和更新时间；当前筛选条件显示在结果区上方，Resource/Skill 的完整元数据进入详情页查看。
-- `/app/sessions` 复用 Studio 双栏聊天、SSE、消息/Tool 展示、历史归档加载和 Memory Impact；手工 Commit/Extract/Used、原始 Tool Result/Context/Archive 只留 Studio。消息同步失败必须显式进入待重试状态，不能静默丢失。
+- `/app/sessions` 复用 Studio 的双栏浏览、消息展示、历史归档加载和 Memory Impact，但删除 Composer、SSE 和停止生成；Session Create/Append/Commit 由插件、MCP、SDK、CLI、API 或可选 VikingBot 完成。
 - `/api/platform/v1`、`/api/v1`、MCP、SDK、CLI 和插件必须经过同一个后端授权门；换一种调用渠道不能扩大权限，也不能绕过上述共享/私有规则。
 - 产品能力归属、业务数据归属、控制责任和调用渠道分开建模；源码 Router 不等于正式产品能力，`/app`、`/admin`、`/platform` 与 `/studio` 的边界由能力目录决定。
 - MCP OAuth 属于用户委托型集成，不是 OIDC 登录；同意页和跨设备验证页迁到 `web-platform` 的 `/oauth/consent`、`/oauth/verify`，使用产品登录 Session，不依赖 Studio 或浏览器内 API Key。
@@ -77,8 +77,8 @@
 | 2026-08-18 | Design v0.1 Studio 边界收敛 | 正式能力统一进入 `/app`、`/admin`、`/platform`；`/studio` 降级为可选的私网维护入口，生产公网默认不挂载。 |
 | 2026-08-18 | Design v0.1 能力归属收敛 | 完成 Studio、REST、MCP、SDK/CLI 能力盘点；Watch 纳入 Resource 子功能，Relations 保持内部能力，Snapshot/Pack 与 WebDAV 不进入公网产品；MCP OAuth 授权页迁出 Studio。 |
 | 2026-08-18 | Design v0.1 Resource 契约收敛 | 明确 Resource 列表、详情、导入来源、异步状态、Watch、发布、删除恢复、安全边界和 Product API。 |
-| 2026-08-18 | Design v0.1 Skill 契约收敛 | 明确 Skill 创建上传、Account 全局名称唯一、角色权限、原地发布、整体替换、Session 调用和删除恢复边界。 |
-| 2026-08-18 | Design v0.1 Memory 与 Session 收敛 | 取消独立 Memory 页面和 CRUD；Memory 通过 Search 与 Session Impact 查看；VikingBot 调整为 v0.1 必选组件。 |
+| 2026-08-18 | Design v0.1 Skill 契约收敛 | 明确 Skill 创建上传、Account 全局名称唯一、角色权限、原地发布、整体替换、Agent 接入使用和删除恢复边界。 |
+| 2026-08-18 | Design v0.1 Memory 与 Session 收敛 | 取消独立 Memory 页面和 CRUD；Memory 通过 Search 与 Session Impact 查看；VikingBot 是可选接入方，不承担产品网页聊天。 |
 | 2026-08-18 | Design v0.1 Search 模式收敛 | 产品页保留快速检索与结合会话检索；Recall 留给调用链，Grep/Glob 留在私网 Studio。 |
 | 2026-08-18 | Design v0.1 Search 筛选收敛 | 类型作为基础筛选，标签与时间作为更多筛选；隐藏分数、层级、来源追踪、数量和 URI 等调试参数。 |
 | 2026-08-18 | Design v0.1 标签模型收敛 | Resource、Skill 与 Search 统一采用 `key=value` 结构化标签，多标签检索要求全部匹配。 |
