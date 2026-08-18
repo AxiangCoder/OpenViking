@@ -264,3 +264,25 @@ class IamAuditEvent(Base):
     result: Mapped[str] = mapped_column(String(16))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+
+
+class IamPermissionSchema(Base):
+    """04 §10.5 全局权限 Schema 版本（单行，`iam_permission_schema`）。
+
+    内置角色权限种子或 migration 变更时由 `RbacService.seed_catalog` 递增
+    `schema_version`（03 §9.4），参与全部权限缓存键；与用户级
+    `permission_version`（iam_users.permission_version）独立。
+
+    `catalog_fingerprint` 是当前 code 定义目录（权限 code × 内置角色权限集合）的
+    SHA-256，种子用它检测内容变更——内容变更即递增版本，幂等重跑不递增。
+    单行约束由 migration 的 `ck_iam_permission_schema_singleton`（id = 1）强制。
+    """
+
+    __tablename__ = "iam_permission_schema"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    schema_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    catalog_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

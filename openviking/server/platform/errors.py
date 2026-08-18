@@ -21,3 +21,18 @@ class OptimisticLockError(PlatformError):
 
 class ConstraintViolationError(PlatformError):
     """唯一约束/外键约束等完整性冲突（IntegrityError 的领域包装）。"""
+
+
+# ── P1-E2：RBAC 服务层（只 append，不修改既有码）──
+
+
+class RoleAssignmentError(PlatformError):
+    """角色授予被拒（04 §10.6）：Account 一致性 / 单角色 / PSA 仅平台初始化路径。
+
+    `reason` 为稳定原因码（如 `CROSS_ACCOUNT_ROLE_ASSIGNMENT`），供 API 层映射为
+    对外错误码；拒绝事件由 RbacService 先写审计（result=denied）再抛出。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
