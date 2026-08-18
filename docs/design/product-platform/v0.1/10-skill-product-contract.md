@@ -107,7 +107,7 @@ OpenViking v0.4.12 当前具备以下能力：
 
 - `name`：必填，沿用当前 `validate_skill_name` 规则，最多 64 个字符，只允许 ASCII 字母、数字、下划线和连字符。
 - `description`：必填。
-- `tags`：可选。
+- `tags`：可选；最多 20 个，每个最多 40 字符，严格使用 `key=value`，key/value 均非空，整体转小写并去重。
 - `allowed_tools`：可选。
 - `content`：Markdown 指令正文。
 
@@ -122,7 +122,7 @@ OpenViking v0.4.12 当前具备以下能力：
 - 单个 `SKILL.md`。
 - 包含 `SKILL.md`、脚本和参考资料的 ZIP。
 
-上传后先调用共享校验能力解析名称、描述、标签、`allowed-tools` 和文件清单。目标归属由入口决定，上传请求不能自行携带 `visibility`、`owner_user_id` 或任意 URI。
+上传后先调用共享校验能力解析名称、描述、标签、`allowed-tools` 和文件清单。上传 Skill 的 Frontmatter 标签同样只接受结构化 `key=value`；Product Facade 将其同步为 OpenViking `search_tags`，使 Skill 与 Resource 使用同一筛选语义。目标归属由入口决定，上传请求不能自行携带 `visibility`、`owner_user_id` 或任意 URI。
 
 ZIP 的路径穿越、绝对路径、符号链接、文件数量和大小限制由服务端校验；这些属于上传安全约束，不在页面上暴露为可调底层参数。
 
@@ -180,6 +180,8 @@ Skill 所属 User 可以编辑自己的私有 Skill；Account Admin 可以编辑
 - `content`
 
 `name` 不可编辑。
+
+标签更新使用与创建相同的结构化校验。多个 Search 标签采用 AND 关系；产品不提供独立的自由标签字段，也不在标签与 `search_tags` 之间增加编码转换层。
 
 ### 56.2 ZIP Skill
 

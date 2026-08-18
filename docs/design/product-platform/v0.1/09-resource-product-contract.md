@@ -159,7 +159,7 @@
 | 来源 | 是 | 文件、公开 HTTPS URL 或公开 HTTPS Git URL |
 | 名称 | 否 | 默认从文件名、页面标题或仓库名生成；1–128 字符，不参与 URI |
 | 说明 | 否 | 最多 1000 字符，只描述业务用途 |
-| 标签 | 否 | 最多 20 个，每个最多 40 字符，大小写不敏感去重，不允许 Secret |
+| 标签 | 否 | 最多 20 个，每个最多 40 字符；严格使用 `key=value`，key/value 均非空，整体转小写并去重，不允许 Secret |
 | 处理要求 | 否 | 最多 2000 字符，映射到引擎 `instruction`；页面不显示 `reason` |
 | 自动同步 | 否 | 只对稳定网页/Git 来源显示；默认关闭 |
 
@@ -293,7 +293,7 @@ v0.1 不提供内容版本浏览和回滚页面。系统仅保留“上一次成
 
 可编辑字段只有 `display_name`、`description` 和 `tags`。更新使用 `If-Match: <version>` 或请求体版本号做乐观锁；版本冲突返回 `RESOURCE_VERSION_CONFLICT`，前端重新加载后让用户决定是否再次提交。
 
-名称修改只更新 PostgreSQL 产品元数据，不移动 `ov_uri`、不重建索引，也不改变分享链接。标签更新由 Product Facade 同步到 OpenViking Search Tags；若同步失败，事务记录为待重试并在管理视图告警，不能静默出现两套标签。
+名称修改只更新 PostgreSQL 产品元数据，不移动 `ov_uri`、不重建索引，也不改变分享链接。标签与 OpenViking `search_tags` 使用相同的 `key=value` 值，不做格式转换；更新由 Product Facade 同步，若同步失败，事务记录为待重试并在管理视图告警，不能静默出现两套标签。
 
 ## 43. Refresh、Watch 与 Activity
 
@@ -464,7 +464,7 @@ Upload ID 必须绑定 Actor、Account、目标可见性、文件名、大小、
   "description": "供产品讨论检索",
   "source_type": "upload",
   "source_display": "requirements.pdf",
-  "tags": ["产品", "需求"],
+  "tags": ["type=requirement", "project=openviking"],
   "lifecycle_status": "active",
   "processing": {
     "state": "succeeded",

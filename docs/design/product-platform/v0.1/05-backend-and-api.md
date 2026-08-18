@@ -427,11 +427,13 @@ Memory 不提供独立 `/memories` 产品 API。Session Commit 继续复用 Open
 
 - `query`：必填检索文本。
 - `context_type`：可空；只允许 `memory/resource/skill`，为空表示全部。
-- `tags`：可空；作为“更多筛选”，只能缩小结果范围。
+- `tags`：可空；作为“更多筛选”，每项必须是规范化 `key=value`，多个标签按 AND 关系缩小结果范围。
 - `since/until`：可空；作为“更多筛选”的时间范围，由后端固定使用受支持的时间字段。
 - `session_id`：只允许 `/search/search` 接受，且必须属于当前 User；`/search/find` 不接受。
 
 `target_uri`、原始 `filter`、`score_threshold`、`level`、`include_provenance`、`limit/node_limit` 和时间字段选择均不属于 Product API。后端根据部署配置控制结果数量、分数阈值、索引层级和来源信息；客户端不能通过参数改变安全范围或索引执行策略。
+
+所有 Resource/Skill 创建、上传和编辑 API 对 `tags` 使用同一校验：最多 20 项、每项最多 40 字符、严格 `key=value`、key/value 均非空、整体小写并去重。Product Facade 在提交 PostgreSQL 后通过 Outbox 同步 OpenViking `search_tags`；不得把任意自由文本标签静默转换成另一套内部格式。
 
 ### 12.6 管理 API
 

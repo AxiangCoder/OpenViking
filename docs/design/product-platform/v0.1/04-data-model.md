@@ -200,7 +200,7 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 | `canonical_name` | Skill 必填的稳定名称，Resource 可空；Skill 按当前 `validate_skill_name` 规范化后写入，创建后不可修改 |
 | `display_name` | Resource 的产品展示名称；Skill v0.1 与 `canonical_name` 一致且不可单独修改 |
 | `description` | 产品说明，可空 |
-| `tags` | JSONB 产品标签；Resource 最多 20 个，需同步到 OpenViking Search Tags |
+| `tags` | JSONB 结构化标签；Resource/Skill 均最多 20 个，使用规范化 `key=value`，需同步到 OpenViking `search_tags` |
 | `source_type` | Resource 使用 `upload/web/git`；Skill 可使用自己的来源枚举 |
 | `source_display` | 已脱敏的文件名或远程来源，不包含 URL Query/Userinfo/Secret |
 | `source_locator_ciphertext/source_locator_key_version` | 应用层加密的远程来源与密钥版本；上传来源为空，普通查询和 DTO 永不返回 |
@@ -229,7 +229,8 @@ v0.1 对每个 User 强制只有一个有效内置角色；表结构保留关联
 - Outbox、OpenViking Task Meta、Watch JSON、审计和日志只保存 Resource ID、脱敏 `source_display` 与 `source_fingerprint`，不能复制完整来源。Watch Scheduler 通过 Resource ID 向 Product Facade 解析来源，而不是持久化明文 `path`。
 - `latest_operation_id` 只做快速关联，Operation 的真实状态仍以 `platform_operation_refs` 为准。Refresh 期间 Resource 保持 `active`，继续指向上一次成功版本。
 - Operation 成功提交时只有其 `generation` 仍是目标最新待处理代数，且对象不在删除中，才能原子更新 `active_generation`；旧任务晚到只能记录终态，不能切换内容。
-- 产品标签与 OpenViking Search Tags 的同步使用 Outbox/Reconciler；前端不能直接调用底层 `set_tags` 形成双写分叉。
+- Resource、Skill 与 Search 共用 OpenViking 的结构化标签语义：每项必须恰好包含一个 `=`，key/value 均非空，去除首尾空白后整体转为小写并去重；每项最多 40 字符、每个对象最多 20 项。产品不另存一套普通自由标签。
+- PostgreSQL `tags` 与 OpenViking `search_tags` 的同步使用 Outbox/Reconciler；Skill Frontmatter 中的 `tags` 也必须通过同一校验，并由 Product Facade 同步到 Skill 索引记录。前端不能直接调用底层 `set_tags` 形成双写分叉。
 
 索引至少包括 `(account_id, object_type, visibility, status)`、`(owner_user_id, object_type, status)` 和 `(account_id, ov_uri)` 唯一索引。Skill 另建等价于 `UNIQUE (account_id, canonical_name) WHERE object_type='skill' AND deleted_at IS NULL` 的部分唯一约束；名称冲突响应不得泄露占用者。
 

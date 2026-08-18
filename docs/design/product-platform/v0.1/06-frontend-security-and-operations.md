@@ -191,7 +191,7 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 
 - `/app` 首页只展示当前 User 的内容数量、最近 Session、最近 Resource/Skill 和处理失败摘要，不返回 Queue、锁、模型、VectorDB 等底层状态。
 - `/app/search` 提供“快速检索”和“结合会话检索”两个模式，分别调用源码 `find` 与 `search`。快速检索是默认模式；结合会话检索要求用户选择自己有权读取的 Session。两种模式的默认范围均为“我的私有数据 + 当前 Account 共享数据”，可缩小到 Memory、Resource 或 Skill，但前端不能输入任意 Viking URI 或扩大根目录。
-- Search 主表单只显示检索词、模式和内容类型（全部、Memory、Resource、Skill）；选择“结合会话检索”后显示当前 User 自己的 Session 选择器。“更多筛选”只包含标签和时间范围。
+- Search 主表单只显示检索词、模式和内容类型（全部、Memory、Resource、Skill）；选择“结合会话检索”后显示当前 User 自己的 Session 选择器。“更多筛选”只包含结构化标签和时间范围。标签输入提示使用 `key=value`，例如 `project=openviking`；多个标签表示必须全部匹配。
 - 相似度分数阈值、索引层级、来源追踪开关、结果数量和自定义 URI 不显示在产品页面，也不能通过 URL Query 或浏览器请求透传到底层 API。
 - `recall` 不显示为页面模式，只供 VikingBot/MCP 等受控调用链使用；`grep/glob` 属于文件与检索调试能力，只留私网 Studio。
 - 不设置 `/app/memories` 顶级页面。Memory 由 Session Commit 自动提取和更新：用户从 `/app/search` 找到 Memory，在 `/app/sessions/{id}` 查看该 Session Commit 的 Memory Impact；不显示 Memory 新建、编辑、删除或恢复按钮。
