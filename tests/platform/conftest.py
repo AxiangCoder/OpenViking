@@ -187,6 +187,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.routers import (
         admin_router,
         auth_router,
+        me_router,
         member_data_router,
         platform_router,
         resources_router,
@@ -284,6 +285,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.include_router(skills_router)
     app.include_router(sessions_router)
     app.include_router(member_data_router)
+    app.include_router(me_router)
     return app
 
 

@@ -29,6 +29,7 @@ from openviking.server.platform.db import get_session
 from openviking.server.platform.deletion.service import DeletionService
 from openviking.server.platform.dependencies import (
     get_current_principal,
+    require_high_risk_write,
     require_permission,
     verify_csrf,
 )
@@ -305,7 +306,15 @@ async def update_my_skill(
 
 @router.delete(
     "/me/skills/{skill_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("skill.user_private.manage.self"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="skill.delete",
+                permission_code="skill.user_private.manage.self",
+                scope="self",
+            )
+        )
+    ],
 )
 async def delete_my_skill(
     request: Request,
@@ -567,7 +576,15 @@ async def update_shared_skill(
 
 @router.delete(
     "/account/skills/{skill_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("skill.account_shared.manage.account"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="skill.delete",
+                permission_code="skill.account_shared.manage.account",
+                scope="account",
+            )
+        )
+    ],
 )
 async def delete_shared_skill(
     request: Request,
