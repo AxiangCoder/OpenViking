@@ -22,6 +22,27 @@ from openviking.server.platform.models import IamAccount, IamApiCredential, IamU
 DEFAULT_PASSWORD = "Init-Pass-2026-Dev!"
 
 
+async def run_provisioning(
+    session: AsyncSession,
+    *,
+    control_plane=None,
+    limit: int | None = None,
+) -> tuple[int, object]:
+    """P2-E1：执行一轮 ProvisioningWorker（开发态 FakeControlPlane）。
+
+    返回 (processed, worker)；worker._service._control_plane 为实际使用的
+    控制面（需共享实例的幂等/重放测试用同一 worker/control_plane）。
+    """
+    from openviking.server.platform.provisioning.control_plane import FakeControlPlane
+    from openviking.server.platform.provisioning.repository import ProvisioningRepository
+    from openviking.server.platform.provisioning.worker import ProvisioningWorker
+
+    control_plane = control_plane or FakeControlPlane()
+    worker = ProvisioningWorker(PostgresIamRepository(), ProvisioningRepository(), control_plane)
+    processed = await worker.run_once(session, limit=limit)
+    return processed, worker
+
+
 async def create_account(
     repo: PostgresIamRepository,
     session: AsyncSession,

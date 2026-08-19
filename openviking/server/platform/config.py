@@ -89,6 +89,21 @@ class PlatformConfig:
         default_factory=lambda: _env_int("OV_SESSION_CLEANUP_INTERVAL", 3600)
     )
 
+    # ── P2-E1：Provisioning Worker/Reconciler（05 §11.3）──
+
+    provisioning_batch_size: int = field(
+        default_factory=lambda: _env_int("OV_PROVISIONING_BATCH_SIZE", 10)
+    )
+    provisioning_retry_base_seconds: int = field(
+        default_factory=lambda: _env_int("OV_PROVISIONING_RETRY_BASE", 60)
+    )
+    provisioning_retry_max_seconds: int = field(
+        default_factory=lambda: _env_int("OV_PROVISIONING_RETRY_MAX", 3600)
+    )
+    provisioning_stuck_timeout_seconds: int = field(
+        default_factory=lambda: _env_int("OV_PROVISIONING_STUCK_TIMEOUT", 600)
+    )
+
     def with_database_url(self, url: str) -> "PlatformConfig":
         """返回仅替换 database_url 的副本（测试用）。"""
         return PlatformConfig(database_url=url)

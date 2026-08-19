@@ -2,7 +2,8 @@
 
 承载 P1-E5 业务规则（本模块为新增服务层，既有 iam/、auth/ 模块只调用、复用）：
 - PSA 创建 Account + 首位 Admin：一次返回初始密码、ov 映射、角色 account_admin
-  （03 §8.3 / 05 §12.6 平台表；Provisioning outbox/Worker 状态流归 P2-E1）；
+  （03 §8.3 / 05 §12.6 平台表；P2-E1：同一 PG 事务写 iam_outbox，Account/User
+  初始 provisioning，由 ProvisioningWorker 转 active）；
 - Account Admin 直建 User：角色固定 `user`，一次返回初始密码（05 §12.6）；
 - 用户管理：列表 / PATCH 启用禁用 / disable / 分级密码重置（复用 AuthService）；
 - 平台级提升：`PUT .../role` 仅 `user → account_admin`，即时生效（04 §10.6）；
@@ -54,6 +55,9 @@ from openviking.server.platform.models import (
     IamUser,
     IamUserRole,
 )
+from openviking.server.platform.provisioning.control_plane import FakeControlPlane
+from openviking.server.platform.provisioning.repository import ProvisioningRepository
+from openviking.server.platform.provisioning.service import ProvisioningService
 
 
 @dataclass(frozen=True)
@@ -109,17 +113,28 @@ def decode_cursor(raw: str | None) -> tuple[datetime, uuid.UUID] | None:
 
 
 class AdminService:
-    """IAM 管理服务：Account/User 生命周期、守卫、API Key 元数据与审计读取。"""
+    """IAM 管理服务：Account/User 生命周期、守卫、API Key 元数据与审计读取。
+
+    P2-E1（14 号计划 §97.1）：创建流程引入 outbox 事务写入——Account+首位
+    Admin 与 iam_outbox 事件同一 PG 事务（05 §11.3 步骤 1），Account/User
+    初始 status=provisioning，由 ProvisioningWorker 初始化 OpenViking
+    namespace 后转 active；`provisioning` 依赖注入失败时回退开发态
+    FakeControlPlane（测试/未装配环境，生产装配经 create_app 注入）。
+    """
 
     def __init__(
         self,
         repo: IamRepository,
         rbac: RbacService,
         auth: AuthService,
+        provisioning: ProvisioningService | None = None,
     ) -> None:
         self._repo = repo
         self._rbac = rbac
         self._auth = auth
+        self._provisioning = provisioning or ProvisioningService(
+            repo, ProvisioningRepository(), FakeControlPlane()
+        )
 
     # ── PSA：创建 Account + 首位 Admin（03 §8.3 / 05 §12.6 平台表）──
 
@@ -139,7 +154,9 @@ class AdminService:
 
         - `code`/`ov_account_id` 双唯一（04 §10.1），`normalized_email` 全局唯一；
         - 首位 Admin 角色固定 `account_admin`（经 RbacService 平台路径授予）；
-        - 失败路径由 repository 的 ConstraintViolationError 包装（事务已回滚），
+        - P2-E1：Account/User 初始 status=provisioning，并在**同一事务**写入
+          iam_outbox（account.provision + user.provision，05 §11.3 步骤 1）；
+          失败路径由 repository 的 ConstraintViolationError 包装（事务已回滚），
           预检查给出稳定错误码（ACCOUNT_CODE_ALREADY_EXISTS / EMAIL_ALREADY_EXISTS）；
         - 审计：action=`account.create`，Actor=PSA、Subject=Account+首位 Admin。
         """
@@ -156,7 +173,7 @@ class AdminService:
             ov_account_id=f"ov_account_{uuid.uuid4().hex[:12]}",
             code=code,
             display_name=account_name,
-            status="active",
+            status="provisioning",
         )
         await session.flush()
         admin = await self._repo.create_user(
@@ -167,7 +184,7 @@ class AdminService:
             email=normalized_email,
             display_name=admin_display_name,
             password_hash=hash_password(initial_password),
-            status="active",
+            status="provisioning",
         )
         await session.flush()
         await self._rbac.assign_role(
@@ -177,6 +194,9 @@ class AdminService:
             target_user_id=admin.id,
             role_code=ACCOUNT_ADMIN,
             request_id=request_id,
+        )
+        await self._provisioning.create_provisioning_events(
+            session, account=account, admin=admin
         )
         await self._append_admin_audit(
             session,
