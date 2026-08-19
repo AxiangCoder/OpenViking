@@ -59,6 +59,8 @@ export default function AdminUserMemberSkillPage() {
         setSubject(page.items.find((u) => u.id === userId) ?? null);
       })
       .catch(() => setSubject(null));
+    // 非法产品 ID 直接 404 语义，不发起后端详情请求（AC⑥）
+    if (!isProductId(skillId)) return;
     fetchMemberSkill(userId, skillId)
       .then(setSkill)
       .catch((error) => {

@@ -39,8 +39,6 @@ export default function AdminUserMemberResourcePage() {
   const [detail, setDetail] = useState<ResourceDetail | null>(null);
   const [loadError, setLoadError] = useState<{ message: string; requestId: string | null } | null>(null);
 
-  const invalidId = !isProductId(resourceId);
-
   const load = useCallback(() => {
     setLoadError(null);
     setDetail(null);
@@ -49,6 +47,8 @@ export default function AdminUserMemberResourcePage() {
         setSubject(page.items.find((u) => u.id === userId) ?? null);
       })
       .catch(() => setSubject(null));
+    // 非法产品 ID 直接 404 语义，不发起后端详情请求（AC⑥）
+    if (!isProductId(resourceId)) return;
     fetchMemberResource(userId, resourceId)
       .then(setDetail)
       .catch((error) => {
@@ -62,6 +62,8 @@ export default function AdminUserMemberResourcePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const invalidId = !isProductId(resourceId);
 
   const subjectLabel = subject
     ? `${subject.display_name ?? subject.username}（${subject.email}）`
