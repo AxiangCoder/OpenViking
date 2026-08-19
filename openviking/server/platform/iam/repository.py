@@ -271,6 +271,31 @@ class IamRepository(ABC):
     ) -> int:
         """用户禁用/删除期撤销全部 Key；返回撤销条数。"""
 
+    # ── P2-E6b：MCP OAuth 生命周期撤销（04 §10.13）──
+
+    @abstractmethod
+    async def revoke_all_oauth_grants_for_user(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        revoked_by: uuid.UUID | None,
+    ) -> int:
+        """用户禁用/进入删除期撤销全部 OAuth Grant/Token（恢复后不自动恢复）。
+
+        返回撤销 Grant 条数；Token 随 Grant 一并撤销（04 §10.13）。
+        """
+
+    @abstractmethod
+    async def revoke_all_oauth_grants_for_account(
+        self,
+        session: AsyncSession,
+        account_id: uuid.UUID,
+        *,
+        revoked_by: uuid.UUID | None,
+    ) -> int:
+        """Account 删除期撤销 Account 内全部 OAuth Grant/Token；返回 Grant 条数。"""
+
     # ── roles / permissions（04 §10.4–10.6，只读；种子归 P1-E2）──
 
     @abstractmethod

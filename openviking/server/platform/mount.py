@@ -39,6 +39,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         auth_router,
         me_router,
         member_data_router,
+        oauth_router,
         platform_router,
         resources_router,
         sessions_router,
@@ -100,6 +101,16 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.platform_config = platform_config
     _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion)
 
+    # P2-E6b：MCP OAuth PostgreSQL 存储（04 §10.13）。dev 态挂载后，
+    # 产品 OAuth 端点使用 PG 存储；SDK 协议端点换存由 app.py 在
+    # platform_enabled 时完成（同样指向 PG），保证单一事实来源。
+    from openviking.server.platform.db import session_factory as _platform_session_factory
+    from openviking.server.platform.iam.pg_oauth_store import PostgresOAuthStore
+
+    app.state.platform_oauth_store = PostgresOAuthStore(
+        _platform_session_factory, label="iam_oauth_* (PostgreSQL)"
+    )
+
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(admin_router)
@@ -108,6 +119,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.include_router(skills_router)
     app.include_router(sessions_router)
     app.include_router(member_data_router)
+    app.include_router(oauth_router)
 
 
 def _build_facade(rbac, registry_service, registry_store, repo, config):

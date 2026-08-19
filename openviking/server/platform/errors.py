@@ -291,11 +291,6 @@ class SkillInvalidFormatError(PlatformError):
     `PACKAGE_NAME_MISMATCH` 等），API 层统一映射 400。
     """
 
-    def __init__(self, reason: str, *args: object) -> None:
-        super().__init__(reason, *args)
-        self.reason = reason
-
-
 class SkillSharedWriteForbiddenError(PlatformError):
     """普通 User 或 PSA 尝试写共享 Skill（10 §63 `SKILL_SHARED_WRITE_FORBIDDEN`）。"""
 
@@ -379,6 +374,28 @@ class InvalidSearchFilterError(PlatformError):
 
     `reason` 为稳定原因码（`TAG_LIMIT_EXCEEDED`/`TAG_INVALID_FORMAT`/
     `INVALID_TIME_RANGE` 等）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+# ── P2-E6b：MCP OAuth 存储与协议端点（只 append，不修改既有码）──
+
+
+class OAuthProtocolError(PlatformError):
+    """MCP OAuth 协议/产品端点拒绝（04 §10.13，05 §12.4）。
+
+    `reason` 为稳定原因码：
+    - `OAUTH_PENDING_NOT_FOUND`：pending_id/code 不存在、过期或已处理（404）；
+    - `OAUTH_PENDING_REQUIRED`：请求体缺少 `pending_id` 或 `code`（400）；
+    - `OAUTH_DECISION_INVALID`：decision 不是 approve/reject（400）；
+    - `OAUTH_CLIENT_DISABLED`：Client 被禁用，拒绝新授权（403）；
+    - `OAUTH_AUTHORIZE_SESSION_REQUIRED`：同意只接受登录 Session，
+      API Key/OAuth Token 不能代替浏览器批准（403）；
+    - `OAUTH_GRANT_NOT_FOUND`：Grant 不存在或不属于当前用户（404）；
+    - `OAUTH_ACCOUNT_REQUIRED`：平台级身份（无 Account）不能授权 MCP Client（400）。
     """
 
     def __init__(self, reason: str, *args: object) -> None:

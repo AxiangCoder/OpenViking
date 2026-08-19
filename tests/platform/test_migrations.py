@@ -1,10 +1,12 @@
 """P1-E1 迁移验收（AC ① ② ③ ⑤）+ P1-E2 新增表（iam_permission_schema，04 §10.5）
-+ P2-E1 新增表（iam_outbox，04 §10.9）+ P2-E2 新增表（iam_deletion_jobs，04 §10.11）。
++ P2-E1 新增表（iam_outbox，04 §10.9）+ P2-E2 新增表（iam_deletion_jobs，04 §10.11）
++ P2-E6b 新增表（iam_oauth_clients/grants/pending_authorizations/tokens，04 §10.13）。
 
 - ① 全新库执行迁移后全部 iam_* 表创建成功，upgrade/downgrade 可重复
   （P1-E2 新增 iam_permission_schema，见 versions/b2c3d4e5f6a7；
    P2-E1 新增 iam_outbox，见 versions/c3d4e5f6a7b8；
    P2-E2 新增 iam_deletion_jobs，见 versions/d4e5f6a7b8c9；
+   P2-E6b 新增 MCP OAuth 四表，见 versions/e5f6a7b8c9d2；
    platform_content_refs/platform_operation_refs/platform_uploads 见 test_content_registry.py）
 - ② normalized_email、(account_id, ov_user_id)、(account_id, normalized_username)、
      public_id/key_hash、token_hash、account code/ov_account_id 唯一生效
@@ -45,6 +47,11 @@ EXPECTED_TABLES = {
     "iam_permission_schema",
     "iam_outbox",
     "iam_deletion_jobs",
+    # P2-E6b（04 §10.13）
+    "iam_oauth_clients",
+    "iam_oauth_grants",
+    "iam_oauth_pending_authorizations",
+    "iam_oauth_tokens",
 }
 
 
@@ -63,7 +70,7 @@ async def _count_iam_tables(session: AsyncSession) -> int:
 
 
 async def test_fresh_upgrade_creates_all_iam_tables(session: AsyncSession) -> None:
-    """AC ①：全新库执行迁移后全部 iam_* 表创建成功（P1-E1 9 张 + P1-E2 1 张 + P2-E1 1 张 + P2-E2 1 张）。"""
+    """AC ①：全新库执行迁移后全部 iam_* 表创建成功（P1-E1 9 张 + P1-E2 1 张 + P2-E1 1 张 + P2-E2 1 张 + P2-E6b 4 张）。"""
     assert await _iam_tables(session) == EXPECTED_TABLES
 
 

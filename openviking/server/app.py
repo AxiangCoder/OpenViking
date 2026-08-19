@@ -619,11 +619,29 @@ def create_app(
             from pathlib import Path as _Path
 
             from openviking.server.oauth.provider import OpenVikingOAuthProvider
-            from openviking.server.oauth.storage import OAuthStore
 
-            _workspace = _Path(ov_cfg.storage.workspace).expanduser().resolve()
-            _workspace.mkdir(parents=True, exist_ok=True)
-            _route_store = OAuthStore(_workspace / ov_cfg.oauth.db_filename)
+            # P2-E6b（04 §10.13，Spike 风险 10）：platform_enabled 时 MCP OAuth
+            # 协议端点（SDK DCR/authorize/token/metadata/revoke）换用 PostgreSQL
+            # 存储，SQLite 不再作为产品生产环境的授权事实来源；非平台态保持
+            # 原 SQLite 行为不变。lifespan 对两种 store 调用
+            # initialize()/gc_expired()/close() 接口一致。
+            if getattr(config, "platform_enabled", False):
+                from openviking.server.platform.db import (
+                    session_factory as _platform_session_factory,
+                )
+                from openviking.server.platform.iam.pg_oauth_store import (
+                    PostgresOAuthStore,
+                )
+
+                _route_store = PostgresOAuthStore(
+                    _platform_session_factory, label="iam_oauth_* (PostgreSQL)"
+                )
+            else:
+                from openviking.server.oauth.storage import OAuthStore
+
+                _workspace = _Path(ov_cfg.storage.workspace).expanduser().resolve()
+                _workspace.mkdir(parents=True, exist_ok=True)
+                _route_store = OAuthStore(_workspace / ov_cfg.oauth.db_filename)
             # Resolution order for the AS issuer URL:
             #   1. OPENVIKING_PUBLIC_BASE_URL env var (deployment override)
             #   2. oauth.issuer in ov.conf (operator config)
