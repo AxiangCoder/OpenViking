@@ -133,6 +133,34 @@ async def verify_csrf(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": CSRF_INVALID})
 
 
+async def verify_integration_write(
+    request: Request,
+    principal: AuthenticatedUserPrincipal = Depends(get_current_principal),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """集成写入口校验（P2-E5：11 §70.6 Session 写链路）。
+
+    浏览器 Session 凭证必须通过完整 CSRF 校验（03 §8.2）；User API Key /
+    OAuth 委托凭证不携带 Cookie，不存在浏览器伪造风险，直接放行
+    （浏览器无法自动携带 Key/Token，05 §11.4）。Origin 校验对两种凭据
+    都执行（防第三方站点在 Session 场景的跨站写）。
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if not origin_allowed(request, platform_config):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": CSRF_INVALID})
+    if principal.session_id is None:
+        return  # API Key / OAuth：非浏览器凭据，无需 CSRF Token
+    provided = request.headers.get("x-csrf-token", "")
+    row = (
+        await session.execute(
+            select(IamSession.csrf_secret_hash).where(IamSession.id == principal.session_id)
+        )
+    ).scalar_one_or_none()
+    if row is None or not SessionService.verify_csrf_token(row, provided):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": CSRF_INVALID})
+
+
 def apply_session_cookie(
     response: Response,
     raw_token: str,

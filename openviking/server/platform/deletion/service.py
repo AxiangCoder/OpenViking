@@ -38,13 +38,14 @@ from openviking.server.platform.registry.repository import (
     RegistryRepository,
 )
 
-# 05 §12.6 注：类型化恢复权限映射（v0.1 交付 user/account，其余 E3–E5 扩展）
+# 05 §12.6 注：类型化恢复权限映射（v0.1 交付 user/account；P2-E5 扩展
+# session → self scope：仅属主本人，管理员不能恢复他人 Session（11 §72））
 # resource_type → (scope, permission_code, 说明)
 RESTORE_PERMISSION_MAP: dict[str, tuple[str, str, str]] = {
     "user": ("account", "user.delete", "Account Admin（本 Account）"),
     "account": ("platform", "account.delete", "仅 Platform Super Admin"),
-    # E3–E5 扩展点（04 §10.11 同表承载，类型化权限按 05 §12.6 注逐条落地）：
-    # "session":  ("self", "session.delete.self", "仅属主本人；管理员不能恢复他人 Session"),
+    "session": ("self", "session.delete.self", "仅属主本人；管理员不能恢复他人 Session"),
+    # E4–E5 扩展点（04 §10.11 同表承载，类型化权限按 05 §12.6 注逐条落地）：
     # "resource": ("account", "resource.user_private.delete.self", "属主本人（私有）..."),
     # "skill":    ("account", "skill.user_private.manage.self", "属主本人（私有）..."),
 }
@@ -313,12 +314,19 @@ class DeletionService:
             jobs = await self._store.list_deletion_jobs(
                 session, account_id=account_id, resource_types=("user",), limit=limit
             )
+        elif scope == "self":
+            # P2-E5：当前 User 回收站（05 §12.5；Session 属主本人可见，AC⑦）
+            jobs = await self._store.list_deletion_jobs(
+                session, account_id=account_id, resource_types=("session",), limit=limit
+            )
         else:
             jobs = await self._store.list_deletion_jobs(
                 session, account_id=account_id, resource_types=("account",), limit=limit
             )
         rows: list[RecycleBinRow] = []
         for job in jobs:
+            if scope == "self" and not await self._is_own_session(session, job, principal):
+                continue
             allowed, permission = self._restore_permission_for(scope, job.resource_type, principal)
             rows.append(
                 RecycleBinRow(
@@ -360,6 +368,9 @@ class DeletionService:
         if not allowed:
             raise AdminActionForbiddenError("PERMISSION_NOT_GRANTED")
         assert permission is not None
+        if scope == "self" and not await self._is_own_session(session, job, principal):
+            # self scope 只能恢复属主本人 Session（11 §72：管理员不能恢复他人）
+            raise EntityNotFoundError(f"deletion job {job_id} not visible")
 
         now = datetime.now(timezone.utc)
         job.status = JOB_RESTORED
@@ -369,8 +380,15 @@ class DeletionService:
 
         if job.resource_type == "user":
             await self._store.restore_user(session, uuid.UUID(job.resource_id))
+            restore_subject = uuid.UUID(job.resource_id)
         elif job.resource_type == "account":
             await self._store.restore_account(session, uuid.UUID(job.resource_id))
+            restore_subject = None
+        elif job.resource_type == "session":
+            # 11 §72：恢复重新显示历史，不回滚该 Session 已产生的 Memory 变更
+            restore_subject = await self._store.restore_session(
+                session, uuid.UUID(job.resource_id)
+            )
         else:
             raise DeletionJobError("NOT_RESTORABLE")
 
@@ -384,7 +402,7 @@ class DeletionService:
             actor_session_id=principal.session_id,
             authentication_method=principal.authentication_method,
             subject_account_id=job.account_id,
-            subject_user_id=uuid.UUID(job.resource_id) if job.resource_type == "user" else None,
+            subject_user_id=restore_subject,
             action=f"{job.resource_type}.restore",
             target_type=job.resource_type,
             target_id=job.resource_id,
@@ -450,7 +468,26 @@ class DeletionService:
             if account is None:
                 return None
             return account.display_name
+        if job.resource_type == "session":
+            # 11 §72：删除确认弹窗显示 Session 标识（客户端名称 + ID 短标识）
+            ref = await self._store.get_session_ref(session, uuid.UUID(job.resource_id))
+            if ref is None:
+                return None
+            return f"{ref.client_name} #{ref.ov_session_id[:8]}"
         return None
+
+    async def _is_own_session(
+        self, session: AsyncSession, job: IamDeletionJob, principal
+    ) -> bool:
+        """self scope 回收站：只展示当前 User 自己的 Session 删除任务（AC⑦）。"""
+        if job.resource_type != "session":
+            return False
+        ref = await self._store.get_session_ref(session, uuid.UUID(job.resource_id))
+        return (
+            ref is not None
+            and ref.owner_user_id == principal.actor_user_id
+            and ref.account_id == principal.actor_account_id
+        )
 
     async def _role_code_of(self, session: AsyncSession, user_id: uuid.UUID) -> str | None:
         from openviking.server.platform.models import IamRole, IamUserRole

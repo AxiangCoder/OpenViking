@@ -26,6 +26,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     from openviking.server.platform.aggregates import AggregateService
     from openviking.server.platform.auth.service import AuthService
     from openviking.server.platform.config import platform_config
+    from openviking.server.platform.dashboard.service import DashboardService
     from openviking.server.platform.deletion.service import DeletionService
     from openviking.server.platform.iam import PostgresIamRepository, RbacService
     from openviking.server.platform.provisioning.control_plane import FakeControlPlane
@@ -36,8 +37,13 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         admin_router,
         auth_router,
         me_router,
+        member_data_router,
         platform_router,
+        sessions_router,
     )
+    from openviking.server.platform.search.service import SearchProductService
+    from openviking.server.platform.session.backend import FakeSearchEngine, FakeSessionBackend
+    from openviking.server.platform.session.service import SessionProductService
 
     repo = PostgresIamRepository()
     rbac = RbacService(repo)
@@ -47,6 +53,11 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    session_backend = FakeSessionBackend()
+    search_engine = FakeSearchEngine()
+    sessions = SessionProductService(repo, backend=session_backend, registry=registry_store)
+    search = SearchProductService(repo, engine=search_engine, registry=registry_store)
+    dashboard = DashboardService()
 
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
@@ -56,9 +67,16 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.iam_registry_store = registry_store
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_session_service = sessions
+    app.state.iam_search_service = search
+    app.state.iam_dashboard_service = dashboard
+    app.state.iam_session_backend = session_backend
+    app.state.iam_search_engine = search_engine
     app.state.platform_config = platform_config
 
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(sessions_router)
+    app.include_router(member_data_router)

@@ -93,7 +93,8 @@ async def session(
                 "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
                 "iam_users, iam_accounts, iam_permissions, iam_permission_schema, "
                 "iam_deletion_jobs, platform_content_refs, platform_operation_refs, "
-                "platform_uploads CASCADE"
+                "platform_uploads, platform_session_commits, platform_session_messages, "
+                "platform_session_refs CASCADE"
             )
         )
         await s.commit()
@@ -163,6 +164,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.admin.service import AdminService
     from openviking.server.platform.aggregates import AggregateService
     from openviking.server.platform.auth.service import AuthService
+    from openviking.server.platform.dashboard.service import DashboardService
     from openviking.server.platform.db import get_session
     from openviking.server.platform.deletion.service import DeletionService
     from openviking.server.platform.iam import PostgresIamRepository, RbacService
@@ -170,7 +172,16 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.provisioning.repository import ProvisioningRepository
     from openviking.server.platform.provisioning.service import ProvisioningService
     from openviking.server.platform.registry.repository import RegistryRepository
-    from openviking.server.platform.routers import admin_router, auth_router, platform_router
+    from openviking.server.platform.routers import (
+        admin_router,
+        auth_router,
+        member_data_router,
+        platform_router,
+        sessions_router,
+    )
+    from openviking.server.platform.search.service import SearchProductService
+    from openviking.server.platform.session.backend import FakeSearchEngine, FakeSessionBackend
+    from openviking.server.platform.session.service import SessionProductService
 
     app = FastAPI(title="ovp-platform-test")
     repo = PostgresIamRepository()
@@ -180,6 +191,11 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    session_backend = FakeSessionBackend()
+    search_engine = FakeSearchEngine()
+    sessions = SessionProductService(repo, backend=session_backend, registry=registry_store)
+    search = SearchProductService(repo, engine=search_engine, registry=registry_store)
+    dashboard = DashboardService()
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
@@ -188,6 +204,11 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.state.iam_registry_store = registry_store
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_session_service = sessions
+    app.state.iam_search_service = search
+    app.state.iam_dashboard_service = dashboard
+    app.state.iam_session_backend = session_backend
+    app.state.iam_search_engine = search_engine
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:
@@ -197,6 +218,8 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.include_router(auth_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(sessions_router)
+    app.include_router(member_data_router)
     return app
 
 
