@@ -27,10 +27,17 @@ export OV_PLATFORM_BACKUP_PASSPHRASE="$PASSPHRASE"
 export OV_PLATFORM_BACKUP_CONFIRM=yes
 export OV_PLATFORM_PG_TOOLS="${OV_PLATFORM_PG_TOOLS:-}"
 
-# 容器内工具视角的 DSN：docker exec 里的工具访问宿主已发布端口需 host.docker.internal
-tools_admin="$ADMIN_URL"
+# 双视角 DSN：python 侧（宿主机）用 host 视角；容器内 PG 工具用容器视角
+# （docker exec 访问宿主已发布端口需 host.docker.internal）。
+host_part="${ADMIN_URL#*@}"; host_part="${host_part%%/*}"     # 127.0.0.1:55455
+host_addr="${host_part%%:*}"; host_port="${host_part#*:}"
+[ "$host_port" = "$host_part" ] && host_port="5432"
+dsn_head="${ADMIN_URL%@*}"                                    # postgresql://user:pass
+dsn_db="${ADMIN_URL##*/}"
+host_admin="${dsn_head}@${host_addr}:${host_port}/${dsn_db}"
+tools_admin="$host_admin"
 if [ -n "$OV_PLATFORM_PG_TOOLS" ]; then
-  tools_admin="${ADMIN_URL/@*/@host.docker.internal}"
+  tools_admin="${dsn_head}@host.docker.internal:${host_port}/${dsn_db}"
 fi
 
 cmd="${1:-full}"; shift || true
@@ -55,14 +62,14 @@ ts="$(date -u +%Y%m%d-%H%M%SZ)"
 mkdir -p "$workdir"
 echo "== P5-E3 drill [$cmd] start: $(date -u +%Y-%m-%dT%H:%M:%SZ) db=$db workdir=$workdir"
 
-admin_async="${ADMIN_URL/postgresql:\/\//postgresql+asyncpg:\/\/}"
-drill_url="${admin_async/\/postgres/\/$db}"
-target_url="${admin_async/\/postgres/\/$target_db}"
-drill_tools="${tools_admin/\/postgres/\/$db}"
-target_tools="${tools_admin/\/postgres/\/$target_db}"
+admin_async="${host_admin/postgresql:\/\//postgresql+asyncpg://}"
+drill_url="${admin_async/\/postgres//$db}"
+target_url="${admin_async/\/postgres//$target_db}"
+drill_tools="${tools_admin/\/postgres//$db}"
+target_tools="${tools_admin/\/postgres//$target_db}"
 
-admin_user="${tools_admin#*//}"; admin_user="${admin_user%%:*}"
-admin_pass="${tools_admin#*:}"; admin_pass="${admin_pass%%@*}"
+admin_user="${tools_admin#postgresql://}"; admin_user="${admin_user%%:*}"
+admin_pass="${tools_admin#postgresql://}"; admin_pass="${admin_pass#*:}"; admin_pass="${admin_pass%%@*}"
 
 step() { printf '\n[STEP] %s\n' "$1"; }
 fail() { echo "[FAIL] $1" >&2; echo "{\"drill\":\"$cmd\",\"result\":\"FAIL\",\"step\":\"$1\"}" > "$workdir/report.json"; exit 1; }
@@ -71,9 +78,9 @@ pass() { echo "[PASS] $1"; }
 psql_admin() { # 管理操作（docker exec 或本地 psql）
   local sql="$1"
   if [ -n "$OV_PLATFORM_PG_TOOLS" ]; then
-    $OV_PLATFORM_PG_TOOLS env PGPASSWORD="$admin_pass" psql -U "$admin_user" -d postgres -At "$sql" 2>/dev/null || true
+    $OV_PLATFORM_PG_TOOLS env PGPASSWORD="$admin_pass" psql -U "$admin_user" -d postgres -At -c "$sql" 2>/dev/null || true
   else
-    PGPASSWORD="$admin_pass" psql "$tools_admin" -At "$sql" 2>/dev/null || true
+    PGPASSWORD="$admin_pass" psql "$tools_admin" -At -c "$sql" 2>/dev/null || true
   fi
 }
 
@@ -91,7 +98,7 @@ from alembic.config import Config
 cfg = Config('$REPO_ROOT/openviking/server/platform/alembic.ini')
 cfg.set_main_option('sqlalchemy.url', '$url')
 command.upgrade(cfg, 'head')
-" 2>/dev/null || fail "migrate $name"
+" || fail "migrate $name"
   OV_PLATFORM_DATABASE_URL="$url" OV_PLATFORM_INIT_PSA_EMAIL="psa@drill.local" \
     OV_PLATFORM_INIT_PSA_USERNAME="psa" OV_PLATFORM_INIT_PSA_PASSWORD="Drill-PSA-2026-Dev!" \
     PYTHONPATH="$REPO_ROOT" "$PY" -m openviking.server.platform.bootstrap_cli init >/dev/null 2>&1 \
@@ -107,7 +114,7 @@ case "$cmd" in
     step "0 预检与演练库重建"
     command -v gpg >/dev/null || fail "gpg missing"
     rebuild_db "$db" "$drill_url"
-    pass "演练库 $db 就绪（迁移 head + PSA）"
+    pass "演练库 ${db} 就绪（迁移 head + PSA）"
 
     step "1 业务数据准备（Account/Admin/User/Key/Session/refs/failed outbox）"
     (cd "$workdir" && OV_PLATFORM_DATABASE_URL="$drill_url" \
@@ -132,7 +139,7 @@ case "$cmd" in
     pg_enc="$(ls "$workdir/backups/"ov_platform_*.dump.gz.gpg | head -1)"
     vol_enc="$(ls "$workdir/backups/"ov_volume_*.tar.gz.gpg | head -1)"
     "$BIN" verify "$pg_enc" >/dev/null || fail "verify backup"
-    pass "PG 备份 $(basename "$pg_enc") + 数据卷备份 $(basename "$vol_enc")（加密、可校验）"
+    pass "PG 备份 $(basename "${pg_enc}") + 数据卷备份 $(basename "${vol_enc}")（加密、可校验）"
 
     step "4 故障注入（删用户/清审计/清业务引用/坏 outbox + 数据卷文件删除）"
     OV_PLATFORM_DATABASE_URL="$drill_url" PYTHONPATH="$REPO_ROOT" "$PY" "$DRILL_LIB" fault-inject "$drill_url" >/dev/null \
@@ -183,8 +190,8 @@ command.downgrade(cfg, '-1')
 command.upgrade(cfg, 'head')
 " 2>/dev/null || fail "migration down/up"
     after="$(OV_PLATFORM_DATABASE_URL="$drill_url" PYTHONPATH="$REPO_ROOT" "$PY" "$DRILL_LIB" snapshot "$drill_url" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["iam_users"])')"
-    [ "$before" = "$after" ] || fail "downgrade/upgrade 后用户数据丢失: $before -> $after"
-    pass "down migration 可验证：downgrade -1 → upgrade head 后 iam_users 计数不变（$before）"
+    [ "${before}" = "${after}" ] || fail "downgrade/upgrade 后用户数据丢失: ${before} -> ${after}"
+    pass "down migration 可验证：downgrade -1 → upgrade head 后 iam_users 计数不变 (${before})"
 
     step "3 回滚版本标记（镜像 tag 切回上次良好版本 v0.4.12）"
     echo "{\"version\":\"v0.4.12\",\"image\":\"registry.example/ovp-product-server:v0.4.12\",\"rolled_back_at\":\"$ts\"}" > "$workdir/deploy-list.json"
@@ -193,7 +200,8 @@ command.upgrade(cfg, 'head')
     step "4 回滚后仍以 PG IAM 鉴权（登录/Session/API Key 全从 PG 解析，不回退旧 registry）"
     (cd "$workdir" && OV_PLATFORM_DATABASE_URL="$drill_url" PYTHONPATH="$REPO_ROOT" "$PY" "$DRILL_LIB" \
       verify "$drill_url" --session-raw "$session_raw" --alice-key "$alice_key" \
-      --failed-account-id "$failed_id" -o verify-report.json) || fail "pg iam after rollback"
+      --failed-account-id "$failed_id" --skip-restore-audit -o verify-report.json) \
+      || fail "pg iam after rollback"
     pass "PG IAM 鉴权在版本回滚后仍生效（verify-report.json）"
 
     echo "{\"drill\":\"rollback\",\"result\":\"PASS\",\"time\":\"$ts\",\"db\":\"$db\"}" > "$workdir/report.json"
@@ -201,15 +209,16 @@ command.upgrade(cfg, 'head')
     ;;
 
   standalone)
-    [ -n "$backup_file" ] && [ -f "$backup_file" ] || fail "need --backup <file>（先用 full 产出备份）"
-    step "0 独立实例（独立库 $target_db）恢复备份"
+    [ -n "${backup_file}" ] && [ -f "${backup_file}" ] || fail "need --backup <file>（先用 full 产出备份）"
+    step "0 独立实例（独立库 ${target_db}）恢复备份"
     rebuild_db "$target_db" "$target_url"
-    export OV_PLATFORM_DATABASE_URL="$target_tools" OV_PLATFORM_BACKUP_AUDIT_LOG="$workdir/audit/ops-audit.log"
+    export OV_PLATFORM_DATABASE_URL="${target_tools}" OV_PLATFORM_BACKUP_AUDIT_LOG="${workdir}/audit/ops-audit.log" \
+      OV_PLATFORM_BACKUP_AUDIT_DB_URL="${target_tools}"
     "$BIN" restore "$backup_file" >/dev/null || fail "restore to standalone"
-    pass "备份已恢复到独立实例（$target_db）；主实例未触碰"
+    pass "备份已恢复到独立实例 (${target_db})；主实例未触碰"
 
     step "1 独立实例数据校验（与备份时快照一致）"
-    [ -f "$workdir/snapshot.json" ] || fail "缺少 full 演练的 snapshot.json（先在相同 workdir 运行 full）"
+    [ -f "${workdir}/snapshot.json" ] || fail "缺少 full 演练的 snapshot.json（先在相同 workdir 运行 full）"
     (cd "$workdir" && OV_PLATFORM_DATABASE_URL="$target_url" PYTHONPATH="$REPO_ROOT" "$PY" "$DRILL_LIB" \
       snapshot "$target_url" -o standalone-snapshot.json >/dev/null) || fail "snapshot standalone"
     "$PY" -c "
@@ -232,7 +241,7 @@ raise SystemExit(1 if bad else 0)
 
     step "3 主实例未受影响（计数与快照一致）"
     main_now="$(OV_PLATFORM_DATABASE_URL="$drill_url" PYTHONPATH="$REPO_ROOT" "$PY" "$DRILL_LIB" snapshot "$drill_url" | "$PY" -c 'import json,sys; d=json.load(sys.stdin); print("iam_users=%s audit=%s" % (d["iam_users"], d["iam_audit_events"]))')"
-    echo "主实例（$db）当前 $main_now"
+    echo "主实例 (${db}) 当前 ${main_now}"
     pass "主实例保持演练前状态（独立实例验证后才允许切流量/执行不可逆变更）"
 
     echo "{\"drill\":\"standalone\",\"result\":\"PASS\",\"time\":\"$ts\",\"target_db\":\"$target_db\",\"backup\":\"$(basename "$backup_file")\"}" > "$workdir/report.json"

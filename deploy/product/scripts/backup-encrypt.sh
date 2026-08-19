@@ -89,9 +89,9 @@ audit_db() { # audit_db <action> <result> <target> <detail>
   user="${adsn%%:*}"; pass="$(echo "${adsn#*:}" | sed -E 's/^([^@]*)@.*/\1/')"; db="${adsn##*/}"
   PGPASSWORD="$pass" pg psql -h "$host" -p "$port" -U "$user" -d "$db" \
     -v ON_ERROR_STOP=1 -qAt -c "INSERT INTO iam_audit_events (
-      actor_type, actor_system_component, action, target_type, target_id,
+      id, actor_type, actor_system_component, action, target_type, target_id,
       scope, result, metadata) VALUES (
-      'system', 'backup-ops', '$action', 'postgres', '$target',
+      gen_random_uuid(), 'system', 'backup-ops', '$action', 'postgres', '$target',
       'platform', '$result',
       jsonb_build_object('operator', '$who', 'backup_file', '$detail'))" >/dev/null 2>&1 || return 0
 }

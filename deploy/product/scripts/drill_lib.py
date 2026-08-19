@@ -354,8 +354,12 @@ async def verify_restore(
     alice_password: str = DRILL_PASSWORD,
     retry_failed_account_id: str | None = None,
     psa_email: str = "psa@drill.local",
+    require_restore_audit: bool = True,
 ) -> dict:
     """恢复后一致性校验（验收②⑤⑥）。返回 {ok, checks: [...]}。
+
+    require_restore_audit=False 用于非恢复型演练（版本回滚 Drill B：
+    无备份/恢复动作，不要求 backup.restore 审计）。
 
     - 登录：alice 密码登录成功（Password 侧）；Session/API Key 解析成功；
     - 审计连续性：恢复前快照计数内的审计存在，且新增 backup.restore 审计；
@@ -423,8 +427,9 @@ async def verify_restore(
             before_audit = (before or {}).get("iam_audit_events", 0)
             check("audit_continuity", n_audit >= before_audit,
                   f"audit={n_audit} before={before_audit}")
-            check("restore_audited", n_restore_audits >= 1,
-                  "iam_audit_events 含 backup.restore 记录（恢复操作有审计）")
+            if require_restore_audit:
+                check("restore_audited", n_restore_audits >= 1,
+                      "iam_audit_events 含 backup.restore 记录（恢复操作有审计）")
 
             # ⑤ 业务数据一致 + 无重复
             counts = await _counts(session, SNAPSHOT_TABLES)
@@ -526,6 +531,8 @@ async def _main(argv: list[str]) -> int:
     parser.add_argument("--alice-key", default=None)
     parser.add_argument("--failed-account-id", default=None)
     parser.add_argument("--snapshot", default=None, help="verify 时对照的 snapshot json")
+    parser.add_argument("--skip-restore-audit", action="store_true",
+                        help="非恢复型演练（版本回滚）不要求 backup.restore 审计")
     parser.add_argument("-o", "--output", default=None)
     args = parser.parse_args(argv)
 
@@ -533,7 +540,10 @@ async def _main(argv: list[str]) -> int:
         data = await prepare_business_data(
             args.url, psa_email=args.psa_email, psa_password=args.psa_password
         )
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+        out = json.dumps(data, ensure_ascii=False, indent=2)
+        if args.output:
+            Path(args.output).write_text(out)
+        print(out)
     elif args.command == "snapshot":
         counts = await snapshot_counts(args.url)
         out = json.dumps(counts, ensure_ascii=False, indent=2)
@@ -551,6 +561,7 @@ async def _main(argv: list[str]) -> int:
             session_raw=args.session_raw,
             alice_key=args.alice_key,
             retry_failed_account_id=args.failed_account_id,
+            require_restore_audit=not args.skip_restore_audit,
         )
         out = json.dumps(report, ensure_ascii=False, indent=2)
         if args.output:

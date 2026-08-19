@@ -229,3 +229,4 @@ tests/integration/.tmp_*/
 
 # all node_modules folders
 node_modules/
+drill-results/
