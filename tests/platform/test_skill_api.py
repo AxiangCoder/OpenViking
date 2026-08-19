@@ -7,8 +7,8 @@
 - ④ 软删立即释放名称、恢复同名冲突保持删除状态不改名不覆盖；
 - ⑦ 普通 User 不能发布、Account Admin 可发布任意成员私有 Skill 但不能
   编辑/删除/恢复他人私有 Skill、PSA 全 Skill 只读（含平台只读路由）；
-- 上传消费 upload_id（10 §61.5，P2-E3 `me/resource-uploads` 契约，
-  联合验证待 W7 收口）；ZIP 安全校验（10 §54.2）。
+- 上传消费 upload_id（10 §61.5，P2-E3 `me/resource-uploads` 契约；
+  端到端 HTTP 链路见 test_skill_upload.py）；ZIP 安全校验（10 §54.2）。
 """
 
 from __future__ import annotations
@@ -96,11 +96,18 @@ def _make_zip(name: str, *, with_aux: bool = True, bad_member: str | None = None
 async def _register_upload(
     platform_app, session: AsyncSession, *, account_id, actor_user_id, visibility, data: bytes, kind: str
 ) -> uuid.UUID:
-    """直建 upload 记录（P2-E3 交付前模拟 `me/resource-uploads` 产物）+ 注册字节。"""
-    service = platform_app.state.iam_skill_service
-    storage_ref = f"temp://uploads/{uuid.uuid4()}"
-    service._packages.store_upload(storage_ref, data, kind=kind)
-    registry = ContentRegistryService()
+    """按 P2-E3 `me/resource-uploads` 语义注册 upload 记录（04 §10.14）：
+
+    `build_blob` 服务端检测（大小/Magic/MIME/扩展名）→ 受控临时上传存储 →
+    registry.create_upload（object_type=resource，与 E3 端点一致）。
+    """
+    from openviking.server.platform.resource.storage import build_blob
+
+    filename = "skill.zip" if kind == "zip" else "SKILL.md"
+    declared_mime = "application/zip" if kind == "zip" else "text/markdown"
+    blob = build_blob(filename=filename, data=data, declared_mime=declared_mime)
+    await platform_app.state.iam_resource_uploads.put(blob)
+    registry = ContentRegistryService(RegistryRepository())
     upload = await registry.create_upload(
         session,
         account_id=account_id,
@@ -108,9 +115,11 @@ async def _register_upload(
         target_visibility=visibility,
         owner_user_id=actor_user_id if visibility == "user_private" else None,
         object_type="resource",
-        storage_ref=storage_ref,
-        original_filename="skill.zip" if kind == "zip" else "SKILL.md",
-        mime_type="application/zip" if kind == "zip" else "text/markdown",
+        storage_ref=blob.storage_ref,
+        original_filename=blob.original_filename,
+        mime_type=blob.mime_type,
+        size_bytes=blob.size_bytes,
+        content_hash=blob.content_hash,
     )
     await session.commit()
     return upload.id

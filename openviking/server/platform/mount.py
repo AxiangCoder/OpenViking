@@ -53,7 +53,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         FakeSkillContentAdapter,
         FakeSkillMigrationAdapter,
     )
-    from openviking.server.platform.skills.packages import FakeSkillPackageAdapter
+    from openviking.server.platform.skills.packages import TempUploadStorePackageAdapter
     from openviking.server.platform.skills.service import SkillService
 
     repo = PostgresIamRepository()
@@ -66,12 +66,18 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     aggregates = AggregateService(registry_store)
     registry_service = ContentRegistryService(registry_store, ProvisioningRepository())
     facade = _build_facade(rbac, registry_service, registry_store, repo, config)
+
+    # P2-E4 收尾：Skill 包消费复用 P2-E3 受控临时上传存储（10 §61.5，
+    # me/resource-uploads 链路），Resource 与 Skill 共享同一 store。
+    from openviking.server.platform.resource.storage import MemoryTempUploadStore
+
+    uploads = MemoryTempUploadStore()
     content = FakeSkillContentAdapter()
     skills = SkillService(
         iam=repo,
         store=registry_store,
         deletion=deletion,
-        packages=FakeSkillPackageAdapter(),
+        packages=TempUploadStorePackageAdapter(uploads),
         content=content,
         migration=FakeSkillMigrationAdapter(content=content),
         configs=FakeSkillConfigsAdapter(),
@@ -99,7 +105,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.iam_session_backend = session_backend
     app.state.iam_search_engine = search_engine
     app.state.platform_config = platform_config
-    _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion)
+    _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion, uploads)
 
     # P2-E6b：MCP OAuth PostgreSQL 存储（04 §10.13）。dev 态挂载后，
     # 产品 OAuth 端点使用 PG 存储；SDK 协议端点换存由 app.py 在
@@ -140,8 +146,14 @@ def _build_facade(rbac, registry_service, registry_store, repo, config):
     )
 
 
-def _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion) -> None:
-    """P2-E3：Resource 服务装配（app.state 注入 + Purge 处理器注册）。"""
+def _mount_resource_services(
+    app, repo, registry_store, registry_service, facade, deletion, uploads=None
+) -> None:
+    """P2-E3：Resource 服务装配（app.state 注入 + Purge 处理器注册）。
+
+    `uploads`：受控临时上传存储（04 §10.14）；缺省自建，Skill 装配
+    （mount_platform_routers）传入共享实例以打通 10 §61.5 复用链路。
+    """
     from openviking.server.platform.config import platform_config
     from openviking.server.platform.resource.execution import FakeResourceExecutionPlane
     from openviking.server.platform.resource.purge import ResourcePurgeHandler
@@ -149,7 +161,7 @@ def _mount_resource_services(app, repo, registry_store, registry_service, facade
     from openviking.server.platform.resource.storage import MemoryTempUploadStore
 
     execution = FakeResourceExecutionPlane()
-    uploads = MemoryTempUploadStore()
+    uploads = uploads or MemoryTempUploadStore()
     resource_service = ResourceService(
         facade=facade,
         registry=registry_service,

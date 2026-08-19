@@ -41,10 +41,30 @@ EXECUTABLE_EXTENSIONS = frozenset(
     {".exe", ".msi", ".dll", ".so", ".dylib", ".bin", ".sh", ".bat", ".cmd", ".com", ".app", ".dmg", ".pkg", ".pyc", ".apk", ".jar"}
 )
 
-# v0.1 产品上传默认不接受归档包（09 §47.3）
+# v0.1 产品上传默认不接受归档包（09 §47.3）。
+#
+# 说明（P2-E4 收尾，10 §61.5）：`me/resource-uploads`/`account/resource-uploads`
+# 是 Resource 与 Skill 共用的受控暂存入口——Skill 的 ZIP 包必须能经该入口
+# 暂存（不新增 skill-uploads 端点）。因此暂存阶段放行 `.zip`（Skill 包唯一
+# 需要的归档格式），Resource 导入/替换在消费侧按 `is_archive_filename`
+# 拒绝全部归档（含 `.zip`），保持 09 §47.3 的 Resource 语义不变。
 BLOCKED_UPLOAD_EXTENSIONS = frozenset(
+    {".tar", ".tgz", ".gz", ".bz2", ".xz", ".rar", ".7z", ".tar.gz"}
+)
+
+# Resource 消费侧拒绝的归档扩展名（09 §47.3；含 .zip，覆盖暂存放行后
+# 被 Resource 入口消费的情形）
+RESOURCE_BLOCKED_ARCHIVE_EXTENSIONS = frozenset(
     {".zip", ".tar", ".tgz", ".gz", ".bz2", ".xz", ".rar", ".7z", ".tar.gz"}
 )
+
+
+def is_archive_filename(name: str) -> bool:
+    """文件名是否为 Resource 消费侧拒绝的归档（09 §47.3）。"""
+    dot = (name or "").lower().rfind(".")
+    if dot <= 0:
+        return False
+    return (name or "").lower()[dot:] in RESOURCE_BLOCKED_ARCHIVE_EXTENSIONS
 
 
 @dataclass(frozen=True)

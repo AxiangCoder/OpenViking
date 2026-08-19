@@ -63,7 +63,11 @@ from openviking.server.platform.resource.nodes import (
     safe_download_filename,
 )
 from openviking.server.platform.resource.repository import ResourceRepository
-from openviking.server.platform.resource.security import RemoteSourcePolicy, is_executable_extension
+from openviking.server.platform.resource.security import (
+    RemoteSourcePolicy,
+    is_archive_filename,
+    is_executable_extension,
+)
 from openviking.server.platform.resource.storage import (
     MemoryTempUploadStore,
     TempUploadStore,
@@ -653,6 +657,7 @@ class ResourceService:
             blob = await self._uploads.get(upload.storage_ref)
             if blob is None:
                 raise ResourceError("RESOURCE_UPLOAD_EXPIRED", retryable=True)
+            self._reject_archive_blob(blob)
             source["source_display"] = blob.original_filename
             source["blob"] = blob
             ref.source_display = blob.original_filename
@@ -1631,6 +1636,7 @@ class ResourceService:
             blob = await self._uploads.get(consumed.storage_ref)
             if blob is None:
                 raise ResourceError("RESOURCE_UPLOAD_EXPIRED", retryable=True)
+            self._reject_archive_blob(blob)
         if retry and upload_id is None and ref.source_type == "upload":
             raise ResourceError("RESOURCE_SOURCE_UNSUPPORTED")
         if source_url is not None:
@@ -1660,6 +1666,13 @@ class ResourceService:
             batch_id=None,
         )
         return operation, blob
+
+    def _reject_archive_blob(self, blob: UploadedBlob) -> None:
+        """Resource 消费侧归档拒绝（09 §47.3）：`me/resource-uploads` 暂存
+        放行 `.zip`（10 §61.5 Skill 包复用同一暂存入口），但 Resource
+        导入/替换不接受任何归档包。"""
+        if is_archive_filename(blob.original_filename):
+            raise ResourceError("RESOURCE_FORMAT_UNSUPPORTED")
 
     async def _consume_upload(
         self, session: AsyncSession, *, principal, scope: ResourceScope, upload_id: uuid.UUID

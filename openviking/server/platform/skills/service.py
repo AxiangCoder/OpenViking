@@ -4,8 +4,8 @@
 
 - 私有/共享列表与详情（10 §61.1/§61.2）；
 - 在线创建（10 §54.1）与 SKILL.md/ZIP 上传（10 §54.2/§61.5：消费
-  `me/resource-uploads`/`account/resource-uploads` upload_id，不新增
-  skill-uploads 端点，P2-E3 交付后联合验证）；
+  `me/resource-uploads`/`account/resource-uploads` upload_id，经 P2-E3
+  受控临时上传存储取包解析，不新增 skill-uploads 端点）；
 - 整体更新 PUT（name 不可变，JSON 与 ZIP 均拒，10 §55.2，AC②）；
 - Account 范围名称唯一（覆盖全部私有+共享未删除，冲突不泄露占用者，AC①③）；
 - 软删立即释放名称、恢复唯一性复查冲突 `SKILL_NAME_CONFLICT`（10 §55.3，AC④）；
@@ -59,6 +59,7 @@ from openviking.server.platform.skills.control_plane import (
 from openviking.server.platform.skills.packages import (
     ParsedSkill,
     SkillPackageAdapter,
+    parse_skill_bytes,
     parse_skill_md_text,
 )
 
@@ -248,12 +249,20 @@ class SkillService:
         if ref.status == "active":
             return ref
         operation = await self._create_import_operation(session, actor, ref)
-        parsed = await self._consume_and_parse_upload(
-            session, actor=actor, upload_id=upload_id, visibility=visibility,
-            operation_id=operation.id,
-        )
+        try:
+            parsed = await self._consume_and_parse_upload(
+                session, actor=actor, upload_id=upload_id, visibility=visibility,
+                operation_id=operation.id,
+            )
+        except Exception as exc:
+            # 10 §61.5：包校验失败不占用名称——Operation 失败终态 + 释放
+            # provisioning 引用（格式错误重传时同名可再次创建）。
+            await self._release_failed_import(session, operation.id, ref, exc)
+            raise
         if parsed.name != ref.canonical_name:
-            await self._fail_import(session, operation.id, ref.id, SkillInvalidFormatError("PACKAGE_NAME_MISMATCH"))
+            await self._release_failed_import(
+                session, operation.id, ref, SkillInvalidFormatError("PACKAGE_NAME_MISMATCH")
+            )
             raise SkillInvalidFormatError("PACKAGE_NAME_MISMATCH")
         source_type = SKILL_SOURCE_ZIP if parsed.auxiliary_files else SKILL_SOURCE_SKILL_MD
         ref.source_type = source_type
@@ -324,20 +333,33 @@ class SkillService:
         request_id: str | None = None,
     ) -> PlatformContentRef:
         """ZIP 整体替换（10 §56.2）：新包 `name` 必须等于当前名称，否则
-        `SKILL_NAME_IMMUTABLE`（AC②）。"""
+        `SKILL_NAME_IMMUTABLE`（AC②）。
+
+        单 Operation 贯穿 消费→解析→替换 全流程（04 §10.12 状态机一致性）：
+        名称不一致在失败终态后抛出，不遗留 pending Operation。
+        """
         visibility = ref.visibility
         operation = await self._create_import_operation(session, actor, ref)
-        parsed = await self._consume_and_parse_upload(
-            session, actor=actor, upload_id=upload_id, visibility=visibility,
-            operation_id=operation.id,
-        )
+        try:
+            parsed = await self._consume_and_parse_upload(
+                session, actor=actor, upload_id=upload_id, visibility=visibility,
+                operation_id=operation.id,
+            )
+        except Exception as exc:
+            await self._fail_import(session, operation.id, ref.id, exc)
+            raise
         if parsed.name != ref.canonical_name:
+            # 10 §55.2：新包 name 必须等于当前名称（AC②）；上传已被原子消费，
+            # Operation 以失败终态收口（SKILL_NAME_IMMUTABLE），对象不变。
+            await self._registry.finish_operation(
+                session, operation.id, status="failed", error_code="SKILL_NAME_IMMUTABLE",
+                error_summary="package name does not match", retryable=False,
+            )
             raise SkillNameImmutableError()
         ref.description = parsed.description
         ref.tags = parsed.tags
         ref.source_type = SKILL_SOURCE_ZIP if parsed.auxiliary_files else SKILL_SOURCE_SKILL_MD
         ref.updated_by_actor_user_id = actor.actor_user_id
-        operation = await self._create_import_operation(session, actor, ref)
         try:
             await self._content.replace(
                 uri=ref.ov_uri, skill_md=parsed.to_skill_md(), auxiliary_files=parsed.auxiliary_files
@@ -781,11 +803,13 @@ class SkillService:
         operation_id: uuid.UUID,
     ) -> ParsedSkill:
         """消费 upload_id（10 §61.5，04 §10.14）：绑定 Actor/Account/目标入口
-        的 `ready → consumed` 原子消费后取包解析。
+        的 `ready → consumed` 原子消费后，经 P2-E3 临时上传存储取回字节并
+        解析（`TempUploadStorePackageAdapter`）。
 
-        object_type 传 `resource`（04 §10.14 v0.1 upload 由
-        `me/resource-uploads`/`account/resource-uploads` 生成，P2-E3 交付；
-        消费契约按 10 §61.5 实现，待 P2-E3 联合验证）。"""
+        object_type 传 `resource`（04 §10.14 v0.1：`me/resource-uploads`/
+        `account/resource-uploads` 生成的 Upload 记录统一标记 `resource`，
+        Skill 复用同一暂存基础设施，"必须独立校验"由消费侧 Scope 检查
+        （Account/Visibility/Actor）与包级安全校验承载）。"""
         upload = await self._registry.consume_upload(
             session,
             upload_id=upload_id,
@@ -795,7 +819,9 @@ class SkillService:
             object_type=UPLOAD_OBJECT_TYPE_RESOURCE,
             operation_id=operation_id,
         )
-        return self._packages.parse(upload.storage_ref)
+        data = await self._packages.fetch(upload.storage_ref)
+        kind = await self._packages.upload_kind(upload.storage_ref)
+        return parse_skill_bytes(kind, data)
 
     async def _create_import_operation(
         self, session: AsyncSession, actor, ref: PlatformContentRef
@@ -826,6 +852,28 @@ class SkillService:
         )
         try:
             await self._registry.fail(session, ref_id)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _release_failed_import(
+        self, session: AsyncSession, operation_id: uuid.UUID, ref: PlatformContentRef, exc: Exception
+    ) -> None:
+        """包校验失败收口（10 §61.5：校验失败不占用名称）。
+
+        Operation 以失败终态结束；provisioning 引用被删除，名称立即释放，
+        重传合法包可再次创建同名 Skill（不再残留 pending/failed 状态）。
+        """
+        await self._registry.finish_operation(
+            session,
+            operation_id,
+            status="failed",
+            error_code="SKILL_IMPORT_FAILED",
+            error_summary=sanitize_error(exc),
+            retryable=False,
+        )
+        try:
+            await session.delete(ref)
+            await session.flush()
         except Exception:  # noqa: BLE001
             pass
 

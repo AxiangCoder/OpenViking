@@ -227,10 +227,28 @@ async def test_upload_size_and_format_limits(session: AsyncSession, platform_cli
     assert r.status_code == 413, r.text
     assert r.json()["detail"]["code"] == "RESOURCE_FILE_TOO_LARGE"
 
-    # 归档包被拒（09 §47.3）→ 415 RESOURCE_FORMAT_UNSUPPORTED
+    # 归档包在 Resource 消费侧拒绝（09 §47.3）：
+    # 暂存入口与 Skill 共用（10 §61.5），`.zip` 可暂存，但 Resource
+    # 导入消费时拒绝 → 单项 error RESOURCE_FORMAT_UNSUPPORTED
     r = await platform_client.post(
         f"{BASE_ME}/resource-uploads",
         files={"file": ("archive.zip", b"PK\x03\x04fakezip", "application/zip")},
+        headers=_csrf(alice_csrf),
+    )
+    assert r.status_code == 200, r.text
+    upload_id = r.json()["result"]["upload_id"]
+    r = await platform_client.post(
+        f"{BASE_ME}/resources/imports",
+        json={"items": [{"upload_id": upload_id}]},
+        headers=_csrf(alice_csrf),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["result"]["items"][0]["error"]["code"] == "RESOURCE_FORMAT_UNSUPPORTED"
+
+    # 其他归档扩展名暂存即拒（Skill 仅需要 .zip）→ 415 RESOURCE_FORMAT_UNSUPPORTED
+    r = await platform_client.post(
+        f"{BASE_ME}/resource-uploads",
+        files={"file": ("bundle.tar.gz", b"\x1f\x8btar", "application/gzip")},
         headers=_csrf(alice_csrf),
     )
     assert r.status_code == 415, r.text
