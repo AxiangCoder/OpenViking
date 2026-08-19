@@ -39,7 +39,15 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         me_router,
         platform_router,
         resources_router,
+        skills_router,
     )
+    from openviking.server.platform.skills.configs import FakeSkillConfigsAdapter
+    from openviking.server.platform.skills.control_plane import (
+        FakeSkillContentAdapter,
+        FakeSkillMigrationAdapter,
+    )
+    from openviking.server.platform.skills.packages import FakeSkillPackageAdapter
+    from openviking.server.platform.skills.service import SkillService
 
     repo = PostgresIamRepository()
     rbac = RbacService(repo)
@@ -51,6 +59,16 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     aggregates = AggregateService(registry_store)
     registry_service = ContentRegistryService(registry_store, ProvisioningRepository())
     facade = _build_facade(rbac, registry_service, registry_store, repo, config)
+    content = FakeSkillContentAdapter()
+    skills = SkillService(
+        iam=repo,
+        store=registry_store,
+        deletion=deletion,
+        packages=FakeSkillPackageAdapter(),
+        content=content,
+        migration=FakeSkillMigrationAdapter(content=content),
+        configs=FakeSkillConfigsAdapter(),
+    )
 
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
@@ -62,6 +80,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.iam_facade_service = facade
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_skill_service = skills
     app.state.platform_config = platform_config
     _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion)
 
@@ -70,6 +89,7 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.include_router(admin_router)
     app.include_router(platform_router)
     app.include_router(resources_router)
+    app.include_router(skills_router)
 
 
 def _build_facade(rbac, registry_service, registry_store, repo, config):

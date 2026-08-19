@@ -38,8 +38,9 @@ from openviking.server.platform.registry.repository import (
     RegistryRepository,
 )
 
-# 05 §12.6 注：类型化恢复权限映射（v0.1 交付 user/account，其余 E3–E5 扩展）
-# resource_type → (scope, permission_code, 说明)
+# 05 §12.6 注：类型化恢复权限映射（v0.1 交付 user/account；skill 分支在
+# `_restore_permission_for_async` 按引用可见性动态判定——共享归 Account Admin、
+# 自己私有归属主本人、他人私有与 PSA 一律不允许）
 RESTORE_PERMISSION_MAP: dict[str, tuple[str, str, str]] = {
     "user": ("account", "user.delete", "Account Admin（本 Account）"),
     "account": ("platform", "account.delete", "仅 Platform Super Admin"),
@@ -340,11 +341,11 @@ class DeletionService:
             if account_id is None:
                 raise EntityNotFoundError("account scope required")
             jobs = await self._store.list_deletion_jobs(
-                session, account_id=account_id, resource_types=("user",), limit=limit
+                session, account_id=account_id, resource_types=("user", "skill"), limit=limit
             )
         else:
             jobs = await self._store.list_deletion_jobs(
-                session, account_id=account_id, resource_types=("account",), limit=limit
+                session, account_id=account_id, resource_types=("account", "skill"), limit=limit
             )
         rows = []
         for job in jobs:
@@ -394,6 +395,27 @@ class DeletionService:
             raise AdminActionForbiddenError("PERMISSION_NOT_GRANTED")
         assert permission is not None
 
+        skill_ref = None
+        if job.resource_type == "skill":
+            skill_ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+            if skill_ref is None or skill_ref.account_id != job.account_id:
+                raise DeletionJobError("NOT_RESTORABLE")
+            # 10 §55.3：恢复前重新检查同 Account 未删除 Skill 名称唯一；
+            # 已被重新占用 → SKILL_NAME_CONFLICT，保持删除状态不改名不覆盖（AC④）
+            holder = await self._store.find_skill_by_canonical_name(
+                session, skill_ref.account_id, skill_ref.canonical_name
+            )
+            if holder is not None and holder.id != skill_ref.id:
+                raise DeletionJobError("SKILL_NAME_CONFLICT")
+            # 软删时原 URI 已改写为 tombstone（10 §55.3 释放名称/URI）；
+            # 恢复从 job 还原原 URI，并复查 URI 未被他人占用（防同一 URI 双主）
+            if job.ov_uri:
+                holder_uri = await self._store.get_ref_by_uri(
+                    session, skill_ref.account_id, job.ov_uri
+                )
+                if holder_uri is not None and holder_uri.id != skill_ref.id:
+                    raise DeletionJobError("SKILL_NAME_CONFLICT")
+
         now = datetime.now(timezone.utc)
         job.status = JOB_RESTORED
         job.restored_by = principal.actor_user_id
@@ -406,6 +428,13 @@ class DeletionService:
             await self._store.restore_account(session, uuid.UUID(job.resource_id))
         elif job.resource_type == "resource":
             await self._restore_content_ref(session, job)
+        elif job.resource_type == "skill":
+            assert skill_ref is not None
+            skill_ref.status = "active"
+            skill_ref.deleted_at = None
+            if job.ov_uri:
+                skill_ref.ov_uri = job.ov_uri
+            await self._store.update_ref(session, skill_ref)
         else:
             raise DeletionJobError("NOT_RESTORABLE")
 
@@ -419,7 +448,11 @@ class DeletionService:
             actor_session_id=principal.session_id,
             authentication_method=principal.authentication_method,
             subject_account_id=job.account_id,
-            subject_user_id=uuid.UUID(job.resource_id) if job.resource_type == "user" else None,
+            subject_user_id=(
+                uuid.UUID(job.resource_id)
+                if job.resource_type == "user"
+                else (skill_ref.owner_user_id if skill_ref is not None else None)
+            ),
             action=f"{job.resource_type}.restore",
             target_type=job.resource_type,
             target_id=job.resource_id,
@@ -440,7 +473,32 @@ class DeletionService:
     async def _restore_permission_for_async(
         self, session: AsyncSession, scope: str, resource_type: str, principal, job=None
     ) -> tuple[bool, str | None]:
-        """05 §12.6 注：类型化恢复权限（Resource 按可见性分支，05 §12.6 恢复表）。"""
+        """05 §12.6 注：类型化恢复权限（Resource 按可见性分支，05 §12.6 恢复表）。
+
+        Skill 分支按引用可见性动态判定：Account 共享 → Account Admin
+        `skill.account_shared.manage.account`；自己的私有 → 属主本人
+        `skill.user_private.manage.self`；他人私有与 PSA（platform scope）
+        一律不允许恢复。
+        """
+        if resource_type == "skill":
+            if scope == "platform":
+                # PSA 对 Skill 始终只读（05 §12.6 注）
+                return False, None
+            ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+            if ref is None:
+                return False, None
+            if ref.visibility == "account_shared":
+                if scope == "account" and "skill.account_shared.manage.account" in principal.permissions:
+                    return True, "skill.account_shared.manage.account"
+                return False, None
+            if ref.visibility == "user_private":
+                if (
+                    ref.owner_user_id == principal.actor_user_id
+                    and "skill.user_private.manage.self" in principal.permissions
+                ):
+                    return True, "skill.user_private.manage.self"
+                return False, None
+            return False, None
         if resource_type == "resource" and job is not None:
             ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
             if ref is None:
@@ -532,6 +590,11 @@ class DeletionService:
             if ref is None:
                 return None
             return ref.display_name
+        if job.resource_type == "skill":
+            ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+            if ref is None:
+                return None
+            return ref.display_name or ref.canonical_name
         return None
 
     async def _job_visible_to(self, session: AsyncSession, job: IamDeletionJob, principal) -> bool:
