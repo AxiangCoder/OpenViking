@@ -89,9 +89,9 @@ async def session(
     async with session_factory() as s:
         await s.execute(
             text(
-                "TRUNCATE TABLE iam_audit_events, iam_user_roles, iam_role_permissions, "
-                "iam_sessions, iam_roles, iam_api_credentials, iam_users, iam_accounts, "
-                "iam_permissions, iam_permission_schema CASCADE"
+                "TRUNCATE TABLE iam_outbox, iam_audit_events, iam_user_roles, "
+                "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
+                "iam_users, iam_accounts, iam_permissions, iam_permission_schema CASCADE"
             )
         )
         await s.commit()
@@ -161,16 +161,21 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.auth.service import AuthService
     from openviking.server.platform.db import get_session
     from openviking.server.platform.iam import PostgresIamRepository, RbacService
+    from openviking.server.platform.provisioning.control_plane import FakeControlPlane
+    from openviking.server.platform.provisioning.repository import ProvisioningRepository
+    from openviking.server.platform.provisioning.service import ProvisioningService
     from openviking.server.platform.routers import admin_router, auth_router, platform_router
 
     app = FastAPI(title="ovp-platform-test")
     repo = PostgresIamRepository()
     rbac = RbacService(repo)
     auth = AuthService(repo, rbac)
+    provisioning = ProvisioningService(repo, ProvisioningRepository(), FakeControlPlane())
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
-    app.state.iam_admin_service = AdminService(repo, rbac, auth)
+    app.state.iam_admin_service = AdminService(repo, rbac, auth, provisioning=provisioning)
+    app.state.iam_provisioning_service = provisioning
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:

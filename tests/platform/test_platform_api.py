@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openviking.server.platform.iam.permissions import ACCOUNT_ADMIN, USER
 from openviking.server.platform.models import IamAccount, IamRole, IamUser, IamUserRole
-from tests.platform.helpers import build_auth_setup, create_api_key
+from tests.platform.helpers import build_auth_setup, create_api_key, run_provisioning
 
 BASE_AUTH = "/api/platform/v1/auth"
 BASE_PLATFORM = "/api/platform/v1/platform"
@@ -71,6 +71,10 @@ async def test_psa_creates_account_with_first_admin(session: AsyncSession, platf
     result = await _create_account(
         platform_client, csrf, code="acme2", email="admin2@acme2.com", username="admin2"
     )
+    # P2-E1（AC①）：Account+首位 Admin 初始 provisioning + outbox 事件；
+    # ProvisioningWorker 初始化 namespace 后转 active
+    processed, _ = await run_provisioning(session)
+    assert processed == 2
 
     # ov 映射（`==3` 复跑）
     assert result["account"]["ov_account_id"].startswith("ov_account_")
@@ -87,6 +91,7 @@ async def test_psa_creates_account_with_first_admin(session: AsyncSession, platf
         await session.execute(select(IamUser).where(IamUser.email == "admin2@acme2.com"))
     ).scalar_one()
     assert account.status == "active"
+    assert admin.status == "active"
     assert admin.password_hash.startswith("$argon2id$")
     assert initial_password not in admin.password_hash
     assert await _role_code(session, admin.id) == ACCOUNT_ADMIN

@@ -30,6 +30,7 @@ from tests.platform.helpers import (
     create_api_key,
     create_login_session,
     create_user,
+    run_provisioning,
 )
 
 
@@ -214,6 +215,8 @@ async def test_disable_last_account_admin_rejected(session: AsyncSession) -> Non
         admin_email="solo@acme.com",
         admin_username="solo",
     )
+    # P2-E1：ProvisioningWorker 转 active 后最后一名 Admin 守卫方可生效
+    await run_provisioning(session)
     await session.commit()
 
     with pytest.raises(LastAccountAdminError):

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openviking.server.platform.models import IamUser
-from tests.platform.helpers import build_auth_setup, create_api_key
+from tests.platform.helpers import build_auth_setup, create_api_key, run_provisioning
 
 BASE_AUTH = "/api/platform/v1/auth"
 BASE_ADMIN = "/api/platform/v1/admin"
@@ -187,6 +187,8 @@ async def test_reset_cross_account_404(session: AsyncSession, platform_client) -
     beta = await _create_account(
         platform_client, psa_csrf, code="beta", email="badmin@beta.com", username="badmin"
     )
+    # P2-E1：ProvisioningWorker 转 active 后首位 Admin 方可登录
+    await run_provisioning(session)
     beta_admin_id = beta["first_admin"]["id"]
 
     # beta Account Admin 重置 acme 的 alice → 404
@@ -248,6 +250,8 @@ async def test_disable_last_account_admin_409(session: AsyncSession, platform_cl
     solo = await _create_account(
         platform_client, psa_csrf, code="solo", email="solo@acme.com", username="solo"
     )
+    # P2-E1：ProvisioningWorker 转 active 后首位 Admin 方可登录/守卫生效
+    await run_provisioning(session)
     solo_admin_id = solo["first_admin"]["id"]
     solo_csrf = await _login(platform_client, "solo@acme.com", solo["first_admin"]["initial_password"])
 
