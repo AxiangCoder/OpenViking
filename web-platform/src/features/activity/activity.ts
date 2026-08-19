@@ -110,6 +110,24 @@ export async function cancelAdminActivity(operationId: string): Promise<CancelRe
   });
 }
 
+// ── /platform 挂载点（05 §12.6：`task.read.platform`，平台范围任务，P4-E4）──
+
+/** `/platform/activity`：平台范围任务，可按目标 Account 过滤（13 §90）。 */
+export async function fetchPlatformActivity(accountId?: string): Promise<ActivityListResult> {
+  const query = accountId ? `?account_id=${encodeURIComponent(accountId)}` : "";
+  const page = await request<{ items: AdminActivityRow[]; next_cursor: string | null }>(
+    `/api/platform/v1/platform/activity${query}`,
+  );
+  return { items: page.items.map(toActivityItem), next_cursor: page.next_cursor };
+}
+
+/** 取消平台范围任务（`task.cancel.platform` + 目标对象写权限由后端校验；内部任务禁止取消）。 */
+export async function cancelPlatformActivity(operationId: string): Promise<CancelResult> {
+  return request<CancelResult>(`/api/platform/v1/platform/activity/${operationId}/cancel`, {
+    method: "POST",
+  });
+}
+
 /** 任务类型 → 产品文案（09 §43.3：类型稳定，新增类型走兜底）。 */
 const OPERATION_TYPE_LABELS: Record<string, string> = {
   resource_import: "导入 Resource",
