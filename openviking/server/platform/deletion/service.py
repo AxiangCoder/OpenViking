@@ -180,6 +180,10 @@ class DeletionService:
         await self._repo.revoke_all_sessions_for_user(
             session, target_user_id, reason="user_deleted"
         )
+        # P2-E6b（04 §10.13）：进入删除期撤销全部 OAuth Grant/Token。
+        oauth_grants_revoked = await self._repo.revoke_all_oauth_grants_for_user(
+            session, target_user_id, revoked_by=actor.actor_user_id
+        )
         deleted = await self._repo.soft_delete_user(
             session, target_user_id, actor_id=actor.actor_user_id
         )
@@ -211,7 +215,11 @@ class DeletionService:
             target_id=str(target_user_id),
             scope="account",
             result="success",
-            metadata={"deletion_job_id": str(job.id), "purge_after": job.purge_after.isoformat()},
+            metadata={
+                "deletion_job_id": str(job.id),
+                "purge_after": job.purge_after.isoformat(),
+                "oauth_grants_revoked": oauth_grants_revoked,
+            },
         )
         return DeletionJobResult(
             resource_type="user",
@@ -251,6 +259,10 @@ class DeletionService:
             await self._repo.revoke_all_sessions_for_user(
                 session, user.id, reason="account_deleted"
             )
+        # P2-E6b（04 §10.13）：Account 删除期撤销 Account 内全部 OAuth Grant/Token。
+        oauth_grants_revoked = await self._repo.revoke_all_oauth_grants_for_account(
+            session, target_account_id, revoked_by=actor.actor_user_id
+        )
         deleted = await self._repo.soft_delete_account(
             session, target_account_id, actor_id=actor.actor_user_id
         )
@@ -281,7 +293,11 @@ class DeletionService:
             target_id=str(target_account_id),
             scope="platform",
             result="success",
-            metadata={"deletion_job_id": str(job.id), "purge_after": job.purge_after.isoformat()},
+            metadata={
+                "deletion_job_id": str(job.id),
+                "purge_after": job.purge_after.isoformat(),
+                "oauth_grants_revoked": oauth_grants_revoked,
+            },
         )
         return DeletionJobResult(
             resource_type="account",

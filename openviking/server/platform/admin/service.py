@@ -79,12 +79,17 @@ class CreatedUserResult:
 
 @dataclass(frozen=True)
 class UserStatusResult:
-    """启用/禁用结果；changed=False 表示目标已处于目标状态（幂等，不写审计）。"""
+    """启用/禁用结果；changed=False 表示目标已处于目标状态（幂等，不写审计）。
+
+    P2-E6b 扩展：`oauth_grants_revoked` 为禁用时撤销的 OAuth Grant 数
+    （04 §10.13：禁用期撤销全部 Grant/Token，恢复后不自动恢复）。
+    """
 
     user: IamUser
     sessions_revoked: int
     keys_revoked: int
     changed: bool
+    oauth_grants_revoked: int = 0
 
 
 @dataclass(frozen=True)
@@ -393,7 +398,9 @@ class AdminService:
         request_id: str | None,
     ) -> UserStatusResult:
         if target.status == status:
-            return UserStatusResult(user=target, sessions_revoked=0, keys_revoked=0, changed=False)
+            return UserStatusResult(
+                user=target, sessions_revoked=0, keys_revoked=0, changed=False
+            )
         if status == "disabled":
             admin_role = await self._repo.get_role_by_code(session, ACCOUNT_ADMIN)
             if (
@@ -420,11 +427,17 @@ class AdminService:
         await self._repo.bump_permission_version(session, target.id)
         sessions_revoked = 0
         keys_revoked = 0
+        oauth_grants_revoked = 0
         if status == "disabled":
             sessions_revoked = await self._repo.revoke_all_sessions_for_user(
                 session, target.id, reason="user_disabled"
             )
             keys_revoked = await self._repo.revoke_all_api_credentials_for_user(
+                session, target.id, revoked_by=actor.actor_user_id
+            )
+            # P2-E6b（04 §10.13）：禁用期撤销全部 OAuth Grant/Token，
+            # 恢复后不自动恢复；Key 不因 Grant 撤销而受影响。
+            oauth_grants_revoked = await self._repo.revoke_all_oauth_grants_for_user(
                 session, target.id, revoked_by=actor.actor_user_id
             )
         await self._append_admin_audit(
@@ -435,11 +448,19 @@ class AdminService:
             subject_user_id=target.id,
             target_type="iam_users",
             target_id=str(target.id),
-            metadata={"sessions_revoked": sessions_revoked, "keys_revoked": keys_revoked},
+            metadata={
+                "sessions_revoked": sessions_revoked,
+                "keys_revoked": keys_revoked,
+                "oauth_grants_revoked": oauth_grants_revoked,
+            },
             request_id=request_id,
         )
         return UserStatusResult(
-            user=target, sessions_revoked=sessions_revoked, keys_revoked=keys_revoked, changed=True
+            user=target,
+            sessions_revoked=sessions_revoked,
+            keys_revoked=keys_revoked,
+            oauth_grants_revoked=oauth_grants_revoked,
+            changed=True,
         )
 
     # ── 分级密码重置（服务层复用 AuthService，本层补路径归属校验）──
