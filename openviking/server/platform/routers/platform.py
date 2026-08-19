@@ -28,6 +28,7 @@ from openviking.server.platform.admin.service import AdminService, decode_cursor
 from openviking.server.platform.db import get_session
 from openviking.server.platform.dependencies import (
     get_current_principal,
+    require_high_risk_write,
     require_permission,
     verify_csrf,
 )
@@ -166,7 +167,15 @@ async def list_account_users(
 
 @router.post(
     "/accounts/{account_id}/users/{user_id}/password/reset",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("user.password.reset.platform"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="user.password.reset",
+                permission_code="user.password.reset.platform",
+                scope="platform",
+            )
+        )
+    ],
 )
 async def reset_user_password(
     request: Request,
@@ -185,6 +194,8 @@ async def reset_user_password(
             request_id=_request_id(request),
         )
     except PasswordResetForbiddenError as exc:
+        # 服务层已写 denied 审计（06 §14.5），必须在异常路径提交
+        await session.commit()
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": exc.reason}) from exc
     except EntityNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
@@ -249,7 +260,15 @@ async def list_user_api_keys(
 
 @router.delete(
     "/accounts/{account_id}/users/{user_id}/api-keys/{credential_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("credential.revoke.platform"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="credential.revoke",
+                permission_code="credential.revoke.platform",
+                scope="platform",
+            )
+        )
+    ],
 )
 async def revoke_user_api_key(
     request: Request,
@@ -411,7 +430,13 @@ async def account_deletion_preview(
 
 @router.delete(
     "/accounts/{account_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("account.delete"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="account.delete", permission_code="account.delete", scope="platform"
+            )
+        )
+    ],
 )
 async def delete_account(
     request: Request,
@@ -429,6 +454,8 @@ async def delete_account(
             request_id=_request_id(request),
         )
     except EntityNotFoundError as exc:
+        # 服务层可能已写 denied 审计（06 §14.5），异常路径也提交
+        await session.commit()
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
     await session.commit()
     return {"status": "ok", "result": deletion_job_result_dto(result)}

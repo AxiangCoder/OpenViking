@@ -33,6 +33,7 @@ from openviking.server.platform.db import get_session
 from openviking.server.platform.dependencies import (
     get_current_principal,
     get_iam_services,
+    require_high_risk_write,
     require_permission,
     verify_csrf,
 )
@@ -240,7 +241,13 @@ async def patch_user(
 
 @router.post(
     "/users/{user_id}/disable",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("user.disable"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="user.disable", permission_code="user.disable", scope="account"
+            )
+        )
+    ],
 )
 async def disable_user(
     request: Request,
@@ -258,6 +265,8 @@ async def disable_user(
             request_id=_request_id(request),
         )
     except LastAccountAdminError as exc:
+        # 服务层已写 denied 审计（06 §14.5），必须在异常路径提交
+        await session.commit()
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail={"code": "LAST_ACCOUNT_ADMIN_REQUIRED"}
         ) from exc
@@ -277,7 +286,15 @@ async def disable_user(
 
 @router.post(
     "/users/{user_id}/password/reset",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("user.password.reset.account"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="user.password.reset",
+                permission_code="user.password.reset.account",
+                scope="account",
+            )
+        )
+    ],
 )
 async def reset_password(
     request: Request,
@@ -294,6 +311,8 @@ async def reset_password(
             request_id=_request_id(request),
         )
     except PasswordResetForbiddenError as exc:
+        # 服务层已写 denied 审计（06 §14.5），必须在异常路径提交
+        await session.commit()
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": exc.reason}) from exc
     except EntityNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
@@ -366,7 +385,15 @@ async def list_user_api_keys(
 
 @router.delete(
     "/users/{user_id}/api-keys/{credential_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("credential.revoke.account"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="credential.revoke",
+                permission_code="credential.revoke.account",
+                scope="account",
+            )
+        )
+    ],
 )
 async def revoke_user_api_key(
     request: Request,
@@ -472,7 +499,13 @@ async def user_deletion_preview(
 
 @router.delete(
     "/users/{user_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("user.delete"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="user.delete", permission_code="user.delete", scope="account"
+            )
+        )
+    ],
 )
 async def delete_user(
     request: Request,
@@ -491,6 +524,8 @@ async def delete_user(
             request_id=_request_id(request),
         )
     except LastAccountAdminError as exc:
+        # 服务层已写 denied 审计（06 §14.5），必须在异常路径提交
+        await session.commit()
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail={"code": "LAST_ACCOUNT_ADMIN_REQUIRED"}
         ) from exc

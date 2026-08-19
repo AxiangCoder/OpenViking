@@ -41,6 +41,26 @@ from openviking.server.platform.models import IamSession
 CSRF_INVALID = "CSRF_INVALID"
 PERMISSION_NOT_GRANTED = "PERMISSION_NOT_GRANTED"
 
+# 高风险操作目标类型（06 §14.5 / 07 §21 #10：管理与高风险操作全审计）
+_HIGH_RISK_TARGET_TYPES = {
+    "user.delete": "iam_users",
+    "user.disable": "iam_users",
+    "user.password.reset": "iam_users",
+    "credential.revoke": "iam_api_credentials",
+    "account.delete": "iam_accounts",
+    "resource.delete": "platform_content_refs",
+    "skill.delete": "platform_content_refs",
+}
+_HIGH_RISK_TARGET_PARAMS = {
+    "user.delete": "user_id",
+    "user.disable": "user_id",
+    "user.password.reset": "user_id",
+    "credential.revoke": "credential_id",
+    "account.delete": "account_id",
+    "resource.delete": "resource_id",
+    "skill.delete": "skill_id",
+}
+
 
 @dataclass(frozen=True)
 class IamServices:
@@ -104,6 +124,93 @@ def require_permission(permission_code: str):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, detail={"code": PERMISSION_NOT_GRANTED}
             )
+        return principal
+
+    return checker
+
+
+async def _audit_high_risk_denial(
+    request: Request,
+    session: AsyncSession,
+    principal: AuthenticatedUserPrincipal,
+    *,
+    action: str,
+    reason: str,
+    scope: str,
+) -> None:
+    """高风险操作拒绝审计（06 §14.5：成功、失败与拒绝都写入审计）。
+
+    target_id 与 Subject（user_id/account_id）从已路由的 path_params 提取
+    （Starlette 在依赖中可见）；脱敏 metadata 只记录拒绝原因。审计事件与
+    拒绝响应同事务提交。
+    """
+    from openviking.server.platform.iam import PostgresIamRepository
+
+    params = request.path_params or {}
+    target_param = _HIGH_RISK_TARGET_PARAMS.get(action)
+    target_id = str(params.get(target_param)) if target_param and params.get(target_param) else None
+    subject_user_id = params.get("user_id")
+    subject_account_id = params.get("account_id")
+    repo = PostgresIamRepository()
+    await repo.append_audit_event(
+        session,
+        request_id=request.headers.get("x-request-id"),
+        account_id=principal.actor_account_id,
+        actor_type="user",
+        actor_user_id=principal.actor_user_id,
+        actor_account_id=principal.actor_account_id,
+        actor_session_id=principal.session_id,
+        authentication_method=principal.authentication_method,
+        subject_user_id=subject_user_id,
+        subject_account_id=subject_account_id,
+        action=action,
+        target_type=_HIGH_RISK_TARGET_TYPES.get(action),
+        target_id=target_id,
+        scope=scope,
+        result="denied",
+        reason=reason,
+        metadata={"reason": reason},
+    )
+    await session.commit()
+
+
+def require_high_risk_write(*, action: str, permission_code: str, scope: str):
+    """高风险写操作守卫（06 §14.5 / 07 §21 #10）。
+
+    CSRF 与权限任一失败都先写脱敏拒绝审计再抛 403——前端确认弹窗只是防误触，
+    不是安全边界，后端必须独立重校验并留下审计足迹。成功路径由路由处理器
+    与服务层照常审计。
+    """
+
+    async def checker(
+        request: Request,
+        principal: AuthenticatedUserPrincipal = Depends(get_current_principal),
+        session: AsyncSession = Depends(get_session),
+    ) -> AuthenticatedUserPrincipal:
+        denied_reason: str | None = None
+        if not origin_allowed(request, platform_config):
+            denied_reason = CSRF_INVALID
+        elif principal.session_id is None:
+            # 非 Session 凭据（API Key/OAuth）不能执行 CSRF 写（03 §8.2/§8.4）
+            denied_reason = CSRF_INVALID
+        else:
+            provided = request.headers.get("x-csrf-token", "")
+            row = (
+                await session.execute(
+                    select(IamSession.csrf_secret_hash).where(
+                        IamSession.id == principal.session_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None or not SessionService.verify_csrf_token(row, provided):
+                denied_reason = CSRF_INVALID
+            elif permission_code not in principal.permissions:
+                denied_reason = PERMISSION_NOT_GRANTED
+        if denied_reason is not None:
+            await _audit_high_risk_denial(
+                request, session, principal, action=action, reason=denied_reason, scope=scope
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": denied_reason})
         return principal
 
     return checker

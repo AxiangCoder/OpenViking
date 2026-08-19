@@ -38,6 +38,7 @@ from openviking.server.platform.db import get_session
 from openviking.server.platform.deletion.service import DeletionService
 from openviking.server.platform.dependencies import (
     get_current_principal,
+    require_high_risk_write,
     require_permission,
     verify_csrf,
 )
@@ -1041,7 +1042,15 @@ async def _delete_resource(
 
 @router.delete(
     "/me/resources/{resource_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("resource.user_private.delete.self"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="resource.delete",
+                permission_code="resource.user_private.delete.self",
+                scope="self",
+            )
+        )
+    ],
 )
 async def me_delete_resource(
     request: Request,
@@ -1490,7 +1499,15 @@ async def account_deletion_preview(
 
 @router.delete(
     "/account/resources/{resource_id}",
-    dependencies=[Depends(verify_csrf), Depends(require_permission("resource.account_shared.delete.account"))],
+    dependencies=[
+        Depends(
+            require_high_risk_write(
+                action="resource.delete",
+                permission_code="resource.account_shared.delete.account",
+                scope="account",
+            )
+        )
+    ],
 )
 async def account_delete_resource(
     request: Request,
