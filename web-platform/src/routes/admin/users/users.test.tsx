@@ -384,6 +384,40 @@ describe("/admin/users 用户管理页（13 §85，AC①-⑥⑧）", () => {
     expect(screen.queryByTestId("admin-users-load-error")).not.toBeInTheDocument();
   });
 
+  it("行操作：查看数据（Subject 视图）与 API Keys 入口按权限展示（85.1，P4-E2 AC⑥）", async () => {
+    const memberAdmin: AuthMeResult = {
+      ...adminMe,
+      permissions: [
+        ...adminMe.permissions,
+        "memory.read.account",
+        "session.read.account",
+        "resource.user_private.read.account",
+        "skill.user_private.read.account",
+        "credential.read.account",
+      ],
+    };
+    setAuthStateForTest({ status: "authenticated", me: memberAdmin, sessionExpired: false });
+    renderRouterAt("/admin/users");
+    await screen.findByTestId("admin-user-row-u-1");
+    // Account Admin 拥有成员只读与凭证读取权限 → 显示两个入口
+    expect(screen.getByTestId("admin-user-data-u-1")).toHaveAttribute("href", "/admin/users/u-1/data");
+    expect(screen.getByTestId("admin-user-keys-u-1")).toHaveAttribute("href", "/admin/users/u-1/api-keys");
+  });
+
+  it("行操作：无成员只读权限时不显示查看数据入口（越权动作 UI 无入口，AC⑥）", async () => {
+    const limitedMe: AuthMeResult = {
+      ...adminMe,
+      permissions: ["user.read", "user.disable"],
+    };
+    setAuthStateForTest({ status: "authenticated", me: limitedMe, sessionExpired: false });
+    renderRouterAt("/admin/users");
+    await screen.findByTestId("admin-user-row-u-1");
+    expect(screen.queryByTestId("admin-user-data-u-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("admin-user-keys-u-1")).not.toBeInTheDocument();
+    // 生命周期动作仍可见（权限保留）
+    expect(screen.getByTestId("admin-user-disable-u-1")).toBeInTheDocument();
+  });
+
   it("普通 User 角色无管理页权限时 Guard 阻止（前端侧 AC① 复核）", async () => {
     const userMe: AuthMeResult = {
       account: { id: "acc-1" },
