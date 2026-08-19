@@ -54,6 +54,12 @@ def main():
         from openviking_cli.doctor import main as doctor_main
 
         sys.exit(doctor_main())
+    # P5-E2（14 号计划 §99.2）：`ov platform` 一次性初始化与运维命令
+    # （init/status/verify，06 §15.2 八步初始化，见 bootstrap_cli.py）。
+    if len(sys.argv) > 2 and sys.argv[1] == "platform" and sys.argv[2] in ("init", "status", "verify"):
+        from openviking.server.platform.bootstrap_cli import main as platform_main
+
+        sys.exit(platform_main(sys.argv[2:]))
     # 1. 检查开发环境（仅在直接运行脚本时有效）
     try:
         # __file__ is openviking_cli/rust_cli.py, so parent is openviking_cli directory

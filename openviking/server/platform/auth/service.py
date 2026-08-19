@@ -308,6 +308,8 @@ class AuthService:
         actor_account_id: uuid.UUID | None,
         target_user_id: uuid.UUID,
         request_id: str | None = None,
+        actor_authentication_method: str | None = None,
+        actor_credential_id: uuid.UUID | None = None,
     ) -> PasswordResetResult:
         """分级密码重置：`actor_role_rank > target_role_rank`。
 
@@ -320,6 +322,10 @@ class AuthService:
           （先写 denied 审计再抛出）；
         - 成功：生成新随机密码（只返回一次），撤销目标全部登录 Session
           （reason=password_reset）；**不删对话数据、不撤销 API Key**（03 §8.3）。
+
+        P5-E2（14 号计划 §99.2，06 §17.2）：`actor_authentication_method` /
+        `actor_credential_id` 由管理 API 层透传，跨用户审计事件字段完整
+        （认证方式 + 脱敏凭证 ID）。
         """
         actor = await self._repo.get_user(session, actor_user_id)
         target = await self._repo.get_user(session, target_user_id)
@@ -344,6 +350,8 @@ class AuthService:
                 actor_type="user",
                 actor_user_id=actor.id,
                 actor_account_id=actor.account_id,
+                authentication_method=actor_authentication_method,
+                actor_credential_id=actor_credential_id,
                 subject_user_id=target.id,
                 subject_account_id=target.account_id,
                 action="user.password.reset",
@@ -372,6 +380,8 @@ class AuthService:
             actor_type="user",
             actor_user_id=actor.id,
             actor_account_id=actor.account_id,
+            authentication_method=actor_authentication_method,
+            actor_credential_id=actor_credential_id,
             subject_user_id=target.id,
             subject_account_id=target.account_id,
             action="user.password.reset",
@@ -392,12 +402,17 @@ class AuthService:
         email: str,
         username: str,
         display_name: str | None = None,
+        password: str | None = None,
         request_id: str | None = None,
     ) -> BootstrapResult:
         """创建首位 Platform Super Admin（account_id IS NULL，04 §10.4 部分唯一
         索引 + service invariant 双重强制；角色经 RbacService 平台初始化路径授予）。
 
         幂等守卫：平台已存在 PSA（无 Account 用户）时拒绝重复初始化。
+
+        P5-E2（14 号计划 §99.2）：`password` 由正式部署命令从环境变量注入
+        （`OV_PLATFORM_INIT_PSA_PASSWORD`）；缺省时服务端生成并仅返回一次。
+        口令不落日志/审计（`_audit` 只记 metadata 白名单字段，06 §14.4）。
         """
         await self._rbac.seed_catalog(session, request_id=request_id)
         # 幂等守卫：平台已存在 PSA（任意无 Account 用户，04 §10.4 部分唯一索引
@@ -412,7 +427,7 @@ class AuthService:
         if existing is not None:
             raise ConstraintViolationError("EMAIL_ALREADY_EXISTS")
 
-        initial_password = random_initial_password()
+        initial_password = password or random_initial_password()
         user = await self._repo.create_user(
             session,
             account_id=None,
