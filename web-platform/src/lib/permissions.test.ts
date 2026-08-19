@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import {
   canManageSharedContent,
   canPerform,
+  canResetTargetPassword,
   hasPermission,
   isAccountAdmin,
   isPlatformSuperAdmin,
   PERMISSION_CODES,
+  roleRank,
 } from "@/lib/permissions";
 import type { AuthMeResult } from "@/features/auth/auth-state";
 
@@ -62,5 +64,30 @@ describe("permissions", () => {
     expect(canManageSharedContent(adminMe)).toBe(true);
     expect(canManageSharedContent(userMe)).toBe(false);
     expect(canManageSharedContent(null)).toBe(false);
+  });
+
+  it("roleRank：内置角色等级 platform_super_admin > account_admin > user（03 §9.3）", () => {
+    expect(roleRank("platform_super_admin")).toBe(3);
+    expect(roleRank("account_admin")).toBe(2);
+    expect(roleRank("user")).toBe(1);
+    expect(roleRank(undefined)).toBe(0);
+    expect(roleRank("unknown_role")).toBe(0);
+  });
+
+  it("canResetTargetPassword：仅严格低级别目标（actor_role_rank > target_role_rank，85.4）", () => {
+    // Account Admin(2) > user(1) → 可重置
+    expect(canResetTargetPassword(["account_admin"], "user")).toBe(true);
+    // 同级/上级 → 不可重置（AC④：按钮不显示，后端仍强制校验）
+    expect(canResetTargetPassword(["account_admin"], "account_admin")).toBe(false);
+    expect(canResetTargetPassword(["user"], "user")).toBe(false);
+    expect(canResetTargetPassword(["user"], "account_admin")).toBe(false);
+    expect(canResetTargetPassword(["account_admin"], "platform_super_admin")).toBe(false);
+    // PSA(3) 可重置更低等级
+    expect(canResetTargetPassword(["platform_super_admin"], "account_admin")).toBe(true);
+    expect(canResetTargetPassword(["platform_super_admin"], "user")).toBe(true);
+    // 无角色信息 / 未知目标角色
+    expect(canResetTargetPassword(undefined, "user")).toBe(false);
+    expect(canResetTargetPassword(["account_admin"], undefined)).toBe(false);
+    expect(canResetTargetPassword(["account_admin"], "ghost")).toBe(false);
   });
 });
