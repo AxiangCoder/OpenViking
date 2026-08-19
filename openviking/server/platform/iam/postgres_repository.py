@@ -96,6 +96,18 @@ class PostgresIamRepository(IamRepository):
         stmt = select(IamAccount).where(IamAccount.ov_account_id == ov_account_id)
         return (await session.execute(stmt)).scalar_one_or_none()
 
+    async def get_account_id_for_ov_user(
+        self,
+        session: AsyncSession,
+        ov_user_id: str,
+    ) -> uuid.UUID | None:
+        stmt = (
+            select(IamUser.account_id)
+            .where(IamUser.ov_user_id == ov_user_id, IamUser.deleted_at.is_(None))
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
+
     async def list_accounts(
         self,
         session: AsyncSession,
