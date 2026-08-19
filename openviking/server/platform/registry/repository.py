@@ -385,3 +385,34 @@ class RegistryRepository:
             .values(deleted_at=None, purge_after=None, deleted_by=None)
         )
         return result.rowcount or 0
+
+    # ── Session 软删/恢复（P2-E5：11 §72，AC⑦）──
+
+    async def get_session_ref(
+        self,
+        session: AsyncSession,
+        ref_id: uuid.UUID,
+        *,
+        include_deleted: bool = True,
+    ) -> object | None:
+        """Session 引用读取（删除任务/回收站用；不加载消息正文）。"""
+        from openviking.server.platform.models import PlatformSessionRef
+
+        return await session.get(PlatformSessionRef, ref_id)
+
+    async def restore_session(
+        self, session: AsyncSession, ref_id: uuid.UUID
+    ) -> uuid.UUID | None:
+        """恢复 Session（11 §72）：只清理回收字段，**不回滚已产生的 Memory**
+        变更；返回属主 User ID（供恢复审计 Subject，05 §12.6 注）。"""
+        from openviking.server.platform.models import PlatformSessionRef
+
+        ref = await session.get(PlatformSessionRef, ref_id)
+        if ref is None:
+            return None
+        ref.status = "active"
+        ref.deleted_at = None
+        ref.purge_after = None
+        ref.deleted_by = None
+        await session.flush()
+        return ref.owner_user_id

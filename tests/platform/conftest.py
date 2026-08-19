@@ -93,7 +93,8 @@ async def session(
                 "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
                 "iam_users, iam_accounts, iam_permissions, iam_permission_schema, "
                 "iam_deletion_jobs, platform_content_refs, platform_operation_refs, "
-                "platform_uploads, platform_resource_watches CASCADE"
+                "platform_uploads, platform_resource_watches, platform_session_commits, "
+                "platform_session_messages, platform_session_refs CASCADE"
             )
         )
         await s.commit()
@@ -168,6 +169,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.auth.service import AuthService
     from openviking.server.platform.auth.uri_policy import AuthorizationService
     from openviking.server.platform.config import PlatformConfig
+    from openviking.server.platform.dashboard.service import DashboardService
     from openviking.server.platform.db import get_session
     from openviking.server.platform.deletion.service import DeletionService
     from openviking.server.platform.facade import ProductFacadeService
@@ -183,10 +185,15 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.routers import (
         admin_router,
         auth_router,
+        member_data_router,
         platform_router,
         resources_router,
+        sessions_router,
         skills_router,
     )
+    from openviking.server.platform.search.service import SearchProductService
+    from openviking.server.platform.session.backend import FakeSearchEngine, FakeSessionBackend
+    from openviking.server.platform.session.service import SessionProductService
     from openviking.server.platform.skills.configs import FakeSkillConfigsAdapter
     from openviking.server.platform.skills.control_plane import (
         FakeSkillContentAdapter,
@@ -237,6 +244,11 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
         migration=FakeSkillMigrationAdapter(content=content),
         configs=FakeSkillConfigsAdapter(),
     )
+    session_backend = FakeSessionBackend()
+    search_engine = FakeSearchEngine()
+    sessions = SessionProductService(repo, backend=session_backend, registry=registry_store)
+    search = SearchProductService(repo, engine=search_engine, registry=registry_store)
+    dashboard = DashboardService()
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
@@ -252,6 +264,11 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.state.iam_resource_uploads = uploads
     app.state.platform_config = config
     app.state.iam_skill_service = skills
+    app.state.iam_session_service = sessions
+    app.state.iam_search_service = search
+    app.state.iam_dashboard_service = dashboard
+    app.state.iam_session_backend = session_backend
+    app.state.iam_search_engine = search_engine
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:
@@ -263,6 +280,8 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.include_router(platform_router)
     app.include_router(resources_router)
     app.include_router(skills_router)
+    app.include_router(sessions_router)
+    app.include_router(member_data_router)
     return app
 
 

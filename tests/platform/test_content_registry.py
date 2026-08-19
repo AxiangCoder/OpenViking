@@ -505,7 +505,8 @@ async def test_upload_expired_and_expire_worker(session: AsyncSession) -> None:
 
 
 async def test_platform_tables_created_and_downgrade_clean(session: AsyncSession, test_database: str) -> None:
-    """platform_* 表创建成功（P2-E2 四张 + P2-E3 watch）；downgrade 后无残留。"""
+    """platform_* 表创建成功（P2-E2 三张 + P2-E3 watch + P2-E5 三张）；
+    downgrade 到 base 后无残留。"""
     result = await session.execute(
         text(
             "select table_name from information_schema.tables "
@@ -517,6 +518,9 @@ async def test_platform_tables_created_and_downgrade_clean(session: AsyncSession
         "platform_operation_refs",
         "platform_uploads",
         "platform_resource_watches",
+        "platform_session_refs",
+        "platform_session_messages",
+        "platform_session_commits",
     }
 
     from alembic import command
