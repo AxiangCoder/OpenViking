@@ -37,7 +37,9 @@ from openviking.server.platform.dependencies import (
     verify_csrf,
 )
 from openviking.server.platform.errors import (
+    AdminActionForbiddenError,
     ConstraintViolationError,
+    DeletionJobError,
     EntityNotFoundError,
     InvalidCursorError,
     LastAccountAdminError,
@@ -387,3 +389,195 @@ async def revoke_user_api_key(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
     await session.commit()
     return {"status": "ok", "result": {"id": str(revoked.id), "name": revoked.name, "revoked": True}}
+
+
+# ── P2-E2：User 删除回收与 admin 聚合（05 §12.6，14 号计划 §97.2，AC⑨）──
+
+
+def _deletion(request: Request):
+    return request.app.state.iam_deletion_service
+
+
+def _aggregates(request: Request):
+    return request.app.state.iam_aggregate_service
+
+
+def _deletion_error(exc: Exception, request: Request):
+    """DeletionJobError/AdminActionForbiddenError → 409/403 稳定码。"""
+    if isinstance(exc, DeletionJobError):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": exc.reason}) from exc
+    if isinstance(exc, AdminActionForbiddenError):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": exc.reason}) from exc
+    raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+
+
+def deletion_preview_dto(preview) -> dict:
+    return {
+        "resource_type": preview.resource_type,
+        "resource_id": preview.resource_id,
+        "target_name": preview.target_name,
+        "impacted": preview.impacted,
+        "recoverable": preview.recoverable,
+        "purge_after": preview.purge_after,
+    }
+
+
+def deletion_job_result_dto(result) -> dict:
+    return {
+        "resource_type": result.resource_type,
+        "resource_id": result.resource_id,
+        "deletion_job_id": str(result.deletion_job_id),
+        "deleted_at": result.deleted_at,
+        "restore_until": result.restore_until,
+    }
+
+
+def recycle_bin_row_dto(row) -> dict:
+    job = row.job
+    return {
+        "id": str(job.id),
+        "resource_type": job.resource_type,
+        "resource_id": job.resource_id,
+        "target_name": row.target_name,
+        "deleted_at": job.deleted_at.isoformat(),
+        "purge_after": job.purge_after.isoformat(),
+        "status": job.status,
+        "restore_allowed": row.restore_allowed,
+        "restore_permission": row.restore_permission,
+        "restored_at": job.restored_at.isoformat() if job.restored_at else None,
+    }
+
+
+@router.get(
+    "/users/{user_id}/deletion-preview",
+    dependencies=[Depends(require_permission("user.delete"))],
+)
+async def user_deletion_preview(
+    request: Request,
+    user_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        preview = await deletion.preview_user(
+            session,
+            scope_account_id=principal.actor_account_id,
+            target_user_id=user_id,
+        )
+    except EntityNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+    return {"status": "ok", "result": deletion_preview_dto(preview)}
+
+
+@router.delete(
+    "/users/{user_id}",
+    dependencies=[Depends(verify_csrf), Depends(require_permission("user.delete"))],
+)
+async def delete_user(
+    request: Request,
+    user_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`DELETE /admin/users/{id}`：软删除进入回收期并返回 deletion job ID（AC⑨）。"""
+    try:
+        result = await deletion.delete_user(
+            session,
+            actor=principal,
+            scope_account_id=principal.actor_account_id,
+            target_user_id=user_id,
+            request_id=_request_id(request),
+        )
+    except LastAccountAdminError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail={"code": "LAST_ACCOUNT_ADMIN_REQUIRED"}
+        ) from exc
+    except EntityNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+    await session.commit()
+    return {"status": "ok", "result": deletion_job_result_dto(result)}
+
+
+@router.get("/activity", dependencies=[Depends(require_permission("task.read.account_shared"))])
+async def admin_activity(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    principal=Depends(get_current_principal),
+    aggregates=Depends(_aggregates),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /admin/activity`：仅当前 Account 共享对象任务（05 §12.6）。"""
+    if principal.actor_account_id is None:
+        return {"status": "ok", "result": {"items": [], "next_cursor": None}}
+    rows = await aggregates.list_account_shared_activity(
+        session, account_id=principal.actor_account_id, limit=limit
+    )
+    return {"status": "ok", "result": {"items": rows, "next_cursor": None}}
+
+
+@router.get("/monitoring", dependencies=[Depends(require_permission("monitoring.read"))])
+async def admin_monitoring(
+    request: Request,
+    principal=Depends(get_current_principal),
+    aggregates=Depends(_aggregates),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /admin/monitoring`：仅当前 Account 业务摘要（05 §12.6）。"""
+    if principal.actor_account_id is None:
+        return {"status": "ok", "result": {"scope": "account", "summary": {}}}
+    return {
+        "status": "ok",
+        "result": await aggregates.account_monitoring(
+            session, account_id=principal.actor_account_id
+        ),
+    }
+
+
+@router.get("/recycle-bin")
+async def admin_recycle_bin(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /admin/recycle-bin`：权限按对象类型分别校验（05 §12.6 注）。"""
+    if principal.actor_account_id is None:
+        return {"status": "ok", "result": {"items": [], "next_cursor": None}}
+    rows = await deletion.list_recycle_bin(
+        session,
+        scope="account",
+        principal=principal,
+        account_id=principal.actor_account_id,
+        limit=limit,
+    )
+    return {
+        "status": "ok",
+        "result": {"items": [recycle_bin_row_dto(r) for r in rows], "next_cursor": None},
+    }
+
+
+@router.post("/recycle-bin/{job_id}/restore", dependencies=[Depends(verify_csrf)])
+async def admin_restore(
+    request: Request,
+    job_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`POST /admin/recycle-bin/{id}/restore`：类型化恢复权限（05 §12.6 注）。"""
+    try:
+        result = await deletion.restore(
+            session,
+            scope="account",
+            principal=principal,
+            account_id=principal.actor_account_id,
+            job_id=job_id,
+            request_id=_request_id(request),
+        )
+    except (DeletionJobError, AdminActionForbiddenError, EntityNotFoundError) as exc:
+        raise _deletion_error(exc, request)
+    await session.commit()
+    return {"status": "ok", "result": deletion_job_result_dto(result)}

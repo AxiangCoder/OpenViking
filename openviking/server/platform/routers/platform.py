@@ -34,6 +34,7 @@ from openviking.server.platform.dependencies import (
 from openviking.server.platform.errors import (
     AdminActionForbiddenError,
     ConstraintViolationError,
+    DeletionJobError,
     EntityNotFoundError,
     InvalidCursorError,
     PasswordResetForbiddenError,
@@ -332,3 +333,169 @@ async def retry_provisioning(
             "retried_events": result.retried_events,
         },
     }
+
+
+# ── P2-E2：Account 删除回收与 platform 聚合（05 §12.6，14 号计划 §97.2，AC⑨）──
+
+
+def _deletion(request: Request):
+    return request.app.state.iam_deletion_service
+
+
+def _aggregates(request: Request):
+    return request.app.state.iam_aggregate_service
+
+
+def _deletion_error(exc: Exception):
+    if isinstance(exc, DeletionJobError):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": exc.reason}) from exc
+    if isinstance(exc, AdminActionForbiddenError):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": exc.reason}) from exc
+    raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+
+
+def deletion_preview_dto(preview) -> dict:
+    return {
+        "resource_type": preview.resource_type,
+        "resource_id": preview.resource_id,
+        "target_name": preview.target_name,
+        "impacted": preview.impacted,
+        "recoverable": preview.recoverable,
+        "purge_after": preview.purge_after,
+    }
+
+
+def deletion_job_result_dto(result) -> dict:
+    return {
+        "resource_type": result.resource_type,
+        "resource_id": result.resource_id,
+        "deletion_job_id": str(result.deletion_job_id),
+        "deleted_at": result.deleted_at,
+        "restore_until": result.restore_until,
+    }
+
+
+def recycle_bin_row_dto(row) -> dict:
+    job = row.job
+    return {
+        "id": str(job.id),
+        "resource_type": job.resource_type,
+        "resource_id": job.resource_id,
+        "target_name": row.target_name,
+        "deleted_at": job.deleted_at.isoformat(),
+        "purge_after": job.purge_after.isoformat(),
+        "status": job.status,
+        "restore_allowed": row.restore_allowed,
+        "restore_permission": row.restore_permission,
+        "restored_at": job.restored_at.isoformat() if job.restored_at else None,
+    }
+
+
+@router.get(
+    "/accounts/{account_id}/deletion-preview",
+    dependencies=[Depends(require_permission("account.delete"))],
+)
+async def account_deletion_preview(
+    request: Request,
+    account_id: uuid.UUID,
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """Account deletion-preview（05 §12.6 平台表 `account.delete`）。"""
+    try:
+        preview = await deletion.preview_account(session, target_account_id=account_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+    return {"status": "ok", "result": deletion_preview_dto(preview)}
+
+
+@router.delete(
+    "/accounts/{account_id}",
+    dependencies=[Depends(verify_csrf), Depends(require_permission("account.delete"))],
+)
+async def delete_account(
+    request: Request,
+    account_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`DELETE /platform/accounts/{id}`：进入回收期并返回 deletion job ID（AC⑨）。"""
+    try:
+        result = await deletion.delete_account(
+            session,
+            actor=principal,
+            target_account_id=account_id,
+            request_id=_request_id(request),
+        )
+    except EntityNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+    await session.commit()
+    return {"status": "ok", "result": deletion_job_result_dto(result)}
+
+
+@router.get("/activity", dependencies=[Depends(require_permission("task.read.platform"))])
+async def platform_activity(
+    request: Request,
+    account_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    aggregates=Depends(_aggregates),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /platform/activity`：平台范围任务（05 §12.6，可按目标 Account 过滤）。"""
+    rows = await aggregates.list_platform_activity(
+        session, account_id=account_id, limit=limit
+    )
+    return {"status": "ok", "result": {"items": rows, "next_cursor": None}}
+
+
+@router.get("/monitoring", dependencies=[Depends(require_permission("monitoring.read"))])
+async def platform_monitoring(
+    request: Request,
+    aggregates=Depends(_aggregates),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /platform/monitoring`：平台聚合业务摘要（05 §12.6）。"""
+    return {"status": "ok", "result": await aggregates.platform_monitoring(session)}
+
+
+@router.get("/recycle-bin")
+async def platform_recycle_bin(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`GET /platform/recycle-bin`：权限按对象类型分别校验（05 §12.6 注）。"""
+    rows = await deletion.list_recycle_bin(
+        session, scope="platform", principal=principal, limit=limit
+    )
+    return {
+        "status": "ok",
+        "result": {"items": [recycle_bin_row_dto(r) for r in rows], "next_cursor": None},
+    }
+
+
+@router.post("/recycle-bin/{job_id}/restore", dependencies=[Depends(verify_csrf)])
+async def platform_restore(
+    request: Request,
+    job_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    deletion=Depends(_deletion),
+    session: AsyncSession = Depends(get_session),
+):
+    """`POST /platform/recycle-bin/{id}/restore`：类型化恢复权限（05 §12.6 注）。"""
+    try:
+        result = await deletion.restore(
+            session,
+            scope="platform",
+            principal=principal,
+            account_id=None,
+            job_id=job_id,
+            request_id=_request_id(request),
+        )
+    except (DeletionJobError, AdminActionForbiddenError, EntityNotFoundError) as exc:
+        raise _deletion_error(exc)
+    await session.commit()
+    return {"status": "ok", "result": deletion_job_result_dto(result)}
