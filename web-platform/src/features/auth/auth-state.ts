@@ -12,6 +12,9 @@ import { AUTH_CHALLENGE_EVENT } from "@/lib/platform-client/client";
 
 export interface AuthMeAccount {
   id: string | null;
+  /** 05 §12.3 契约字段：后端 /auth/me 当前未下发，P2 联调后回填（P3-E2 备注）。 */
+  code?: string | null;
+  name?: string | null;
 }
 
 export interface AuthMeResult {
@@ -19,6 +22,9 @@ export interface AuthMeResult {
   user: {
     id: string;
     ov_user_id: string | null;
+    /** 05 §12.3 契约字段：后端当前未下发，P2 联调后回填。 */
+    display_name?: string | null;
+    email?: string | null;
   };
   roles: string[];
   permissions: string[];
