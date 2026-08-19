@@ -58,6 +58,11 @@ class PurgeWorker:
         self._store = store or RegistryRepository()
         self._handlers = dict(handlers or {})
         self._config = config
+        # P5-E2（14 号计划 §99.2，06 §16.3/§17.3）：Purge Worker 可观测状态。
+        # `running` 由调度方置位（周期循环运行中）；`last_run_at` 每轮刷新。
+        self.running: bool = False
+        self.last_run_at: datetime | None = None
+        self.last_processed: int = 0
 
     def register_handler(self, resource_type: str, handler: PurgeHandler) -> None:
         self._handlers[resource_type] = handler
@@ -71,6 +76,8 @@ class PurgeWorker:
     ) -> int:
         """处理一批到期删除任务；返回处理条数（每条独立提交，失败不影响后续）。"""
         now = now or datetime.now(timezone.utc)
+        self.running = True
+        self.last_run_at = now
         jobs = await self._store.claim_purge_jobs(
             session, now=now, limit=limit or self._config.purge_batch_size
         )
@@ -94,6 +101,7 @@ class PurgeWorker:
             )
             await session.commit()
             processed += 1
+        self.last_processed = processed
         return processed
 
     async def _append_purge_audit(

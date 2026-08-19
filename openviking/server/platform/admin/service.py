@@ -201,7 +201,7 @@ class AdminService:
             request_id=request_id,
         )
         await self._provisioning.create_provisioning_events(
-            session, account=account, admin=admin
+            session, account=account, admin=admin, request_id=request_id
         )
         await self._append_admin_audit(
             session,
@@ -490,6 +490,8 @@ class AdminService:
             actor_account_id=None if scope_account_id is not None else actor.actor_account_id,
             target_user_id=target_user_id,
             request_id=request_id,
+            actor_authentication_method=actor.authentication_method,
+            actor_credential_id=actor.credential_id,
         )
 
     # ── 平台级提升：PUT .../role 仅 user→account_admin（05 §12.6 / 04 §10.6）──

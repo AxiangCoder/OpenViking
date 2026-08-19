@@ -69,7 +69,12 @@ async def _embedding_probe(embedder) -> str:
 
 @router.get("/health", tags=["system"])
 async def health_check(request: Request):
-    """Health check endpoint (no authentication required)."""
+    """Health check endpoint (no authentication required).
+
+    Platform 模式（P5-E2，06 §17.3）：附加 Platform 17.3 检查
+    （PG 连通/migration 版本/Provisioning backlog/Session cleanup/Purge 状态）。
+    任一检查非 ok → 503 + `status=not_ready` + 可读诊断（14 号计划 §99.2 验收④）。
+    """
     from openviking import __version__
 
     result = {"status": "ok", "healthy": True, "version": __version__}
@@ -103,6 +108,27 @@ async def health_check(request: Request):
                 logger.warning(f"Failed to resolve identity: {e}")
     except Exception as e:
         logger.error(f"Failed to get health check: {e}")
+
+    platform_checks = getattr(request.app.state, "platform_health_checks", None)
+    if platform_checks is not None:
+        try:
+            checks = await platform_checks.all_checks()
+            ready = platform_checks.is_ready(checks)
+            result["status"] = "ready" if ready else "not_ready"
+            result["healthy"] = ready
+            result["checks"] = {
+                "platform": {"status": "ok" if ready else "error", "checks": checks}
+            }
+            return JSONResponse(
+                status_code=200 if ready else 503,
+                content=result,
+            )
+        except Exception as e:
+            logger.error(f"Failed to run platform health checks: {e}")
+            result["status"] = "not_ready"
+            result["healthy"] = False
+            result["checks"] = {"platform": {"status": "error", "detail": f"error: {e}"}}
+            return JSONResponse(status_code=503, content=result)
 
     return result
 
@@ -191,6 +217,23 @@ async def readiness_check(request: Request):
             checks["ollama"] = "not_configured"
     except Exception as e:
         checks["ollama"] = f"error: {e}"
+
+    # 6. P5-E2（06 §17.3）：Platform 生产运维检查（PG 连通/migration 版本/
+    #    Provisioning backlog/Session cleanup/Purge 状态；阈值见 06 §16.3）。
+    #    任一非 ok → 整体 503，含可读诊断（14 号计划 §99.2 验收④）。
+    platform_checks = getattr(request.app.state, "platform_health_checks", None)
+    if platform_checks is not None:
+        try:
+            platform = await platform_checks.all_checks()
+            checks["platform"] = {
+                "status": "ok" if platform_checks.is_ready(platform) else "error",
+                "checks": platform,
+            }
+        except Exception as e:
+            checks["platform"] = {
+                "status": "error",
+                "checks": {"postgresql": {"status": "error", "detail": f"error: {e}"}},
+            }
 
     all_ok = all(_is_ready_check_ok(v) for v in checks.values())
     status_code = 200 if all_ok else 503

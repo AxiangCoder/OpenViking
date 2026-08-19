@@ -110,6 +110,21 @@ class PlatformConfig:
     upload_ttl_minutes: int = field(default_factory=lambda: _env_int("OV_UPLOAD_TTL_MINUTES", 15))
     purge_batch_size: int = field(default_factory=lambda: _env_int("OV_PURGE_BATCH_SIZE", 50))
 
+    # ── P5-E2：健康检查阈值（06 §16.3，14 号计划 §99.2，17.3）──
+
+    provisioning_backlog_threshold: int = field(
+        default_factory=lambda: _env_int("OV_HEALTH_PROVISIONING_BACKLOG_THRESHOLD", 100)
+    )
+    migration_lag_versions: int = field(
+        default_factory=lambda: _env_int("OV_HEALTH_MIGRATION_LAG_VERSIONS", 1)
+    )
+    purge_stall_max_pending: int = field(
+        default_factory=lambda: _env_int("OV_HEALTH_PURGE_STALL_MAX_PENDING", 500)
+    )
+    purge_stall_max_stall_days: int = field(
+        default_factory=lambda: _env_int("OV_HEALTH_PURGE_STALL_MAX_DAYS", 3)
+    )
+
     # ── P2-E3：Resource 摄取能力（09 §40/§43，服务端强制，AC⑩）──
 
     upload_max_files_per_batch: int = field(

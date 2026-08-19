@@ -228,6 +228,19 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         deletion_purge_days=platform_config.deletion_purge_days,
     )
 
+    # P5-E2（14 号计划 §99.2，06 §16.3/§17.3）：健康检查装配。检查集合挂载
+    # app.state.platform_health_checks，由 system.py /health、/ready 消费；
+    # Session cleanup / Purge Worker 状态如实注入（周期调度由部署层负责，
+    # 与 ProvisioningWorker 同模式，runbook 见 docs/design/.../p5-e2-init-runbook.md）。
+    from openviking.server.platform.auth.worker import SessionCleanupWorker
+    from openviking.server.platform.health import PlatformHealthChecks
+
+    session_cleanup_worker = SessionCleanupWorker(config=platform_config)
+    app.state.iam_session_cleanup_worker = session_cleanup_worker
+    app.state.platform_health_checks = PlatformHealthChecks(_platform_session_factory)
+    app.state.platform_health_checks.session_cleanup_worker = session_cleanup_worker
+    app.state.platform_health_checks.purge_worker = app.state.iam_purge_worker
+
     # P2-E6b：MCP OAuth PostgreSQL 存储（04 §10.13）。dev 态挂载后，
     # 产品 OAuth 端点使用 PG 存储；SDK 协议端点换存由 app.py 在
     # platform_enabled 时完成（同样指向 PG），保证单一事实来源。

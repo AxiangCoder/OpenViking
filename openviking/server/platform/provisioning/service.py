@@ -92,10 +92,15 @@ class ProvisioningService:
         *,
         account: IamAccount,
         admin: IamUser,
+        request_id: str | None = None,
     ) -> list[IamOutbox]:
         """Account + 首位 Admin 的 outbox 事件（account.provision + user.provision）。
 
         在调用方事务内执行：Account/User 创建失败回滚时事件一并回滚（AC①）。
+
+        P5-E2（14 号计划 §99.2，06 §17.2）：`request_id` 写入事件 payload，
+        Worker 处理时回填审计事件，保证 HTTP 请求 → 后台 Provisioning Task
+        的 Request ID 贯通（日志/审计/trace 可关联）。
         """
         now = datetime.now(timezone.utc)
         account_event = await self._outbox.enqueue(
@@ -107,6 +112,7 @@ class ProvisioningService:
                 "ov_account_id": account.ov_account_id,
                 "code": account.code,
                 "display_name": account.display_name,
+                "request_id": request_id,
             },
             now=now,
         )
@@ -119,6 +125,7 @@ class ProvisioningService:
                 "user_id": str(admin.id),
                 "ov_user_id": admin.ov_user_id,
                 "email": admin.email,
+                "request_id": request_id,
             },
             now=now,
         )
@@ -133,6 +140,7 @@ class ProvisioningService:
         幂等（AC③）：控制面动作本身幂等；事件重放不会产生重复 namespace。
         """
         principal = SystemPrincipal(component=COMPONENT, task_id=str(event.id))
+        request_id = (event.payload or {}).get("request_id") or None
         if event.event_type == EVENT_ACCOUNT_PROVISION:
             account = await self._repo.get_account(session, event.aggregate_id)
             if account is None or account.deleted_at is not None:
@@ -159,6 +167,7 @@ class ProvisioningService:
                 await self._append_system_audit(
                     session,
                     principal=principal,
+                    request_id=request_id,
                     action="provision.account",
                     account_id=account.id,
                     target_type="iam_accounts",
@@ -170,6 +179,7 @@ class ProvisioningService:
             await self._append_system_audit(
                 session,
                 principal=principal,
+                request_id=request_id,
                 action="provision.account",
                 account_id=account.id,
                 target_type="iam_accounts",
@@ -198,6 +208,7 @@ class ProvisioningService:
                 await self._append_system_audit(
                     session,
                     principal=principal,
+                    request_id=request_id,
                     action="provision.user",
                     account_id=user.account_id,
                     subject_user_id=user.id,
@@ -210,6 +221,7 @@ class ProvisioningService:
             await self._append_system_audit(
                 session,
                 principal=principal,
+                request_id=request_id,
                 action="provision.user",
                 account_id=user.account_id,
                 subject_user_id=user.id,
@@ -309,10 +321,16 @@ class ProvisioningService:
         result: str,
         reason: str | None = None,
         metadata: dict | None = None,
+        request_id: str | None = None,
     ) -> None:
-        """系统动作审计（04 §10.8：actor_type=system + 组件名，不伪装成用户）。"""
+        """系统动作审计（04 §10.8：actor_type=system + 组件名，不伪装成用户）。
+
+        P5-E2（06 §17.2）：`request_id` 由事件 payload 回填，保证后台任务
+        审计与触发它的 HTTP 请求可关联。
+        """
         await self._repo.append_audit_event(
             session,
+            request_id=request_id,
             account_id=account_id,
             actor_type="system",
             actor_system_component=principal.component,
