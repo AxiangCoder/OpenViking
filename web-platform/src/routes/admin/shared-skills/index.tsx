@@ -1,11 +1,15 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+/**
+ * 共享 Skill 管理（/admin 挂载点，06 §13.3，P3-E5 AC⑦）。
+ * 与 /app/skills/shared（Account Admin 视图）共用 SharedSkillsManager 组件。
+ */
+
+import { SharedSkillsManager } from "@/components/skills/SharedSkillsManager";
 
 export default function AdminSharedSkillsPage() {
   return (
-    <PlaceholderPage
-      title="共享 Skill 管理"
-      plannedIn="P4-E2"
-      description="Account 共享 Skill 集中管理：查看、使用、管理（06 §13.3）；发布语义见 10 号文档。"
+    <SharedSkillsManager
+      newHref="/admin/shared-skills/new"
+      detailPrefix="/admin/shared-skills"
     />
   );
 }

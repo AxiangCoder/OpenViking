@@ -1,11 +1,16 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+/**
+ * 新建私有 Skill（10 §54，P3-E5 AC②）。
+ * 普通 User 的创建入口固定进入自己的私有区（10 §54.1）。
+ */
+
+import { SkillCreatePage } from "@/components/skills/SkillCreatePage";
 
 export default function SkillsPrivateNewPage() {
   return (
-    <PlaceholderPage
-      title="新建私有 Skill"
-      plannedIn="P3-E5"
-      description="在线创建或上传 SKILL.md/ZIP；名称不可编辑，ZIP 整体替换（10 号文档产品契约）。"
+    <SkillCreatePage
+      scope="me"
+      detailPrefix="/app/skills/private"
+      backHref="/app/skills/private"
     />
   );
 }

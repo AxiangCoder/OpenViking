@@ -93,6 +93,12 @@ const adminSharedResourceDetailRoute = createRoute({
 const adminSharedSkillsRoute = createRoute({
   getParentRoute: () => adminLayoutRoute,
   path: "/shared-skills",
+  component: () => <Outlet />,
+});
+
+const adminSharedSkillsIndexRoute = createRoute({
+  getParentRoute: () => adminSharedSkillsRoute,
+  path: "/",
   component: AdminSharedSkillsPage,
 });
 
@@ -157,7 +163,11 @@ export const adminRouteTree = adminLayoutRoute.addChildren([
     adminSharedResourcesIndexRoute,
     adminSharedResourceDetailRoute,
   ]),
-  adminSharedSkillsRoute.addChildren([adminSharedSkillsNewRoute, adminSharedSkillDetailRoute]),
+  adminSharedSkillsRoute.addChildren([
+    adminSharedSkillsIndexRoute,
+    adminSharedSkillsNewRoute,
+    adminSharedSkillDetailRoute,
+  ]),
   adminRolesRoute,
   adminAuditRoute,
   adminActivityRoute,
