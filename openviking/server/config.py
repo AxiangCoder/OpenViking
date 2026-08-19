@@ -276,6 +276,10 @@ class ServerConfig(BaseModel):
     bot_api_url: str = "http://localhost:18790"  # Vikingbot OpenAPIChannel URL (default port)
     encryption_enabled: bool = False  # Whether file-level AES encryption is enabled
     api_key_hashing_enabled: bool = False  # Whether API key Argon2id hashing is enabled (default: false, rely on file encryption)
+    # P2-E1 (dev-state verification, 14-plan §97.1 AC⑥): mount the platform
+    # routers (/api/platform/v1/*) into create_app(). Dev-mode switch only;
+    # production routing/public boundary is closed by P5-E1.
+    platform_enabled: bool = False
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     usage_reporter: UsageReporterConfig = Field(default_factory=UsageReporterConfig)
     # Public-facing base URL emitted in MCP-issued upload instructions. See

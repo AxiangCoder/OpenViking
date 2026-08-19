@@ -684,6 +684,14 @@ def create_app(
     except Exception as e:  # noqa: BLE001
         logger.warning("Skipping OAuth router registration: %s", e)
 
+    # P2-E1（14 号计划 §97.1 AC⑥，Spike 风险 9 开发态验证点）：开发态挂载
+    # Platform 路由（/api/platform/v1/*），仅验证与 /api/v1、/mcp 并存不冲突；
+    # 生产路由与公网边界由 P5-E1 闭合。挂载函数内部惰性导入，关闭时不引入
+    # Platform 模块。
+    from openviking.server.platform.mount import mount_platform_routers
+
+    mount_platform_routers(app, config)
+
     # Favicon routes — always registered so /favicon.* and /mcp/favicon.* never
     # 404, even when web-studio isn't bundled. Source files live in
     # openviking/server/static/ (shipped via package-data, ~30KB total) so they
