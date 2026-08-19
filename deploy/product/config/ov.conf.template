@@ -1,0 +1,50 @@
+{
+    "server": {
+        "host": "0.0.0.0",
+        "port": 1933,
+        "workers": 1,
+        "auth_mode": "platform_iam",
+        "root_api_key": null,
+        "platform_enabled": true,
+        "platform_adapter_mode": "real",
+        "low_level_routers_enabled": ["admin"],
+        "studio_enabled": false,
+        "cors_origins": ["https://product.example.com"],
+        "public_base_url": "https://product.example.com",
+        "observability": {
+            "metrics": {"enabled": true},
+            "dump_body": {"enabled": false}
+        }
+    },
+    "storage": {
+        "workspace": "/app/.openviking/workspace",
+        "vectordb": {
+            "name": "context",
+            "backend": "local",
+            "project": "default"
+        },
+        "agfs": {"backend": "local"}
+    },
+    "log": {"level": "INFO", "output": "stdout"},
+    "embedding": {
+        "dense": {
+            "api_base": "https://ark.cn-beijing.volces.com/api/v3",
+            "api_key": "${OPENVIKING_EMBEDDING_API_KEY}",
+            "provider": "volcengine",
+            "dimension": 1024,
+            "model": "doubao-embedding-vision-251215",
+            "input": "multimodal"
+        },
+        "max_concurrent": 10
+    },
+    "vlm": {
+        "api_base": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key": "${OPENVIKING_VLM_API_KEY}",
+        "provider": "volcengine",
+        "model": "doubao-seed-2-0-lite-260428",
+        "temperature": 0.0,
+        "max_retries": 2,
+        "thinking": false,
+        "max_concurrent": 100
+    }
+}

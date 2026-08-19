@@ -1,0 +1,92 @@
+# OpenViking 产品化平台三单元部署（14 号计划 §99.1 P5-E1，06 §16.1/§16.2）
+#
+#   reverse-proxy            → nginx（公网唯一入口，低层入口 deny 第二道防线）
+#   openviking-product-server→ 平台化 OpenViking 服务（app.py create_app，
+#                              platform_enabled + platform_adapter_mode=real）
+#   postgresql               → IAM/审计/OAuth 存储（04 §10.13）
+#
+# 启动（在 deploy/product 目录）：
+#   export OV_PLATFORM_DATABASE_URL='postgresql://ov_platform:CHANGE_ME@postgresql:5432/ov_platform'
+#   export OPENVIKING_ROOT_API_KEY='CHANGE_ME'        # 模型网关/低层 API 密钥
+#   export OPENVIKING_PUBLIC_BASE_URL='https://product.example.com'
+#   docker compose up -d --build
+#
+# 生产要求（06 §14.4）：口令经环境变量/Secret Manager 注入；全站 HTTPS；
+# CORS 同源（staging ov.conf 模板已配）；/studio 公网不注册（反代无路由 +
+# 应用层默认不挂载）；低层入口（/api/v1/admin/*、WebDAV/Snapshot/Pack/
+# Debug/Observer/Console）反代 deny。
+#
+# 沿用既有 VectorDB/模型/数据卷配置：embedding/vlm 由 ov.conf 模板注入；
+# 数据卷 ./data 挂载 /app/.openviking（workspace/vectordb/agfs 持久化）。
+
+name: openviking-product
+
+services:
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: ovp-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "${OVP_HTTP_PORT:-80}:80"
+      - "${OVP_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # 生产 HTTPS 证书挂载（宿主机 Let's Encrypt / 托管证书）：
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - openviking-product-server
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  openviking-product-server:
+    build:
+      context: ../..
+      dockerfile: deploy/product/Dockerfile.product
+    container_name: ovp-product-server
+    restart: unless-stopped
+    environment:
+      OPENVIKING_CONFIG_FILE: /app/.openviking/ov.conf
+      OPENVIKING_PUBLIC_BASE_URL: ${OPENVIKING_PUBLIC_BASE_URL:-https://product.example.com}
+      OPENVIKING_ROOT_API_KEY: ${OPENVIKING_ROOT_API_KEY:-}
+      # 生产口令只经环境变量注入（06 §14.4；Secret Manager 可替换 compose env）
+      OV_PLATFORM_DATABASE_URL: ${OV_PLATFORM_DATABASE_URL:?set postgres DSN}
+      OV_NODE_ID_SECRET: ${OV_NODE_ID_SECRET:?set node-id HMAC secret}
+      OV_SOURCE_CIPHER_KEY: ${OV_SOURCE_CIPHER_KEY:?set source cipher key}
+      OV_COOKIE_SECURE: "1"
+      OV_SESSION_IDLE_TTL: "86400"
+      OV_SESSION_ABSOLUTE_TTL: "2592000"
+    volumes:
+      - ./data:/app/.openviking
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:1933/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  postgresql:
+    image: postgres:16-alpine
+    container_name: ovp-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ov_platform
+      POSTGRES_PASSWORD: ${OV_PLATFORM_DB_PASSWORD:?set postgres password}
+      POSTGRES_DB: ov_platform
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ov_platform -d ov_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
