@@ -515,3 +515,37 @@ class PlatformUpload(Base):
     consumed_by_operation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformResourceWatch(Base):
+    """09 §43.2 `platform_resource_watches`：Resource 自动同步配置。
+
+    - 持久化记录只保存 Resource ID 与调度参数，**不保存明文远程 URL**
+      （远程来源在 `platform_content_refs.source_locator_ciphertext`，
+      执行时由 Product Facade 解析并临时解密，09 §43.2/04 §10.10）；
+    - `state`：active/paused/error；`not_configured` 用无记录表达；
+    - `interval_minutes` 只接受 Capabilities 预设值（服务端强制，09 §40.5）；
+    - `last_result`：succeeded/failed/cancelled，`last_error` 只存脱敏摘要；
+    - 暂停保留周期与配置；删除 Watch 只删本行，不删除 Resource。
+    """
+
+    __tablename__ = "platform_resource_watches"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    resource_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("platform_content_refs.id"), unique=True
+    )
+    state: Mapped[str] = mapped_column(String(16), default="active")
+    interval_minutes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_result: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    processing_instruction: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("iam_users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

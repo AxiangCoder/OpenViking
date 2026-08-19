@@ -66,8 +66,11 @@ def _operation_dto(op: PlatformOperationRef) -> dict:
         "target_id": op.target_id,
         "target_visibility": op.target_visibility,
         "generation": op.generation,
-        "cancellable": op.cancellable,
+        "cancellable": op.cancellable and op.status in ("pending", "running"),
+        "initiated_by": "user" if op.initiated_by_actor_user_id is not None else "system",
         "error_code": op.error_code,
+        "error_summary": op.error_summary,
+        "retryable": op.retryable,
         "created_at": op.created_at.isoformat() if op.created_at else None,
         "completed_at": op.completed_at.isoformat() if op.completed_at else None,
     }

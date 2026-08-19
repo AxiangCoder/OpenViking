@@ -43,9 +43,11 @@ from openviking.server.platform.registry.repository import (
 RESTORE_PERMISSION_MAP: dict[str, tuple[str, str, str]] = {
     "user": ("account", "user.delete", "Account Admin（本 Account）"),
     "account": ("platform", "account.delete", "仅 Platform Super Admin"),
-    # E3–E5 扩展点（04 §10.11 同表承载，类型化权限按 05 §12.6 注逐条落地）：
+    # P2-E3：Resource 恢复权限按可见性分别校验（09 §45.3/05 §12.6 注），
+    # 本槽位是可见性无关兜底；实际判定在 _restore_permission_for 内分支：
+    "resource": ("account", "resource.account_shared.delete.account", "Account 共享 Resource（Account Admin）"),
+    # E4–E5 扩展点（04 §10.11 同表承载，类型化权限按 05 §12.6 注逐条落地）：
     # "session":  ("self", "session.delete.self", "仅属主本人；管理员不能恢复他人 Session"),
-    # "resource": ("account", "resource.user_private.delete.self", "属主本人（私有）..."),
     # "skill":    ("account", "skill.user_private.manage.self", "属主本人（私有）..."),
 }
 
@@ -304,9 +306,36 @@ class DeletionService:
     ) -> list[RecycleBinRow]:
         """回收站列表；`restore_allowed` 按 05 §12.6 注映射实时计算。
 
-        - admin scope：当前 Account 的 user 任务；
+        - self scope：当前 User 私有 Resource 任务 + 本 Account 共享 Resource 任务
+          （05 §12.5 `/recycle-bin`：对应资源的 self read）；
+        - account scope：当前 Account 的 user 任务；
         - platform scope：account 任务（Platform Super Admin 专属）。
         """
+        if scope == "self":
+            if account_id is None:
+                raise EntityNotFoundError("self scope requires account")
+            jobs = await self._store.list_deletion_jobs(
+                session, account_id=account_id, resource_types=("resource",), limit=limit
+            )
+            visible = [
+                job
+                for job in jobs
+                if await self._job_visible_to(session, job, principal)
+            ]
+            rows: list[RecycleBinRow] = []
+            for job in visible:
+                allowed, permission = await self._restore_permission_for_async(
+                    session, scope, job.resource_type, principal, job=job
+                )
+                rows.append(
+                    RecycleBinRow(
+                        job=job,
+                        target_name=await self._target_name(session, job),
+                        restore_allowed=allowed,
+                        restore_permission=permission,
+                    )
+                )
+            return rows
         if scope == "account":
             if account_id is None:
                 raise EntityNotFoundError("account scope required")
@@ -317,9 +346,11 @@ class DeletionService:
             jobs = await self._store.list_deletion_jobs(
                 session, account_id=account_id, resource_types=("account",), limit=limit
             )
-        rows: list[RecycleBinRow] = []
+        rows = []
         for job in jobs:
-            allowed, permission = self._restore_permission_for(scope, job.resource_type, principal)
+            allowed, permission = await self._restore_permission_for_async(
+                session, scope, job.resource_type, principal, job=job
+            )
             rows.append(
                 RecycleBinRow(
                     job=job,
@@ -356,7 +387,9 @@ class DeletionService:
         if job.purge_after <= datetime.now(timezone.utc):
             raise DeletionJobError("RESTORE_WINDOW_EXPIRED")
 
-        allowed, permission = self._restore_permission_for(scope, job.resource_type, principal)
+        allowed, permission = await self._restore_permission_for_async(
+            session, scope, job.resource_type, principal, job=job
+        )
         if not allowed:
             raise AdminActionForbiddenError("PERMISSION_NOT_GRANTED")
         assert permission is not None
@@ -371,6 +404,8 @@ class DeletionService:
             await self._store.restore_user(session, uuid.UUID(job.resource_id))
         elif job.resource_type == "account":
             await self._store.restore_account(session, uuid.UUID(job.resource_id))
+        elif job.resource_type == "resource":
+            await self._restore_content_ref(session, job)
         else:
             raise DeletionJobError("NOT_RESTORABLE")
 
@@ -402,10 +437,41 @@ class DeletionService:
 
     # ── 内部工具 ──
 
-    def _restore_permission_for(
-        self, scope: str, resource_type: str, principal
+    async def _restore_permission_for_async(
+        self, session: AsyncSession, scope: str, resource_type: str, principal, job=None
     ) -> tuple[bool, str | None]:
-        """05 §12.6 注：类型化恢复权限映射表。"""
+        """05 §12.6 注：类型化恢复权限（Resource 按可见性分支，05 §12.6 恢复表）。"""
+        if resource_type == "resource" and job is not None:
+            ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+            if ref is None:
+                return False, None
+            if scope == "self":
+                if ref.visibility == "account_shared":
+                    # 本 Account 共享 Resource：Account Admin 恢复（05 §12.5/§12.6 注）
+                    return (
+                        "resource.account_shared.delete.account" in principal.permissions,
+                        "resource.account_shared.delete.account",
+                    )
+                if ref.owner_user_id != principal.actor_user_id:
+                    return False, None
+                return (
+                    "resource.user_private.delete.self" in principal.permissions,
+                    "resource.user_private.delete.self",
+                )
+            if ref.visibility == "user_private":
+                # 05 §12.6 恢复表：其他 User 的私有 Resource 不允许恢复
+                return False, None
+            if scope == "account":
+                return (
+                    "resource.account_shared.delete.account" in principal.permissions,
+                    "resource.account_shared.delete.account",
+                )
+            if scope == "platform":
+                return (
+                    "resource.account_shared.delete.platform" in principal.permissions,
+                    "resource.account_shared.delete.platform",
+                )
+            return False, None
         mapping = RESTORE_PERMISSION_MAP.get(resource_type)
         if mapping is None:
             return False, None
@@ -413,6 +479,17 @@ class DeletionService:
         if scope != expected_scope:
             return False, None
         return permission_code in principal.permissions, permission_code
+
+    async def _restore_content_ref(self, session: AsyncSession, job: IamDeletionJob) -> None:
+        """Resource 恢复（09 §45.3：回到最近一次成功 active 版本；无成功版本
+        保持 failed；Watch 保持 paused，用户或管理员必须手工恢复）。"""
+
+        ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+        if ref is None:
+            raise DeletionJobError("NOT_RESTORABLE")
+        ref.deleted_at = None
+        ref.status = "active" if (ref.active_generation or 0) > 0 else "failed"
+        await self._store.update_ref(session, ref)
 
     async def _load_user_in_scope(
         self, session: AsyncSession, scope_account_id: uuid.UUID, target_user_id: uuid.UUID
@@ -450,7 +527,24 @@ class DeletionService:
             if account is None:
                 return None
             return account.display_name
+        if job.resource_type == "resource":
+            ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+            if ref is None:
+                return None
+            return ref.display_name
         return None
+
+    async def _job_visible_to(self, session: AsyncSession, job: IamDeletionJob, principal) -> bool:
+        """self 回收站可见性（05 §12.5）：属主本人的私有 Resource 或本 Account
+        共享 Resource。"""
+        if job.resource_type != "resource":
+            return False
+        ref = await self._store.get_ref(session, uuid.UUID(job.resource_id))
+        if ref is None:
+            return False
+        if ref.visibility == "user_private":
+            return ref.owner_user_id == principal.actor_user_id
+        return ref.visibility == "account_shared"
 
     async def _role_code_of(self, session: AsyncSession, user_id: uuid.UUID) -> str | None:
         from openviking.server.platform.models import IamRole, IamUserRole

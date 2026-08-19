@@ -110,6 +110,36 @@ class PlatformConfig:
     upload_ttl_minutes: int = field(default_factory=lambda: _env_int("OV_UPLOAD_TTL_MINUTES", 15))
     purge_batch_size: int = field(default_factory=lambda: _env_int("OV_PURGE_BATCH_SIZE", 50))
 
+    # ── P2-E3：Resource 摄取能力（09 §40/§43，服务端强制，AC⑩）──
+
+    upload_max_files_per_batch: int = field(
+        default_factory=lambda: _env_int("OV_UPLOAD_MAX_FILES_BATCH", 10)
+    )
+    upload_max_size_bytes: int = field(
+        default_factory=lambda: _env_int("OV_UPLOAD_MAX_SIZE_BYTES", 10 * 1024 * 1024)
+    )
+    watch_enabled: bool = field(default_factory=lambda: _env_bool("OV_WATCH_ENABLED", True))
+    watch_interval_presets: tuple[int, ...] = field(
+        default_factory=lambda: tuple(
+            int(x) for x in _env("OV_WATCH_INTERVAL_PRESETS", "60,360,720,1440,10080").split(",") if x
+        )
+    )
+    refresh_min_interval_seconds: int = field(
+        default_factory=lambda: _env_int("OV_REFRESH_MIN_INTERVAL", 300)
+    )
+    http_sources_allowed: bool = field(
+        default_factory=lambda: _env_bool("OV_HTTP_SOURCES_ALLOWED", False)
+    )
+    # Node ID HMAC 签名密钥（09 §42.3：服务端生成、带版本的不透明标识）。
+    # 生产由 Secret Manager 注入；开发态默认值只用于本地测试。
+    node_id_secret: str = field(
+        default_factory=lambda: _env("OV_NODE_ID_SECRET", "dev-node-id-secret-p2e3")
+    )
+    # 远程来源应用层加密密钥（09 §47.3：Envelope Encryption，明文不落库）。
+    source_cipher_key: str = field(
+        default_factory=lambda: _env("OV_SOURCE_CIPHER_KEY", "dev-source-cipher-key-p2e3-32bytes!")
+    )
+
     def with_database_url(self, url: str) -> "PlatformConfig":
         """返回仅替换 database_url 的副本（测试用）。"""
         return PlatformConfig(database_url=url)

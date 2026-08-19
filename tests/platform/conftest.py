@@ -93,7 +93,7 @@ async def session(
                 "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
                 "iam_users, iam_accounts, iam_permissions, iam_permission_schema, "
                 "iam_deletion_jobs, platform_content_refs, platform_operation_refs, "
-                "platform_uploads CASCADE"
+                "platform_uploads, platform_resource_watches CASCADE"
             )
         )
         await s.commit()
@@ -152,26 +152,43 @@ async def auth_client(auth_app):
 
 @pytest_asyncio.fixture
 async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
-    """P1-E5 集成测试 FastAPI app（auth + admin + platform 三组路由）。
+    """P1-E5/P2-E3 集成测试 FastAPI app（auth + admin + platform + resources 路由）。
 
     app.state 注入 IAM repository/RBAC/AuthService/AdminService/
-    ProvisioningService/DeletionService/AggregateService（create_app
-    挂载时的装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
+    ProvisioningService/DeletionService/AggregateService/ProductFacade/
+    ResourceService（create_app 挂载时的装配约定，P5-E1）。会话依赖
+    override 到测试库 session_factory。
     """
     from fastapi import FastAPI
 
     from openviking.server.platform.admin.service import AdminService
     from openviking.server.platform.aggregates import AggregateService
     from openviking.server.platform.auth.service import AuthService
+    from openviking.server.platform.auth.uri_policy import AuthorizationService
+    from openviking.server.platform.config import PlatformConfig
     from openviking.server.platform.db import get_session
     from openviking.server.platform.deletion.service import DeletionService
+    from openviking.server.platform.facade import ProductFacadeService
     from openviking.server.platform.iam import PostgresIamRepository, RbacService
     from openviking.server.platform.provisioning.control_plane import FakeControlPlane
     from openviking.server.platform.provisioning.repository import ProvisioningRepository
     from openviking.server.platform.provisioning.service import ProvisioningService
     from openviking.server.platform.registry.repository import RegistryRepository
-    from openviking.server.platform.routers import admin_router, auth_router, platform_router
+    from openviking.server.platform.registry.service import ContentRegistryService
+    from openviking.server.platform.resource.execution import FakeResourceExecutionPlane
+    from openviking.server.platform.resource.service import ResourceService
+    from openviking.server.platform.resource.storage import MemoryTempUploadStore
+    from openviking.server.platform.routers import (
+        admin_router,
+        auth_router,
+        platform_router,
+        resources_router,
+    )
+    from openviking.server.platform.target_policy import TargetPolicy
 
+    config = PlatformConfig(
+        refresh_min_interval_seconds=0,
+    )
     app = FastAPI(title="ovp-platform-test")
     repo = PostgresIamRepository()
     rbac = RbacService(repo)
@@ -180,14 +197,40 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    registry_service = ContentRegistryService(registry_store, ProvisioningRepository())
+    authorization = AuthorizationService(
+        TargetPolicy(), ProductFacadeService.build_ov_mapper(repo, session_factory)
+    )
+    facade = ProductFacadeService(
+        authorization=authorization,
+        registry=registry_service,
+        control_plane=None,
+        registry_store=registry_store,
+    )
+    execution = FakeResourceExecutionPlane()
+    uploads = MemoryTempUploadStore()
+    resource_service = ResourceService(
+        facade=facade,
+        registry=registry_service,
+        iam_repo=repo,
+        execution=execution,
+        uploads=uploads,
+        config=config,
+    )
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
     app.state.iam_admin_service = AdminService(repo, rbac, auth, provisioning=provisioning)
     app.state.iam_provisioning_service = provisioning
     app.state.iam_registry_store = registry_store
+    app.state.iam_registry_service = registry_service
+    app.state.iam_facade_service = facade
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_resource_service = resource_service
+    app.state.iam_resource_execution = execution
+    app.state.iam_resource_uploads = uploads
+    app.state.platform_config = config
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:
@@ -197,6 +240,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.include_router(auth_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(resources_router)
     return app
 
 
