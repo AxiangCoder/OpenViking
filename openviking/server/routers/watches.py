@@ -11,7 +11,7 @@ query parameter ``?to_uri=``. Cross-key conflict returns 400.
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from openviking.resource import watch_manager as wm_mod
@@ -20,6 +20,10 @@ from openviking.server.auth import get_request_context
 from openviking.server.dependencies import get_service
 from openviking.server.identity import RequestContext
 from openviking.server.models import Response
+from openviking.server.platform.lowlevel.guard import (
+    guard_request,
+    object_type_for_uri,
+)
 from openviking_cli.exceptions import (
     FailedPreconditionError,
     InvalidArgumentError,
@@ -282,21 +286,37 @@ async def delete_watch_by_id(
             "task, so omit it unless the cross-check is desired."
         ),
     ),
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Delete a watch task by ID."""
     task = await _resolve_task(task_id, to_uri, _ctx)
+    await _guard_watch_change(http_request, task)
     return await _delete_impl(task, _ctx)
 
 
 @router.delete("/watches")
 async def delete_watch_by_uri(
     to_uri: str = Query(..., description="Target URI of the watch task"),
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Delete a watch task by to_uri."""
     task = await _resolve_task(None, to_uri, _ctx)
+    await _guard_watch_change(http_request, task)
     return await _delete_impl(task, _ctx)
+
+
+async def _guard_watch_change(http_request: Request, target: WatchTask) -> None:
+    """P2-E6a（05 §11.5）：取消 Watch 需要目标 Resource 当前写权限。"""
+    if http_request is None or target.to_uri is None:
+        return
+    await guard_request(
+        http_request,
+        action="write",
+        uri=target.to_uri,
+        object_type=object_type_for_uri(target.to_uri),
+    )
 
 
 async def _trigger_impl(target: WatchTask):

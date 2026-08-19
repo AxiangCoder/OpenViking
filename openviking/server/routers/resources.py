@@ -12,6 +12,11 @@ from openviking.server.auth import get_request_context, get_upload_request_conte
 from openviking.server.dependencies import get_service
 from openviking.server.identity import RequestContext
 from openviking.server.local_input_guard import require_remote_resource_source
+from openviking.server.platform.lowlevel.guard import (
+    guard_request,
+    lowlevel_guard_for,
+    principal_from_request,
+)
 from openviking.server.resource_ingest import ingest_temp_upload
 from openviking.server.responses import response_from_result
 from openviking.server.skill_source_metadata import persist_skill_source_metadata
@@ -211,6 +216,22 @@ async def add_resource(
     """Add resource to OpenViking."""
     service = get_service()
 
+    # P2-E6a（05 §11.5 默认目标规则，AC①）：未显式指定目标（to/parent 均空）
+    # → 服务端强制 User 私有根；显式共享目标触发共享写权限检查（普通 User 403）
+    guard = lowlevel_guard_for(http_request)
+    if guard is not None:
+        principal = principal_from_request(http_request)
+        explicit = request.to or request.parent
+        if explicit:
+            await guard_request(
+                http_request,
+                action="add_resource",
+                uri=explicit,
+                object_type="resource",
+            )
+        else:
+            request.to = guard.default_target_uri(principal, object_type="resource")
+
     path = request.path
     allow_local_path_resolution = False
     original_filename = None
@@ -307,6 +328,22 @@ async def add_skill(
 ):
     """Add skill to OpenViking."""
     service = get_service()
+
+    # P2-E6a（05 §11.5 默认目标规则）：Skill 未显式 target_uri → 强制 User
+    # 私有 skills 根；显式共享目标触发共享写权限检查（普通 User 403）
+    guard = lowlevel_guard_for(http_request)
+    if guard is not None:
+        principal = principal_from_request(http_request)
+        if request.target_uri:
+            await guard_request(
+                http_request,
+                action="add_skill",
+                uri=request.target_uri,
+                object_type="skill",
+            )
+        else:
+            request.target_uri = guard.default_target_uri(principal, object_type="skill")
+
     data = request.data
     allow_local_path_resolution = False
     resolved = None

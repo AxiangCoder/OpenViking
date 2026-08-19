@@ -5,7 +5,7 @@
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import Response as FastAPIResponse
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -26,6 +26,11 @@ from openviking.server.dependencies import get_service
 from openviking.server.error_mapping import map_exception
 from openviking.server.identity import RequestContext, Role
 from openviking.server.models import Response
+from openviking.server.platform.lowlevel.guard import (
+    guard_active,
+    guard_request,
+    object_type_for_uri,
+)
 from openviking.server.telemetry import run_operation
 from openviking.telemetry import TelemetryRequest
 from openviking_cli.exceptions import InvalidArgumentError, NotFoundError, PermissionDeniedError
@@ -253,10 +258,18 @@ async def download(
 
 @router.post("/write")
 async def write(
+    http_request: Request,
     request: WriteContentRequest = Body(...),
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Write text content to a file (replace, append, or create) and refresh semantics/vectors."""
+    # P2-E6a（05 §11.5）：低层写动作统一 TargetPolicy 守卫
+    await guard_request(
+        http_request,
+        action="write",
+        uri=request.uri,
+        object_type=object_type_for_uri(request.uri),
+    )
     service = get_service()
     uri = resolve_path_variables(request.uri)
     execution = await run_operation(
@@ -280,10 +293,20 @@ async def write(
 
 @router.post("/batch-write")
 async def batch_write(
+    http_request: Request,
     request: BatchWriteRequest = Body(...),
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Apply preconditioned file writes and refresh their indexes as one request."""
+    # P2-E6a（05 §11.5）：批量写经 TargetPolicy——根与每个 operation 都校验
+    if guard_active(http_request):
+        for operation in request.operations:
+            await guard_request(
+                http_request,
+                action="batch_write",
+                uri=operation.uri,
+                object_type=object_type_for_uri(operation.uri),
+            )
     service = get_service()
     root_uri = resolve_path_variables(request.root_uri)
     operations = [operation.model_dump(exclude_none=True) for operation in request.operations]
@@ -309,10 +332,18 @@ async def batch_write(
 
 @router.post("/set_tags")
 async def set_tags(
+    http_request: Request,
     request: SetTagsRequest = Body(...),
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Set explicit k=v retrieval tags metadata for a file or directory."""
+    # P2-E6a（05 §11.5）：set_tags 是"会改变"动作，经 TargetPolicy 写守卫
+    await guard_request(
+        http_request,
+        action="set_tags",
+        uri=request.uri,
+        object_type=object_type_for_uri(request.uri),
+    )
     service = get_service()
     uri = resolve_path_variables(request.uri)
     execution = await run_operation(
