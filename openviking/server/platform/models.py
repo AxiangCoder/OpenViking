@@ -515,3 +515,149 @@ class PlatformUpload(Base):
     consumed_by_operation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ── P2-E6b：MCP OAuth（04 §10.13，Spike 风险 10）──
+
+
+class IamOAuthClient(Base):
+    """04 §10.13 `iam_oauth_clients`：OAuth Public Client 注册。
+
+    v0.1 固定 `token_endpoint_auth_method='none'`（Public Client + PKCE）；
+    `status` active/disabled，disabled 时协议与产品端点均拒绝新授权。
+    """
+
+    __tablename__ = "iam_oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    client_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    redirect_uris: Mapped[list] = mapped_column(JSONB, nullable=False)
+    grant_types: Mapped[list] = mapped_column(JSONB, nullable=False)
+    response_types: Mapped[list] = mapped_column(JSONB, nullable=False)
+    token_endpoint_auth_method: Mapped[str] = mapped_column(String(32), default="none")
+    scope: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class IamOAuthGrant(Base):
+    """04 §10.13 `iam_oauth_grants`：完成授权的 Account User ↔ Client 关系。
+
+    - `id` 即 `/app/profile/connections` 的连接 ID；
+    - 一个 active Grant 绑定一个 `user_id + client_id + scope`（部分唯一索引
+      `uq_oauth_grants_user_client_scope_active`），不绑定登录 Session，
+      也不绑定某个 User API Key；
+    - 同意只接受 `authentication_method=session`；用户禁用/删除期撤销其
+      全部 Grant/Token，恢复后不自动恢复。
+    """
+
+    __tablename__ = "iam_oauth_grants"
+    __table_args__ = (
+        Index("ix_oauth_grants_user_status", "user_id", "status"),
+        Index("ix_oauth_grants_account", "account_id"),
+        Index(
+            "uq_oauth_grants_user_client_scope_active",
+            "user_id",
+            "client_id",
+            "scope",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_users.id"))
+    client_id: Mapped[str] = mapped_column(ForeignKey("iam_oauth_clients.client_id"))
+    scope: Mapped[str] = mapped_column(String(128))  # v0.1: mcp
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("iam_users.id"), nullable=True
+    )
+
+
+class IamOAuthPendingAuthorization(Base):
+    """04 §10.13 `iam_oauth_pending_authorizations`：短期授权请求。
+
+    保存 `pending_id`、display code、Client、精确 redirect URI、PKCE
+    challenge、state、过期时间和批准状态；只能由 OAuth 协议端点与产品
+    授权端点访问，前端不能提交或修改 redirect URI。
+    """
+
+    __tablename__ = "iam_oauth_pending_authorizations"
+    __table_args__ = (
+        Index("ix_oauth_pending_expires", "expires_at"),
+        Index("ix_oauth_pending_display_code", "display_code"),
+    )
+
+    pending_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("iam_oauth_clients.client_id"))
+    redirect_uri: Mapped[str] = mapped_column(String(2048))
+    redirect_uri_provided_explicitly: Mapped[bool] = mapped_column(Boolean, default=True)
+    code_challenge: Mapped[str] = mapped_column(String(256))
+    code_challenge_method: Mapped[str] = mapped_column(String(16), default="S256")
+    scopes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    resource: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    display_code: Mapped[str] = mapped_column(String(32))
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified_account_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    verified_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    verified_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    verified_key_fp: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IamOAuthToken(Base):
+    """04 §10.13 `iam_oauth_tokens`：Auth Code / Refresh / Access Token 存储。
+
+    只保存 SHA-256 hash、类型、Grant、Token family、父子轮换关系、过期/
+    消费/撤销状态，不保存可再次读取的明文。Refresh Token 必须轮换；
+    检测到已消费 Token 重放时撤销整个 Token family。
+    """
+
+    __tablename__ = "iam_oauth_tokens"
+    __table_args__ = (
+        Index("ix_oauth_tokens_hash", "token_hash", unique=True),
+        Index("ix_oauth_tokens_grant", "grant_id"),
+        Index("ix_oauth_tokens_family", "token_family_id"),
+        Index("ix_oauth_tokens_user", "user_id", "token_type", "status"),
+        Index("ix_oauth_tokens_expires", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    token_type: Mapped[str] = mapped_column(String(16))  # auth_code | refresh | access
+    token_hash: Mapped[str] = mapped_column(String(64))
+    client_id: Mapped[str] = mapped_column(ForeignKey("iam_oauth_clients.client_id"))
+    grant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_oauth_grants.id"))
+    token_family_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    parent_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("iam_oauth_tokens.id"), nullable=True
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_users.id"))
+    role: Mapped[str] = mapped_column(String(32))
+    scope: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    resource: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    authorizing_key_fp: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # auth_code 专用：provider load_authorization_code 需要 PKCE challenge 与
+    # 精确 redirect URI（04 §10.13 协议闭环）；refresh/access 行为 NULL。
+    redirect_uri: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    code_challenge: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    code_challenge_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    replaced_by_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
