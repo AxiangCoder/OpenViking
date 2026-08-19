@@ -23,6 +23,8 @@ from openviking.server.platform.models import (
     IamAccount,
     IamApiCredential,
     IamAuditEvent,
+    IamOAuthGrant,
+    IamOAuthToken,
     IamPermission,
     IamRole,
     IamRolePermission,
@@ -415,6 +417,72 @@ class PostgresIamRepository(IamRepository):
         )
         result = await session.execute(stmt)
         return result.rowcount
+
+    # ── P2-E6b：MCP OAuth 生命周期撤销（04 §10.13）──
+
+    async def revoke_all_oauth_grants_for_user(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        revoked_by: uuid.UUID | None,
+    ) -> int:
+        now = datetime.now(timezone.utc)
+        grants = (
+            await session.execute(
+                update(IamOAuthGrant)
+                .where(IamOAuthGrant.user_id == user_id)
+                .where(IamOAuthGrant.status != "revoked")
+                .values(status="revoked", revoked_at=now, revoked_by=revoked_by)
+            )
+        ).rowcount or 0
+        grant_ids = (
+            await session.execute(
+                select(IamOAuthGrant.id).where(
+                    IamOAuthGrant.user_id == user_id, IamOAuthGrant.status == "revoked"
+                )
+            )
+        ).scalars().all()
+        if grant_ids:
+            await session.execute(
+                update(IamOAuthToken)
+                .where(IamOAuthToken.grant_id.in_(grant_ids))
+                .where(IamOAuthToken.status != "revoked")
+                .values(status="revoked", revoked_at=now)
+            )
+        return grants
+
+    async def revoke_all_oauth_grants_for_account(
+        self,
+        session: AsyncSession,
+        account_id: uuid.UUID,
+        *,
+        revoked_by: uuid.UUID | None,
+    ) -> int:
+        now = datetime.now(timezone.utc)
+        grant_ids = (
+            await session.execute(
+                select(IamOAuthGrant.id).where(
+                    IamOAuthGrant.account_id == account_id, IamOAuthGrant.status != "revoked"
+                )
+            )
+        ).scalars().all()
+        grants = (
+            await session.execute(
+                update(IamOAuthGrant)
+                .where(IamOAuthGrant.account_id == account_id)
+                .where(IamOAuthGrant.status != "revoked")
+                .values(status="revoked", revoked_at=now, revoked_by=revoked_by)
+            )
+        ).rowcount or 0
+        if grant_ids:
+            await session.execute(
+                update(IamOAuthToken)
+                .where(IamOAuthToken.grant_id.in_(grant_ids))
+                .where(IamOAuthToken.status != "revoked")
+                .values(status="revoked", revoked_at=now)
+            )
+        return grants
 
     # ── roles / permissions ──
 
