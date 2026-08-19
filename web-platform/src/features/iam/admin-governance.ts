@@ -180,3 +180,16 @@ export interface MonitoringResult {
 export async function fetchAdminMonitoring(): Promise<MonitoringResult> {
   return request<MonitoringResult>("/api/platform/v1/admin/monitoring");
 }
+
+// ── /platform 挂载点（13 §90，P4-E4；复用本层 DTO 与展示规则）──
+
+/** `/platform/audit-events`：平台范围审计（13 §90，AC⑧；列表字段白名单同 87.2）。 */
+export async function fetchPlatformAuditEvents(cursor?: string): Promise<AuditEventPage> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return request<AuditEventPage>(`/api/platform/v1/platform/audit-events${query}`);
+}
+
+/** `/platform/monitoring`：平台聚合业务摘要（05 §12.6；不含底层组件状态）。 */
+export async function fetchPlatformMonitoring(): Promise<MonitoringResult> {
+  return request<MonitoringResult>("/api/platform/v1/platform/monitoring");
+}

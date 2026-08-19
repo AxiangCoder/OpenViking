@@ -81,6 +81,33 @@ export async function restoreAdminRecycleItem(jobId: string): Promise<RestoreRes
   }
 }
 
+// ── /platform 挂载点（05 §12.6 注：平台范围，Skill 始终只读，P4-E4 AC⑧⑨）──
+
+/** `/platform/recycle-bin`：平台范围回收站（`restore_allowed` 由服务端按类型实时计算）。 */
+export async function fetchPlatformRecycleBin(): Promise<RecycleBinResult> {
+  return request<RecycleBinResult>("/api/platform/v1/platform/recycle-bin");
+}
+
+/** 平台范围恢复（按对象类型校验；Skill 服务端不下发恢复权限 → 组件只读，10 §60）。 */
+export async function restorePlatformRecycleItem(jobId: string): Promise<RestoreResult> {
+  try {
+    return await request<RestoreResult>(`/api/platform/v1/platform/recycle-bin/${jobId}/restore`, {
+      method: "POST",
+    });
+  } catch (error) {
+    // 共享组件以 err.message 展示；将稳定错误码转为可读文案（组件只挂载不改写）
+    if (isPlatformError(error) && error.code === "SKILL_NAME_CONFLICT") {
+      throw new PlatformError({
+        code: "SKILL_NAME_CONFLICT",
+        status: error.status,
+        message: "该名称已被其他 Skill 占用：恢复被拒绝，原 Skill 保持删除状态（名称不可改名或覆盖）。",
+        requestId: error.requestId,
+      });
+    }
+    throw error;
+  }
+}
+
 /** 对象类型 → 产品分组文案（06 §14.6：按对象类型分组展示与恢复）。 */
 export const RESOURCE_TYPE_LABELS: Record<RecycleResourceType, string> = {
   session: "对话 Session",
