@@ -143,6 +143,12 @@ const appRecycleBinRoute = createRoute({
 const appProfileRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/profile",
+  component: () => <Outlet />,
+});
+
+const appProfileIndexRoute = createRoute({
+  getParentRoute: () => appProfileRoute,
+  path: "/",
   component: ProfilePage,
 });
 
@@ -174,5 +180,9 @@ export const appRouteTree = appLayoutRoute.addChildren([
   appSessionsRoute,
   appActivityRoute,
   appRecycleBinRoute,
-  appProfileRoute.addChildren([appProfileApiKeysRoute, appProfileConnectionsRoute]),
+  appProfileRoute.addChildren([
+    appProfileIndexRoute,
+    appProfileApiKeysRoute,
+    appProfileConnectionsRoute,
+  ]),
 ]);

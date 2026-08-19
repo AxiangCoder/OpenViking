@@ -121,6 +121,42 @@ describe("platform-client", () => {
     }
   });
 
+  it("限流 401 附带 Retry-After → PlatformError.retryAfterSeconds（03 §8.3，登录页冷却用）", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        401,
+        { status: "error", error: { code: "LOGIN_FAILED" } },
+        { "Retry-After": "30" },
+      ),
+    );
+    configurePlatformClient({ fetchImpl: fetchMock });
+
+    try {
+      await request("/auth/login", { method: "POST", body: { email: "a@b.c", password: "x" } });
+      expect.unreachable();
+    } catch (error) {
+      expect(isPlatformError(error)).toBe(true);
+      expect((error as PlatformError).code).toBe("LOGIN_FAILED");
+      expect((error as PlatformError).retryAfterSeconds).toBe(30);
+    }
+  });
+
+  it("无 Retry-After 的普通 401 → retryAfterSeconds 为 null", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { status: "error", error: { code: "LOGIN_FAILED" } }),
+    );
+    configurePlatformClient({ fetchImpl: fetchMock });
+
+    try {
+      await request("/auth/login", { method: "POST", body: { email: "a@b.c", password: "x" } });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as PlatformError).retryAfterSeconds).toBeNull();
+    }
+  });
+
   it("401/403 触发全局 auth-challenge 事件（AC③）", async () => {
     const listener = vi.fn();
     globalThis.addEventListener(AUTH_CHALLENGE_EVENT, listener);

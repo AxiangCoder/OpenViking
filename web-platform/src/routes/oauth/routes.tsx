@@ -11,6 +11,10 @@ export const oauthConsentRoute = createRoute({
   component: OAuthConsentPage,
   beforeLoad: requireAuthZone("oauth"),
   errorComponent: ErrorPage,
+  // AC⑥：pending 仅作为同设备授权入参存在；读取后由页面立即从地址栏剥离
+  validateSearch: (search: Record<string, unknown>) => ({
+    pending: typeof search.pending === "string" ? search.pending : undefined,
+  }),
 });
 
 export const oauthVerifyRoute = createRoute({

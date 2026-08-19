@@ -242,6 +242,11 @@ button:disabled {
   padding: 32px;
 }
 
+.login-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
 .login-notice {
   background: #fff7e6;
   border: 1px solid #ffd591;
@@ -258,4 +263,232 @@ button:disabled {
   color: var(--ov-text-secondary);
   font-size: 13px;
   word-break: break-all;
+}
+
+/* ── 登录表单（13 §80.2，P3-E2）── */
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ov-text-secondary);
+  font-size: 13px;
+}
+
+.login-field input {
+  padding: 8px 10px;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  font: inherit;
+  color: var(--ov-text);
+}
+
+.login-field input:focus {
+  outline: none;
+  border-color: var(--ov-primary);
+}
+
+.login-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--ov-radius);
+  padding: 8px 12px;
+  color: var(--ov-danger);
+  font-size: 13px;
+}
+
+.login-submit {
+  background: var(--ov-primary);
+  color: #fff;
+  border-color: var(--ov-primary);
+  padding: 9px 14px;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--ov-primary-hover);
+  border-color: var(--ov-primary-hover);
+  color: #fff;
+}
+
+/* ── 个人设置（13 §81，P3-E2）── */
+
+.profile-page {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-section h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.profile-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.profile-row dt {
+  width: 120px;
+  flex-shrink: 0;
+  color: var(--ov-text-secondary);
+}
+
+.profile-row dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.profile-form .login-field input:focus {
+  border-color: var(--ov-primary);
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.profile-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--ov-radius);
+  padding: 10px 12px;
+  color: #166534;
+}
+
+.profile-session-card {
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 12px 14px;
+  max-width: 480px;
+}
+
+.profile-session-card p {
+  margin: 0 0 6px;
+  color: var(--ov-text-secondary);
+  font-size: 13px;
+}
+
+.profile-hint {
+  color: var(--ov-text-secondary);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.primary-button {
+  background: var(--ov-primary);
+  color: #fff;
+  border-color: var(--ov-primary);
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--ov-primary-hover);
+  border-color: var(--ov-primary-hover);
+  color: #fff;
+}
+
+.danger-button {
+  color: var(--ov-danger);
+  border-color: #fecaca;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--ov-danger);
+  color: var(--ov-danger);
+}
+
+.confirm-dialog {
+  margin-top: 12px;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 12px 14px;
+  background: var(--ov-bg);
+  font-size: 13px;
+}
+
+.oauth-consent-page,
+.oauth-verify-page {
+  max-width: 480px;
+  margin: 64px auto;
+  background: var(--ov-surface);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 28px;
+}
+
+.oauth-meta {
+  color: var(--ov-text-secondary);
+  line-height: 1.7;
+  font-size: 13px;
+  margin: 8px 0;
+  word-break: break-all;
+}
+
+.oauth-warning {
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: var(--ov-radius);
+  padding: 10px 12px;
+  color: #874d00;
+  font-size: 13px;
+}
+
+.one-time-key {
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.empty-state {
+  color: var(--ov-text-secondary);
+  background: var(--ov-bg);
+  border: 1px dashed var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 20px;
+  text-align: center;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ov-border);
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--ov-text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
 }
