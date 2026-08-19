@@ -266,6 +266,37 @@ class IamAuditEvent(Base):
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
 
 
+class IamOutbox(Base):
+    """04 §10.9 `iam_outbox`：PostgreSQL → OpenViking Provisioning 可靠同步。
+
+    - `aggregate_id` 指向 Account 或 User 内部 ID（04 §10.9，无 FK）；
+    - `status` pending/processing/completed/failed，`attempts` 递增、
+      指数退避（05 §11.3），`last_error` 仅存脱敏错误；
+    - `processing_started_at` 为 Reconciler 卡死恢复的检测时间（P2-E1 实现细节）。
+    """
+
+    __tablename__ = "iam_outbox"
+    __table_args__ = (
+        Index("ix_iam_outbox_status_next_attempt", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(64))
+    aggregate_id: Mapped[uuid.UUID] = mapped_column()
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(BigInteger, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class IamPermissionSchema(Base):
     """04 §10.5 全局权限 Schema 版本（单行，`iam_permission_schema`）。
 

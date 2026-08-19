@@ -120,3 +120,25 @@ class AdminActionForbiddenError(PlatformError):
 
 class InvalidCursorError(PlatformError):
     """分页 cursor 格式非法（05 §12.2：cursor 不透明、API 层映射 400）。"""
+
+
+# ── P2-E1：Provisioning Outbox/Worker/Reconciler（只 append，不修改既有码）──
+
+
+class ProvisioningError(PlatformError):
+    """Provisioning 处理失败（05 §11.3）：Worker/控制面同步错误。
+
+    `last_error` 一律存脱敏错误（不含路径/密钥/口令，04 §10.9）。
+    """
+
+
+class ProvisioningNotRetryableError(PlatformError):
+    """`provisioning/retry` 拒绝（05 §12.6）：目标已 active 且无未完成事件。
+
+    `reason` 为稳定对外码（`PROVISIONING_NOT_RETRYABLE`，spike ==12：active 重试 409）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
