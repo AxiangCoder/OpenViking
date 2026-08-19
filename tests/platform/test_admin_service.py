@@ -196,10 +196,15 @@ async def test_disable_revokes_sessions_and_keys(session: AsyncSession) -> None:
     # 全部 API Key 撤销（AC ⑤）
     for cred in await setup.repo.list_api_credentials_for_user(session, setup.alice.id):
         assert cred.revoked_at is not None
-    # 审计含撤销计数、无密钥/密码明文（AC ⑥）
+    # 审计含撤销计数、无密钥/密码明文（AC ⑥）；P2-E6b：禁用期同步撤销
+    # OAuth Grant/Token（04 §10.13，14 号计划 §97.7）
     events = await setup.repo.list_audit_events(session, action="user.disable")
     assert len(events) == 1
-    assert events[0].metadata_json == {"sessions_revoked": 2, "keys_revoked": 2}
+    assert events[0].metadata_json == {
+        "sessions_revoked": 2,
+        "keys_revoked": 2,
+        "oauth_grants_revoked": 0,
+    }
     assert events[0].actor_user_id == setup.admin.id
     assert events[0].subject_user_id == setup.alice.id
 

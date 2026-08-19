@@ -93,7 +93,8 @@ async def session(
                 "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
                 "iam_users, iam_accounts, iam_permissions, iam_permission_schema, "
                 "iam_deletion_jobs, platform_content_refs, platform_operation_refs, "
-                "platform_uploads CASCADE"
+                "platform_uploads, iam_oauth_tokens, iam_oauth_pending_authorizations, "
+                "iam_oauth_grants, iam_oauth_clients CASCADE"
             )
         )
         await s.commit()
@@ -206,5 +207,51 @@ async def platform_client(platform_app):
     import httpx
 
     transport = httpx.ASGITransport(app=platform_app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def oauth_app(session_factory: async_sessionmaker[AsyncSession]):
+    """P2-E6b 集成测试 FastAPI app（auth + me + oauth 路由 + PG OAuth 存储）。
+
+    app.state.platform_oauth_store = PostgresOAuthStore（测试库 session_factory），
+    与 create_app 开发态挂载（mount.py）的装配约定一致（P5-E1 生产挂载）。
+    """
+    from fastapi import FastAPI
+
+    from openviking.server.platform.auth.service import AuthService
+    from openviking.server.platform.db import get_session
+    from openviking.server.platform.iam import PostgresIamRepository, RbacService
+    from openviking.server.platform.iam.pg_oauth_store import PostgresOAuthStore
+    from openviking.server.platform.routers import auth_router, me_router, oauth_router
+
+    app = FastAPI(title="ovp-oauth-test")
+    repo = PostgresIamRepository()
+    rbac = RbacService(repo)
+    app.state.iam_repository = repo
+    app.state.iam_rbac_service = rbac
+    app.state.iam_auth_service = AuthService(repo, rbac)
+    app.state.platform_oauth_store = PostgresOAuthStore(
+        session_factory, label="ovp-test-pg-oauth"
+    )
+
+    async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _override_get_session
+    app.include_router(auth_router)
+    app.include_router(me_router)
+    app.include_router(oauth_router)
+    return app
+
+
+@pytest_asyncio.fixture
+async def oauth_client(oauth_app):
+    """httpx ASGITransport 客户端（同一事件循环，避免跨 loop 连接问题）。"""
+    import httpx
+
+    transport = httpx.ASGITransport(app=oauth_app)
     async with httpx.AsyncClient(transport=transport, base_url="https://testserver") as client:
         yield client
