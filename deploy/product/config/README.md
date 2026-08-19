@@ -31,7 +31,7 @@
 #   OV_COOKIE_SECURE=1（Cookie Secure/HttpOnly/SameSite=Lax，03 §8.1）
 #
 # ## 首次初始化（P5-E2，06 §15.2 八步顺序，runbook 见
-#   docs/design/product-platform/v0.1/p5-e2-init-runbook.md）
+#   docs/ovp/v0.1/p5-e2-init-runbook.md）
 #   1) 启动三单元后执行一次：
 #        OV_PLATFORM_INIT_PSA_EMAIL=psa@example.com \
 #         OV_PLATFORM_INIT_PSA_USERNAME=psa \

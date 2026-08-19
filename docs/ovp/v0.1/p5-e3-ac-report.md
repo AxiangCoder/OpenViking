@@ -13,7 +13,7 @@
 
 | # | 验收标准 | 结论 | 证据 |
 | --- | --- | --- | --- |
-| ① | 至少一次完整备份-恢复演练并留存记录 | ✅ | `docs/design/product-platform/v0.1/p5-e3-drill-record.md` 演练一（Drill A，2026-08-19T09:12:51Z，真实 PG 16.15 容器 55455）：备份（pg_dump -Fc→gzip→GPG AES256 + 数据卷 tar→gzip→GPG）→故障注入→恢复→18 项校验全绿；产物 `drill-results/full/`（report.json/verify-report.json/backups/*.enc.gz） |
+| ① | 至少一次完整备份-恢复演练并留存记录 | ✅ | `docs/ovp/v0.1/p5-e3-drill-record.md` 演练一（Drill A，2026-08-19T09:12:51Z，真实 PG 16.15 容器 55455）：备份（pg_dump -Fc→gzip→GPG AES256 + 数据卷 tar→gzip→GPG）→故障注入→恢复→18 项校验全绿；产物 `drill-results/full/`（report.json/verify-report.json/backups/*.enc.gz） |
 | ② | 恢复后登录/Key/审计正常、PG 与数据卷一致（抽查 Resource/Skill/Session 无重复） | ✅ | verify-report.json：login_password ✅、session_resolve ✅、api_key_resolve ✅、audit_continuity ✅（9≥7）；count_* 与快照一致；no_dup_content_refs/no_dup_session_refs duplicates=0；数据卷恢复后 memory.md 内容比对一致（Drill A 步骤 5）；自动化：test_drill_verify_passes_without_fault / _detects_fault（校验逻辑正/负向） |
 | ③ | 完成一次应用版本回滚演练、回滚后仍以 PG IAM 鉴权 | ✅ | 演练二（Drill B，09:17:02Z）：deploy-list 版本回退 v0.4.13→v0.4.12（deploy/VERSION + OVP_PRODUCT_IMAGE 机制）+ migration down/up（iam_users 3→3 数据保留）+ 登录/Session/API Key 全从 PG 解析成功（不回退旧 registry）；自动化：test_single_step_downgrade_upgrade_keeps_data、test_pg_credentials_authorize_after_downgrade_upgrade_cycle |
 | ④ | 不可逆 migration 具备独立实例验证步骤且演练通过 | ✅ | 演练三（Drill C，09:17:54Z）：备份恢复到独立实例 `ov_platform_drill_verify` → 数据逐表一致 → 完整校验通过 → 主实例未受影响（iam_users=3/audit=10 不变）后才允许切流量（06 §15.4 步骤 4）；步骤固化于 p5-e3-runbook.md §5；当前 7 个迁移均含 down（可逆），流程以占位不可逆操作真实演练 |
@@ -22,14 +22,14 @@
 
 ## 交付物清单
 
-- **选型文档（首个交付项）**：`docs/design/product-platform/v0.1/p5-e3-backup-tooling.md`
+- **选型文档（首个交付项）**：`docs/ovp/v0.1/p5-e3-backup-tooling.md`
   —— 备份/恢复工具与加密方案结论：pg_dump -Fc → gzip → GPG AES256；数据卷 tar；
   无需第三方备份软件，生产可平滑换托管 RDS。
 - **生产脚本固化**：`deploy/product/scripts/backup-encrypt.sh` —— P5-E2 骨架按选型
   固化为生产可执行：新增 `backup-volume`/`restore-volume`/`verify`/`list` 子命令、
   非交互恢复（`OV_PLATFORM_BACKUP_CONFIRM=yes`）、双路审计
   （iam_audit_events + shell 600 审计日志）、`OV_PLATFORM_PG_TOOLS` docker exec 模式。
-- **runbook**：`docs/design/product-platform/v0.1/p5-e3-runbook.md` —— 发布前备份、
+- **runbook**：`docs/ovp/v0.1/p5-e3-runbook.md` —— 发布前备份、
   向下兼容发布顺序/可验证 down、应用版本回滚（PG IAM 边界）、不可逆 schema 独立
   实例验证流程、恢复后一致性校验清单（06 §14.4/§15.4）。
 - **版本回滚机制**：`deploy/product/VERSION` + docker-compose `OVP_PRODUCT_IMAGE`
@@ -37,7 +37,7 @@
 - **演练剧本**：`deploy/product/scripts/drill-backup-restore.sh`（full/rollback/
   standalone 三种剧本）+ `drill_lib.py`（数据准备/故障注入/一致性校验，与自动化
   测试共用同一套逻辑）。
-- **演练记录**：`docs/design/product-platform/v0.1/p5-e3-drill-record.md`
+- **演练记录**：`docs/ovp/v0.1/p5-e3-drill-record.md`
   （07 §21 条目 12 证据；Drill A/B/C 步骤、校验明细、审计留痕、复现方法）。
 - **测试**：`tests/platform/test_backup_restore.py`（4 例）、`test_rollback_drill.py`
   （3 例）。

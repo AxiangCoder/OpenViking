@@ -28,9 +28,9 @@
 | G9 | PASS | 禁用/改密/角色变更即时生效：`test_admin_api.py::test_disable_kills_sessions_and_keys`、`test_api_keys.py::test_disabled_user_keys_and_session_rejected`、`test_auth_api.py::test_password_change_rotates_cookie_old_cookie_dead`、`test_oauth_principal.py::test_oauth_principal_reflects_permission_changes_immediately`、`test_principal_resolver.py::test_disabled_user_blocks_session_and_all_keys` |
 | G10 | PASS | 管理与高风险操作全审计：`test_audit_production.py::test_17_1_event_categories_produce_masked_audit`、`test_security_acceptance.py::test_confirmation_dialog_is_not_a_security_boundary`（P5-E4 新增）、`test_high_risk_confirm.py`（P5-E4 新增，14.5 全量） |
 | G11 | PASS | Provisioning 失败可见、可重试、不重复：`test_provisioning.py`（active 重试 409 守卫）、`test_reconciler.py`、`test_audit_production.py::test_17_1_event_categories_produce_masked_audit`（provisioning.retry 审计） |
-| G12 | PASS | 备份恢复与版本回滚演练：`test_backup_restore.py::test_drill_verify_passes_without_fault`、`test_backup_restore.py::test_encrypted_backup_roundtrip`、`test_rollback_drill.py::test_single_step_downgrade_upgrade_keeps_data`、`test_rollback_drill.py::test_pg_credentials_authorize_after_downgrade_upgrade_cycle`；演练记录 `docs/design/product-platform/v0.1/p5-e3-drill-record.md` |
+| G12 | PASS | 备份恢复与版本回滚演练：`test_backup_restore.py::test_drill_verify_passes_without_fault`、`test_backup_restore.py::test_encrypted_backup_roundtrip`、`test_rollback_drill.py::test_single_step_downgrade_upgrade_keeps_data`、`test_rollback_drill.py::test_pg_credentials_authorize_after_downgrade_upgrade_cycle`；演练记录 `docs/ovp/v0.1/p5-e3-drill-record.md` |
 | G13 | PASS | 软删 30 天恢复、期满物理清理、审计保留、Skill 冲突失败：`test_deletion_jobs.py::test_purge_after_defaults_to_30_days`、`test_deletion_jobs.py::test_purge_worker_idempotent_and_preserves_audit`、`test_sessions_api.py::test_soft_delete_hides_and_blocks_writes`、`test_resource_deletion.py::test_purge_worker_physical_cleanup_after_30_days`、`test_skill_api.py`（Skill 恢复冲突失败） |
-| G14 | PASS | 用户与 Account Admin 不能切换 Account：`test_auth_api.py::test_password_change_rotates_cookie_old_cookie_dead`（无 Account 切换机制）、`test_api_keys.py::test_cookie_wins_over_bearer_at_http_level`、13 §92 页面级验收（web-platform 无 Account 切换入口，`docs/design/product-platform/v0.1/13-admin-profile-product-contract.md` §91） |
+| G14 | PASS | 用户与 Account Admin 不能切换 Account：`test_auth_api.py::test_password_change_rotates_cookie_old_cookie_dead`（无 Account 切换机制）、`test_api_keys.py::test_cookie_wins_over_bearer_at_http_level`、13 §92 页面级验收（web-platform 无 Account 切换入口，`docs/ovp/v0.1/13-admin-profile-product-contract.md` §91） |
 | G15 | PASS | 多具名 Key 分别创建/撤销、明文一次、禁用全阻断：`test_api_keys.py::test_create_returns_full_key_once_format_valid`、`test_api_keys.py::test_revoke_is_per_key_and_idempotent`、`test_api_keys.py::test_revoke_other_users_key_not_found`、`test_api_keys.py::test_disabled_user_keys_and_session_rejected`、`test_api_keys.py::test_password_change_and_reset_keep_key_valid` |
 | G16 | PASS | v0.1 无 Service Account/Key/机器 Principal：`test_permission_catalog.py::test_reserved_high_risk_codes_ungranted`（service account 权限未授予）、`test_api_keys.py::test_psa_cannot_create_platform_api_key`、`test_bootstrap_cmd.py::test_keys_issued_by_iam_are_ovk_u_prefixed`（仅 IAM 签发 User Key，无机器 Principal 路径） |
 | G17 | PASS | PSA 建 Account+首位 Admin、Admin 直建 User、无注册/邀请：`test_bootstrap_cmd.py::test_init_creates_psa_password_printed_once`、`test_platform_api.py`（PSA 建 Account）、`test_admin_api.py::test_admin_creates_user_role_fixed`（角色固定 user、无邀请流程） |
@@ -97,7 +97,7 @@
 ## 备份回滚 / 审计可观测性 / 健康检查证据（P5-E1/E2/E3 输入）
 
 - 备份加密与恢复审计：`test_backup_restore.py`、`deploy/product/scripts/backup-encrypt.sh`
-- 回滚演练：`test_rollback_drill.py`、`docs/design/product-platform/v0.1/p5-e3-drill-record.md`
+- 回滚演练：`test_rollback_drill.py`、`docs/ovp/v0.1/p5-e3-drill-record.md`
 - 审计 17.1 清单 + 17.2 Request ID 贯通：`test_audit_production.py`
 - 健康检查（PG/migration/backlog/Purge 阈值，06 §16.3）：`test_health_ready.py`
 - 部署/镜像无明文密钥：`test_mount_production.py::test_no_secret_plaintext_in_repo`

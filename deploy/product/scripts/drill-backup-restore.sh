@@ -3,7 +3,7 @@
 #   ① Drill A `full`       备份→故障注入→恢复→校验（验收①②⑤⑥）
 #   ② Drill B `rollback`   应用版本回滚：migration down/up 可验证 + PG 凭证不回退（验收③）
 #   ③ Drill C `standalone` 备份恢复独立实例 + 不可逆变更占位演练，主实例不受影响（验收④）
-# 演练记录落盘 docs/design/product-platform/v0.1/p5-e3-drill-record.md（人汇总）。
+# 演练记录落盘 docs/ovp/v0.1/p5-e3-drill-record.md（人汇总）。
 #
 # 用法：
 #   export OV_PLATFORM_TEST_ADMIN_URL='postgresql://ov_platform:ov_platform_dev@127.0.0.1:55455/postgres'

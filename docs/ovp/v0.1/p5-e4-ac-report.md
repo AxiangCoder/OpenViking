@@ -12,7 +12,7 @@
 
 | # | 验收标准 | 结论 | 证据（测试用例/交付物） |
 | --- | --- | --- | --- |
-| ① | 26 条验收逐条有证据（唯一证据收口点，Go/No-Go 报告模板：测试用例编号、结论、证据链接） | ✅ | `docs/design/product-platform/v0.1/p5-e4-go-no-go.md`「26 条生产验收门禁证据表」：G1–G26 每条含用例编号/结论/证据链接；证据完整性由测试门禁守护 `test_security_acceptance.py::test_go_no_go_report_evidence_complete`（26 行、结论合法、证据链接可解析）；P5-E1/E2/E3 条目按 §99.4 约定只引用不重复收集 |
+| ① | 26 条验收逐条有证据（唯一证据收口点，Go/No-Go 报告模板：测试用例编号、结论、证据链接） | ✅ | `docs/ovp/v0.1/p5-e4-go-no-go.md`「26 条生产验收门禁证据表」：G1–G26 每条含用例编号/结论/证据链接；证据完整性由测试门禁守护 `test_security_acceptance.py::test_go_no_go_report_evidence_complete`（26 行、结论合法、证据链接可解析）；P5-E1/E2/E3 条目按 §99.4 约定只引用不重复收集 |
 | ② | 18.5 全通过（含 `/studio` 公网 404、无 Studio OAuth、低层封禁） | ✅ | `test_security_acceptance.py` 19 项（17 项 18.5 清单实时断言 + 报告完整性门禁 2 项）；报告「18.5 安全测试 17 项清单」全 PASS；`/studio` 404/低层封禁：`test_mount_production.py::test_platform_mode_studio_404_not_redirect`、`test_low_level_ops_not_mounted_in_production`、`test_security_acceptance.py::test_low_level_ops_blocked_public`；无 Studio OAuth：`test_oauth_without_studio.py` |
 | ③ | 五类测试生产配置全绿且与 07 §18 清单对应（18.3 公网断言按客户端清单执行并留存证据） | ✅ | 全量回归 **599 passed, 1 skipped**（既有 566+1 + 本 Epic 新增 33）；18.1/18.2/18.5 覆盖见 Go/No-Go 报告各表；18.3 客户端清单（SDK/CLI/插件/MCP）`test_client_acceptance.py` 5 项：新 IAM Key（`ovk_u.*`）走通、三凭证一致实时 RBAC；真实公网不可用 → 生产配置集成断言+配置断言并注明证据形态（报告「18.3 公网断言测试客户端清单」）；18.4 前端 E2E 生产配置以既有 web-platform 构建/集成断言回归（`test_mount_production.py`） |
 | ④ | 安全缺陷全修复无 P0/P1 遗留 | ✅ | 本 Epic 修复 2 个真实安全缺陷（见下「安全缺陷修复清单」）：① 高风险写依赖层拒绝无审计；② 服务层拒绝审计在路由异常路径被回滚。均已有回归测试。无新增 P0/P1 遗留（遗留 P1 为既有接线限制，见 Go/No-Go 报告） |

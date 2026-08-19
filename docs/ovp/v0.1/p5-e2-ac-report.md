@@ -12,7 +12,7 @@
 
 | # | 验收标准 | 结论 | 证据（测试用例/交付物） |
 | --- | --- | --- | --- |
-| ① | 全新环境按 15.2 八步完整走通且文档化可重复 | ✅ | `docs/design/product-platform/v0.1/p5-e2-init-runbook.md`（八步 runbook + 验证清单）；`ov platform init/status/verify` CLI 端到端冒烟通过（迁移→建 PSA→幂等拒绝→巡检，见 bootstrap_cli.py）；步骤 3–8 复用例：test_bootstrap_cmd.py::test_verify_three_credentials_consistent（步骤 8）、test_admin_service/test_provisioning 既有用例（步骤 3–5）、test_api_keys 既有用例（步骤 6） |
+| ① | 全新环境按 15.2 八步完整走通且文档化可重复 | ✅ | `docs/ovp/v0.1/p5-e2-init-runbook.md`（八步 runbook + 验证清单）；`ov platform init/status/verify` CLI 端到端冒烟通过（迁移→建 PSA→幂等拒绝→巡检，见 bootstrap_cli.py）；步骤 3–8 复用例：test_bootstrap_cmd.py::test_verify_three_credentials_consistent（步骤 8）、test_admin_service/test_provisioning 既有用例（步骤 3–5）、test_api_keys 既有用例（步骤 6） |
 | ② | 初始化命令幂等、密码仅一次展示、库中仅 Argon2id hash | ✅ | test_bootstrap_cmd.py::test_init_creates_psa_password_printed_once（生成密码仅 `>>> ... <<<` 一次展示、`$argon2id$` 可校验）、test_init_password_env_injected_not_printed（env 注入不打印明文、库中 Argon2id）、test_init_idempotent_rejection（重复执行退出码 1、不覆盖密码、PSA 唯一）；CLI 冒烟 exit=1 验证 |
 | ③ | 无旧 Key 导入路径、新 Key 均为 `ovk_u.*` 由 IAM 签发 | ✅ | test_bootstrap_cmd.py::test_keys_issued_by_iam_are_ovk_u_prefixed（`ovk_u.<public_id>.<secret>` 三段式、库中仅 SHA-256+末四位）；无任何旧 registry 导入/双写路径（06 §15.1：PG 为唯一事实来源，`resolve_api_key_principal` 只接受 `ovk_u.` 前缀，见 principals.py:181） |
 | ④ | `/health`、`/ready` 在 PG 故障/migration 落后/backlog 超阈值/Purge 停滞时非 ready 且含可读诊断（阈值可精确复测） | ✅ | tests/platform/test_health_ready.py：test_ready_not_ready_when_pg_down（503+`unreachable`）、test_migration_lag_not_ready（落后 1 版 error+lag 诊断）、test_provisioning_backlog_over_threshold_not_ready（101>100 error；自定义阈值 150 复测 ok）、test_purge_pending_over_max_not_ready（501>500；max_pending=1000 复测 ok）、test_purge_stall_by_earliest_purge_after（落后 5d>3d；max_stall_days=7 复测 ok）、test_purge_pending_without_worker_not_ready（Worker 未运行）、test_ready_not_ready_when_backlog_over_threshold（HTTP 503+provisioning 明细）、test_health_non_ready_in_platform_mode（/health 503 not_ready）、test_health_ready_in_platform_mode / test_ready_platform_ok_when_checks_pass（正向 200）；阈值入 `PlatformConfig`（06 §16.3 一致：100/1/500/3 天） |
@@ -25,7 +25,7 @@
 - **初始化命令**：`openviking/server/platform/bootstrap_cli.py`（`init`/`status`/`verify`），
   经 `openviking_cli/rust_cli.py` 接入 `ov platform`；`AuthService.bootstrap_platform_super_admin`
   新增 env 密码注入（`OV_PLATFORM_INIT_PSA_PASSWORD`）。
-- **runbook**：`docs/design/product-platform/v0.1/p5-e2-init-runbook.md`（15.2 八步 + 可观测性 +
+- **runbook**：`docs/ovp/v0.1/p5-e2-init-runbook.md`（15.2 八步 + 可观测性 +
   生产化 + 验证清单）。
 - **健康检查**：`openviking/server/platform/health.py`（17.3 五维检查 + 阈值判定）；
   system.py `/health`、`/ready` 平台模式扩展（503+可读诊断）；`PlatformConfig` 新增
