@@ -317,3 +317,201 @@ class IamPermissionSchema(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class PlatformContentRef(Base):
+    """04 §10.10 `platform_content_refs`：产品稳定 ID ↔ OpenViking URI 授权映射。
+
+    OpenViking 是内容事实来源；本表是可见性、归属与审计关联的事实来源，
+    不复制业务内容正文。约束（04 §10.10）：
+
+    - `(account_id, ov_uri)` 在 Account 内唯一（Account 共享 Skill 发布
+      从 User 私有根迁入共享根时保持 ID/名称不变、URI 变化）；
+    - Skill 部分唯一约束：`(account_id, canonical_name)` 且
+      `object_type='skill' AND deleted_at IS NULL`（覆盖全部私有+共享未删除）；
+    - `visibility=user_private` 时 `owner_user_id` 非空；`account_shared` 时为空。
+    """
+
+    __tablename__ = "platform_content_refs"
+    __table_args__ = (
+        Index(
+            "ix_content_refs_account_type_vis_status",
+            "account_id",
+            "object_type",
+            "visibility",
+            "status",
+        ),
+        Index("ix_content_refs_owner_type_status", "owner_user_id", "object_type", "status"),
+        UniqueConstraint("account_id", "ov_uri", name="uq_content_refs_account_ov_uri"),
+        Index(
+            "uq_content_refs_skill_name_active",
+            "account_id",
+            "canonical_name",
+            unique=True,
+            postgresql_where=text("object_type = 'skill' AND deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_content_refs_idempotency",
+            "account_id",
+            "object_type",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    object_type: Mapped[str] = mapped_column(String(24))  # resource | skill
+    visibility: Mapped[str] = mapped_column(String(24))  # user_private | account_shared
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("iam_users.id"), nullable=True
+    )
+    ov_uri: Mapped[str] = mapped_column(String(1024))
+    canonical_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    source_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    source_display: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_locator_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_locator_key_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    latest_operation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    last_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    active_generation: Mapped[int] = mapped_column(BigInteger, default=0)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by_actor_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    updated_by_actor_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="provisioning")
+    version: Mapped[int] = mapped_column(BigInteger, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IamDeletionJob(Base):
+    """04 §10.11 `iam_deletion_jobs`：Account/User/Session/Resource/Skill
+    统一软删除、恢复与期满清理跟踪。
+
+    - `resource_id` 按类型引用 IAM/Content 对象稳定 ID；`ov_uri` 只供受控
+      Purge Worker 使用，不替代创建任务时的可见性与 Permission 校验；
+    - `status` pending/restored/purging/purged/failed；到达 `purge_after`
+      后由 Purge Worker 幂等清理并置 `purged`；审计事件不随物理清理；
+    - 恢复动作必须写审计（05 §12.6 注：按对象类型分别校验权限）。
+    """
+
+    __tablename__ = "iam_deletion_jobs"
+    __table_args__ = (
+        Index("ix_deletion_jobs_purge_status", "purge_after", "status"),
+        Index("ix_deletion_jobs_type_resource", "resource_type", "resource_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    resource_type: Mapped[str] = mapped_column(String(24))  # account|user|session|resource|skill
+    resource_id: Mapped[str] = mapped_column(String(128))
+    ov_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("iam_users.id"), nullable=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    purge_after: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    restored_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("iam_users.id"), nullable=True)
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlatformOperationRef(Base):
+    """04 §10.12 `platform_operation_refs`：OpenViking 异步 Task/Watch ↔
+    产品对象关联（授权索引与产品状态展示，不复制运行日志/任务正文）。
+
+    - `ov_operation_id` 与 `account_id + operation_kind` 组成唯一约束；
+      `ov_operation_id` 不返回为可枚举主 ID（产品用本表 `id`）；
+    - `generation` 为目标对象操作代数：旧任务完成时不得覆盖更新一代或
+      删除中的对象（04 §10.10 原子切换规则）。
+    """
+
+    __tablename__ = "platform_operation_refs"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "operation_kind", "ov_operation_id", name="uq_operations_account_kind_ov"
+        ),
+        Index(
+            "ix_operations_target_generation",
+            "account_id",
+            "target_type",
+            "target_id",
+            "generation",
+        ),
+        Index("ix_operations_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    operation_kind: Mapped[str] = mapped_column(String(16))  # task | watch
+    operation_type: Mapped[str] = mapped_column(String(64))
+    ov_operation_id: Mapped[str] = mapped_column(String(128))
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    target_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    target_visibility: Mapped[str] = mapped_column(String(24))
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("iam_users.id"), nullable=True
+    )
+    initiated_by_actor_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending")
+    stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cancellable: Mapped[bool] = mapped_column(Boolean, default=False)
+    generation: Mapped[int] = mapped_column(BigInteger, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    retryable: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformUpload(Base):
+    """04 §10.14 `platform_uploads`：Product Upload ID 授权元数据。
+
+    上传字节存临时对象存储/受控 Temp Upload Store，不写入 PostgreSQL。
+
+    - `expires_at` 默认创建后 15 分钟（可由 Capabilities 配置）；
+    - 消费使用数据库原子状态转换 `ready → consumed`（04 §10.14），
+      重复请求经 `Idempotency-Key` 返回第一次结果；
+    - Upload ID 不允许跨 User/Account/Visibility/Object Type 使用。
+    """
+
+    __tablename__ = "platform_uploads"
+    __table_args__ = (
+        Index("ix_platform_uploads_expires", "expires_at"),
+        Index("ix_platform_uploads_account_status", "account_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_users.id"))
+    target_visibility: Mapped[str] = mapped_column(String(24))  # user_private | account_shared
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("iam_users.id"), nullable=True
+    )
+    object_type: Mapped[str] = mapped_column(String(24))  # v0.1: resource
+    storage_ref: Mapped[str] = mapped_column(String(512))
+    original_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="uploading")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_by_operation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

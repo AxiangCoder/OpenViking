@@ -85,13 +85,15 @@ async def session_factory(
 async def session(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncGenerator[AsyncSession, None]:
-    """每个测试前清空全部 iam_* 表，保证测试间隔离。"""
+    """每个测试前清空全部 iam_*/platform_* 表，保证测试间隔离。"""
     async with session_factory() as s:
         await s.execute(
             text(
                 "TRUNCATE TABLE iam_outbox, iam_audit_events, iam_user_roles, "
                 "iam_role_permissions, iam_sessions, iam_roles, iam_api_credentials, "
-                "iam_users, iam_accounts, iam_permissions, iam_permission_schema CASCADE"
+                "iam_users, iam_accounts, iam_permissions, iam_permission_schema, "
+                "iam_deletion_jobs, platform_content_refs, platform_operation_refs, "
+                "platform_uploads CASCADE"
             )
         )
         await s.commit()
@@ -152,18 +154,22 @@ async def auth_client(auth_app):
 async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     """P1-E5 集成测试 FastAPI app（auth + admin + platform 三组路由）。
 
-    app.state 注入 IAM repository/RBAC/AuthService/AdminService（create_app
+    app.state 注入 IAM repository/RBAC/AuthService/AdminService/
+    ProvisioningService/DeletionService/AggregateService（create_app
     挂载时的装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
     """
     from fastapi import FastAPI
 
     from openviking.server.platform.admin.service import AdminService
+    from openviking.server.platform.aggregates import AggregateService
     from openviking.server.platform.auth.service import AuthService
     from openviking.server.platform.db import get_session
+    from openviking.server.platform.deletion.service import DeletionService
     from openviking.server.platform.iam import PostgresIamRepository, RbacService
     from openviking.server.platform.provisioning.control_plane import FakeControlPlane
     from openviking.server.platform.provisioning.repository import ProvisioningRepository
     from openviking.server.platform.provisioning.service import ProvisioningService
+    from openviking.server.platform.registry.repository import RegistryRepository
     from openviking.server.platform.routers import admin_router, auth_router, platform_router
 
     app = FastAPI(title="ovp-platform-test")
@@ -171,11 +177,17 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     rbac = RbacService(repo)
     auth = AuthService(repo, rbac)
     provisioning = ProvisioningService(repo, ProvisioningRepository(), FakeControlPlane())
+    registry_store = RegistryRepository()
+    deletion = DeletionService(repo, registry_store)
+    aggregates = AggregateService(registry_store)
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
     app.state.iam_admin_service = AdminService(repo, rbac, auth, provisioning=provisioning)
     app.state.iam_provisioning_service = provisioning
+    app.state.iam_registry_store = registry_store
+    app.state.iam_deletion_service = deletion
+    app.state.iam_aggregate_service = aggregates
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:
