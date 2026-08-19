@@ -100,28 +100,13 @@ function parseRetryAfter(raw: string | null): number | null {
 }
 
 /**
- * 统一请求入口：返回 envelope 的 `result`。
- * 成功：`{status:"ok", result}`；失败：抛 PlatformError（status/code/requestId 稳定）。
+ * 统一 fetch + 信封解析（request/requestForm 共用）：
+ * 401/403 触发 auth-challenge；非 ok 抛 PlatformError；ok 返回 envelope 的 `result`。
  */
-export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
-  const headers: Record<string, string> = { [REQUEST_ID_HEADER]: newRequestId() };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (method !== "GET") {
-    const csrf = csrfTokenProvider();
-    if (csrf) headers[CSRF_HEADER] = csrf;
-  }
-  if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
-
+async function fetchEnvelope(path: string, init: RequestInit): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetchImpl(path, {
-      method,
-      headers,
-      credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
-    });
+    response = await fetchImpl(path, init);
   } catch (error) {
     throw new PlatformError({
       code: "UNAVAILABLE",
@@ -148,7 +133,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const body = (typeof raw === "object" && raw !== null ? raw : {}) as EnvelopeOk;
   if (body.status === "ok") {
-    return body.result as T;
+    return body.result;
   }
   throw new PlatformError({
     code: "UNKNOWN",
@@ -156,6 +141,54 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     message: "响应信封格式非法",
     requestId: response.headers.get(REQUEST_ID_HEADER),
   });
+}
+
+/**
+ * 统一 JSON 请求入口：返回 envelope 的 `result`。
+ * 成功：`{status:"ok", result}`；失败：抛 PlatformError（status/code/requestId 稳定）。
+ */
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
+  const headers: Record<string, string> = { [REQUEST_ID_HEADER]: newRequestId() };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (method !== "GET") {
+    const csrf = csrfTokenProvider();
+    if (csrf) headers[CSRF_HEADER] = csrf;
+  }
+  if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
+
+  return fetchEnvelope(path, {
+    method,
+    headers,
+    credentials: "include",
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
+  }) as Promise<T>;
+}
+
+/**
+ * multipart/form-data 上传入口（05 §12.5 `me|account resource-uploads`；
+ * P3-E4/P3-E5 文件导入复用）。与 `request` 同信封/CSRF/Request-ID/401/403 语义；
+ * Content-Type 由浏览器生成（含 multipart boundary），不手动设置。
+ */
+export async function requestForm<T>(
+  path: string,
+  form: FormData,
+  options: RequestOptions = {},
+): Promise<T> {
+  const method = options.method ?? "POST";
+  const headers: Record<string, string> = { [REQUEST_ID_HEADER]: newRequestId() };
+  const csrf = csrfTokenProvider();
+  if (csrf) headers[CSRF_HEADER] = csrf;
+  if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
+
+  return fetchEnvelope(path, {
+    method,
+    headers,
+    credentials: "include",
+    body: form,
+    signal: options.signal,
+  }) as Promise<T>;
 }
 
 export function requestIdHeaderValue(): string {
