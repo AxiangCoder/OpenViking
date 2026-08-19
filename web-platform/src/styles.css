@@ -648,3 +648,222 @@ button:disabled {
 .admin-settings-list .profile-row dd {
   color: var(--ov-text);
 }
+
+/* ═══════════════════ Resource 产品页面（P3-E4，09 契约） ═══════════════════ */
+
+.resource-tag {
+  display: inline-block;
+  margin: 2px 6px 2px 0;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.14);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.resource-tag-more {
+  font-size: 12px;
+  color: var(--ov-muted, #888);
+}
+
+.resource-muted {
+  color: var(--ov-muted, #888);
+  font-size: 12px;
+}
+
+.resource-op-line {
+  display: block;
+  font-size: 12px;
+  color: var(--ov-muted, #888);
+  margin-top: 2px;
+}
+
+.resource-list-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--ov-muted, #888);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-source-display {
+  font-size: 12px;
+  color: var(--ov-muted, #888);
+}
+
+.link-danger {
+  color: var(--ov-danger, #d64545);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.filter-keyword {
+  padding: 6px 8px;
+  border: 1px solid var(--ov-border, #ccc);
+  border-radius: 4px;
+  min-width: 220px;
+}
+
+.filter-clear {
+  background: none;
+  border: 1px solid var(--ov-border, #ccc);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* 新增弹窗（09 §40：入口固定归属） */
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+.confirm-dialog {
+  background: var(--ov-bg, #fff);
+  border-radius: 8px;
+  padding: 18px 20px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 86vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.import-dialog {
+  max-width: 680px;
+}
+
+.import-source-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  border-bottom: 1px solid var(--ov-border, #ccc);
+  padding-bottom: 8px;
+}
+
+.import-source-tabs button {
+  background: none;
+  border: 1px solid var(--ov-border, #ccc);
+  border-radius: 4px 4px 0 0;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.import-source-tabs button.tab-active {
+  border-bottom-color: var(--ov-bg, #fff);
+  border-color: var(--ov-accent, #2563eb);
+  color: var(--ov-accent, #2563eb);
+  font-weight: 600;
+}
+
+.import-upload-area input[type="file"] {
+  margin: 8px 0;
+}
+
+.import-result {
+  margin-top: 12px;
+  border: 1px solid var(--ov-border, #ccc);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+/* 删除/发布预览（09 §45.1：弹窗完整要素） */
+.deletion-preview-list {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.deletion-preview-list > div {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.deletion-preview-list dt {
+  color: var(--ov-muted, #888);
+}
+
+.deletion-preview-list dd {
+  margin: 0;
+}
+
+/* 内容树与预览（09 §42.3） */
+.node-tree {
+  list-style: none;
+  margin: 6px 0;
+  padding-left: 0;
+}
+
+.node-children {
+  padding-left: 22px;
+}
+
+.node-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 14px;
+}
+
+.node-row button,
+.node-row a {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.node-row .node-file {
+  color: var(--ov-accent, #2563eb);
+}
+
+.node-download {
+  font-size: 12px;
+  color: var(--ov-muted, #888);
+  text-decoration: underline;
+}
+
+.node-icon {
+  display: inline-block;
+  width: 20px;
+}
+
+.node-preview {
+  margin-top: 12px;
+}
+
+.node-preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+  background: rgba(127, 127, 127, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}

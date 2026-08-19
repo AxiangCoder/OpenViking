@@ -204,15 +204,16 @@ describe("导航与按钮按权限隐藏/禁用（AC②）", () => {
     expect(sidebar.queryByText("共享 Resource")).not.toBeInTheDocument();
   });
 
-  it("共享 Resource 页：普通 User 无“发布为共享”入口，Admin 可见（06 §13.3）", async () => {
+  it("共享 Resource 页：普通 User 无管理入口并提示管理员维护；Admin 可见新增（06 §13.3，AC①）", async () => {
     setAuthStateForTest({ status: "authenticated", me: userMe, sessionExpired: false });
     renderRouterAt("/app/resources/shared");
     await screen.findByTestId("shell-app");
-    expect(screen.queryByText("发布为共享（管理员）")).not.toBeInTheDocument();
+    expect(await screen.findByText("共享内容由 Account 管理员维护")).toBeInTheDocument();
+    expect(screen.queryByText("新增 Resource")).not.toBeInTheDocument();
 
     setAuthStateForTest({ status: "authenticated", me: adminMe, sessionExpired: false });
     renderRouterAt("/app/resources/shared");
-    expect(await screen.findByText("发布为共享（管理员）")).toBeInTheDocument();
+    expect(await screen.findByText("新增 Resource")).toBeInTheDocument();
   });
 
   it("Admin 侧边栏按权限过滤（user.read 缺失则不显示用户管理）", async () => {
