@@ -58,9 +58,14 @@ class ProvisioningRepository:
         *,
         limit: int,
         now: datetime,
+        event_types: tuple[str, ...] | None = None,
     ) -> list[IamOutbox]:
         """领取可执行事件：status IN (pending, failed) 且到期（next_attempt_at 为空或
-        已到）。失败事件按退避时间到期后自动重试（05 §11.3）。"""
+        已到）。失败事件按退避时间到期后自动重试（05 §11.3）。
+
+        `event_types` 可选过滤：P2-E4 发布 Worker 只领取 `skill.publish`
+        事件，避免与 Provisioning Worker 抢领（缺省 None = 全部，保持
+        既有语义）。"""
         stmt = (
             select(IamOutbox)
             .where(
@@ -74,6 +79,8 @@ class ProvisioningRepository:
             )
             .limit(limit)
         )
+        if event_types is not None:
+            stmt = stmt.where(IamOutbox.event_type.in_(event_types))
         return list((await session.execute(stmt)).scalars())
 
     async def list_by_account(self, session: AsyncSession, account_id: uuid.UUID) -> list[IamOutbox]:

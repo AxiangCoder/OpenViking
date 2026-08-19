@@ -217,3 +217,60 @@ class DeletionJobError(PlatformError):
 class PurgeError(PlatformError):
     """Purge Worker 物理清理失败（04 §10.11）：`last_error` 只存脱敏错误。"""
 
+
+# ── P2-E4：Skill 产品 API（10 §55/§58/§63，只 append，不修改既有码）──
+
+
+class SkillNameConflictError(PlatformError):
+    """Skill 名称在当前 Account 不可用（10 §55.1/§55.3，AC①③）。
+
+    创建/上传/发布/恢复冲突统一映射 409 `SKILL_NAME_CONFLICT`；
+    响应只说明"该名称在当前 Account 不可用"，不泄露占用者。
+    """
+
+
+class SkillNameImmutableError(PlatformError):
+    """Skill 名称创建后不可修改（10 §55.2，AC②）：JSON 更新与 ZIP 替换均拒。"""
+
+
+class SkillInvalidFormatError(PlatformError):
+    """SKILL.md/Frontmatter/ZIP 结构不合法（10 §63 `SKILL_INVALID_FORMAT`）。
+
+    `reason` 为内部原因码（`MISSING_SKILL_MD`/`ZIP_PATH_TRAVERSAL`/
+    `PACKAGE_NAME_MISMATCH` 等），API 层统一映射 400。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class SkillSharedWriteForbiddenError(PlatformError):
+    """普通 User 或 PSA 尝试写共享 Skill（10 §63 `SKILL_SHARED_WRITE_FORBIDDEN`）。"""
+
+
+class SkillPrivateManageForbiddenError(PlatformError):
+    """Account Admin/Platform 尝试编辑、删除或恢复他人私有 Skill（10 §59/§63）。"""
+
+
+class SkillPublishForbiddenError(PlatformError):
+    """非 Account Admin、跨 Account、Platform 或非私有 Skill 发起发布
+    （10 §58.1/§63 `SKILL_PUBLISH_FORBIDDEN`）。"""
+
+
+class SkillUnpublishUnsupportedError(PlatformError):
+    """请求共享转私有或取消发布（10 §63 `SKILL_UNPUBLISH_UNSUPPORTED`）。"""
+
+
+class SkillPublishMigrationError(PlatformError):
+    """发布 Worker 迁移失败（10 §58.4）：Operation 置 failed 可重试。
+
+    `retryable`：瞬时迁移失败可自动退避重试；目标占用等持久冲突不可重试。
+    `code` 为稳定产品错误码（`SKILL_PUBLISH_TARGET_CONFLICT` 等）。
+    """
+
+    def __init__(self, code: str, *args: object, retryable: bool = True) -> None:
+        super().__init__(code, *args)
+        self.code = code
+        self.retryable = retryable
+

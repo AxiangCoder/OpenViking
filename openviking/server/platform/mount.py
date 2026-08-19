@@ -37,7 +37,15 @@ def mount_platform_routers(app: FastAPI, config) -> None:
         auth_router,
         me_router,
         platform_router,
+        skills_router,
     )
+    from openviking.server.platform.skills.configs import FakeSkillConfigsAdapter
+    from openviking.server.platform.skills.control_plane import (
+        FakeSkillContentAdapter,
+        FakeSkillMigrationAdapter,
+    )
+    from openviking.server.platform.skills.packages import FakeSkillPackageAdapter
+    from openviking.server.platform.skills.service import SkillService
 
     repo = PostgresIamRepository()
     rbac = RbacService(repo)
@@ -47,6 +55,16 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    content = FakeSkillContentAdapter()
+    skills = SkillService(
+        iam=repo,
+        store=registry_store,
+        deletion=deletion,
+        packages=FakeSkillPackageAdapter(),
+        content=content,
+        migration=FakeSkillMigrationAdapter(content=content),
+        configs=FakeSkillConfigsAdapter(),
+    )
 
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
@@ -56,9 +74,11 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.iam_registry_store = registry_store
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_skill_service = skills
     app.state.platform_config = platform_config
 
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(skills_router)
