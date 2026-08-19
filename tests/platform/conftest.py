@@ -152,11 +152,13 @@ async def auth_client(auth_app):
 
 @pytest_asyncio.fixture
 async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
-    """P1-E5 集成测试 FastAPI app（auth + admin + platform 三组路由）。
+    """P1-E5/P2-E4 集成测试 FastAPI app（auth + admin + platform + skills 路由）。
 
     app.state 注入 IAM repository/RBAC/AuthService/AdminService/
-    ProvisioningService/DeletionService/AggregateService（create_app
-    挂载时的装配约定，P5-E1）。会话依赖 override 到测试库 session_factory。
+    ProvisioningService/DeletionService/AggregateService/SkillService
+    （create_app 挂载时的装配约定，P5-E1）。会话依赖 override 到测试库
+    session_factory。Skill 内容/迁移/私密配置使用受控 fake 适配器
+    （与 FakeControlPlane 同模式，P5-E1 接线真实实现）。
     """
     from fastapi import FastAPI
 
@@ -170,7 +172,19 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     from openviking.server.platform.provisioning.repository import ProvisioningRepository
     from openviking.server.platform.provisioning.service import ProvisioningService
     from openviking.server.platform.registry.repository import RegistryRepository
-    from openviking.server.platform.routers import admin_router, auth_router, platform_router
+    from openviking.server.platform.routers import (
+        admin_router,
+        auth_router,
+        platform_router,
+        skills_router,
+    )
+    from openviking.server.platform.skills.configs import FakeSkillConfigsAdapter
+    from openviking.server.platform.skills.control_plane import (
+        FakeSkillContentAdapter,
+        FakeSkillMigrationAdapter,
+    )
+    from openviking.server.platform.skills.packages import FakeSkillPackageAdapter
+    from openviking.server.platform.skills.service import SkillService
 
     app = FastAPI(title="ovp-platform-test")
     repo = PostgresIamRepository()
@@ -180,6 +194,16 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    content = FakeSkillContentAdapter()
+    skills = SkillService(
+        iam=repo,
+        store=registry_store,
+        deletion=deletion,
+        packages=FakeSkillPackageAdapter(),
+        content=content,
+        migration=FakeSkillMigrationAdapter(content=content),
+        configs=FakeSkillConfigsAdapter(),
+    )
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
     app.state.iam_auth_service = auth
@@ -188,6 +212,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.state.iam_registry_store = registry_store
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
+    app.state.iam_skill_service = skills
 
     async def _override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as s:
@@ -197,6 +222,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
     app.include_router(auth_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(skills_router)
     return app
 
 

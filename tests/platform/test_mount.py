@@ -30,6 +30,16 @@ def test_create_app_with_platform_enabled_mounts_all_surfaces() -> None:
     assert "/api/platform/v1/platform/accounts" in paths
     assert "/api/platform/v1/platform/accounts/{account_id}/provisioning/retry" in paths
 
+    # P2-E4：Skill 产品 API 与 skill-configs 挂载（10 §61.1–§61.5，05 §12.5/§12.6）
+    assert "/api/platform/v1/me/skills" in paths
+    assert "/api/platform/v1/me/skills/{skill_id}/restore" in paths
+    assert "/api/platform/v1/me/skill-configs/{skill_id}" in paths
+    assert "/api/platform/v1/account/skills" in paths
+    assert "/api/platform/v1/admin/users/{user_id}/skills" in paths
+    assert "/api/platform/v1/admin/users/{user_id}/skills/{skill_id}/publish" in paths
+    assert "/api/platform/v1/platform/accounts/{account_id}/skills" in paths
+    assert "/api/platform/v1/platform/accounts/{account_id}/users/{user_id}/skills/{skill_id}" in paths
+
     # OpenViking 原生面与 MCP 并存
     native_paths = {p for p in paths if p.startswith("/api/v1")}
     assert native_paths, "native /api/v1 routes must be mounted"
