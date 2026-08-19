@@ -48,18 +48,25 @@ export class PlatformError extends Error {
   readonly code: string;
   readonly status: number;
   readonly requestId: string | null;
+  /**
+   * 服务端 Retry-After（秒）：登录/改密限流时随 401 LOGIN_FAILED 下发
+   * （03 §8.3，P3-E2 登录页冷却用；非限流响应为 null）。
+   */
+  readonly retryAfterSeconds: number | null;
 
   constructor(options: {
     code: string;
     status: number;
     message?: string;
     requestId?: string | null;
+    retryAfterSeconds?: number | null;
   }) {
     super(options.message || options.code);
     this.name = "PlatformError";
     this.code = options.code;
     this.status = options.status;
     this.requestId = options.requestId ?? null;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
   }
 }
 

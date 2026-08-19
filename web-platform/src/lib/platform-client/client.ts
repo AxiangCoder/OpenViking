@@ -87,7 +87,16 @@ async function parseErrorBody(response: Response, raw: unknown): Promise<Platfor
     status: response.status,
     message: message || undefined,
     requestId: response.headers.get(REQUEST_ID_HEADER),
+    retryAfterSeconds: parseRetryAfter(response.headers.get("retry-after")),
   });
+}
+
+/** Retry-After：仅接受秒数形态（03 §8.3 限流冷却；日期形态按无处理）。 */
+function parseRetryAfter(raw: string | null): number | null {
+  if (raw == null || raw.trim().length === 0) return null;
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const seconds = Number.parseInt(raw.trim(), 10);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }
 
 /**
