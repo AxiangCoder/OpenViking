@@ -48,15 +48,28 @@ const platformAccountsIndexRoute = createRoute({
   component: PlatformAccountsPage,
 });
 
+/** 目标 Account 用户：列表布局（列表页为 index，成员详情为其子路由）。 */
 const platformAccountUsersRoute = createRoute({
   getParentRoute: () => platformAccountsRoute,
   path: "/$accountId/users",
+  component: () => <Outlet />,
+});
+
+const platformAccountUsersIndexRoute = createRoute({
+  getParentRoute: () => platformAccountUsersRoute,
+  path: "/",
   component: PlatformAccountUsersPage,
 });
 
 const platformAccountResourcesRoute = createRoute({
   getParentRoute: () => platformAccountsRoute,
   path: "/$accountId/resources",
+  component: () => <Outlet />,
+});
+
+const platformAccountResourcesIndexRoute = createRoute({
+  getParentRoute: () => platformAccountResourcesRoute,
+  path: "/",
   component: PlatformAccountResourcesPage,
 });
 
@@ -69,6 +82,12 @@ const platformAccountResourceDetailRoute = createRoute({
 const platformAccountSkillsRoute = createRoute({
   getParentRoute: () => platformAccountsRoute,
   path: "/$accountId/skills",
+  component: () => <Outlet />,
+});
+
+const platformAccountSkillsIndexRoute = createRoute({
+  getParentRoute: () => platformAccountSkillsRoute,
+  path: "/",
   component: PlatformAccountSkillsPage,
 });
 
@@ -130,9 +149,16 @@ export const platformRouteTree = platformLayoutRoute.addChildren([
   platformIndexRoute,
   platformAccountsRoute.addChildren([
     platformAccountsIndexRoute,
-    platformAccountResourcesRoute.addChildren([platformAccountResourceDetailRoute]),
-    platformAccountSkillsRoute.addChildren([platformAccountSkillDetailRoute]),
+    platformAccountResourcesRoute.addChildren([
+      platformAccountResourcesIndexRoute,
+      platformAccountResourceDetailRoute,
+    ]),
+    platformAccountSkillsRoute.addChildren([
+      platformAccountSkillsIndexRoute,
+      platformAccountSkillDetailRoute,
+    ]),
     platformAccountUsersRoute.addChildren([
+      platformAccountUsersIndexRoute,
       platformAccountUserSkillRoute,
       platformAccountUserDataRoute,
       platformAccountUserResourceRoute,
