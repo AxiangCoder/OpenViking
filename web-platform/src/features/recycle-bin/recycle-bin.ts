@@ -8,7 +8,7 @@
  * - `RESTORE_WINDOW_EXPIRED`（409）：已过恢复截止或已被物理清理，前端正确展示。
  */
 
-import { request } from "@/lib/platform-client";
+import { PlatformError, isPlatformError, request } from "@/lib/platform-client";
 
 export type RecycleResourceType =
   | "session"
@@ -52,6 +52,33 @@ export async function restoreRecycleItem(jobId: string): Promise<RestoreResult> 
   return request<RestoreResult>(`/api/platform/v1/recycle-bin/${jobId}/restore`, {
     method: "POST",
   });
+}
+
+// ── /admin 挂载点（05 §12.6 注：按对象类型分别校验；与 /app 共用组件）──
+
+/** `/admin/recycle-bin`：当前 Account 内有权恢复的对象（AC⑤）。 */
+export async function fetchAdminRecycleBin(): Promise<RecycleBinResult> {
+  return request<RecycleBinResult>("/api/platform/v1/admin/recycle-bin");
+}
+
+/** 恢复动作写审计由后端完成；`SKILL_NAME_CONFLICT` 转为产品文案（10 §55.3，AC⑥）。 */
+export async function restoreAdminRecycleItem(jobId: string): Promise<RestoreResult> {
+  try {
+    return await request<RestoreResult>(`/api/platform/v1/admin/recycle-bin/${jobId}/restore`, {
+      method: "POST",
+    });
+  } catch (error) {
+    // 共享组件以 err.message 展示；将稳定错误码转为可读文案（组件只挂载不改写）
+    if (isPlatformError(error) && error.code === "SKILL_NAME_CONFLICT") {
+      throw new PlatformError({
+        code: "SKILL_NAME_CONFLICT",
+        status: error.status,
+        message: "该名称已被其他 Skill 占用：恢复被拒绝，原 Skill 保持删除状态（名称不可改名或覆盖）。",
+        requestId: error.requestId,
+      });
+    }
+    throw error;
+  }
 }
 
 /** 对象类型 → 产品分组文案（06 §14.6：按对象类型分组展示与恢复）。 */
