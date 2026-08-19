@@ -1,11 +1,16 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+/**
+ * 新建共享 Skill（10 §54.1，P3-E5 AC⑦）。
+ * Account Admin 从共享管理入口创建，固定进入当前 Account 共享区。
+ */
+
+import { SkillCreatePage } from "@/components/skills/SkillCreatePage";
 
 export default function AdminSharedSkillsNewPage() {
   return (
-    <PlaceholderPage
-      title="新建共享 Skill"
-      plannedIn="P4-E2"
-      description="当前 Account 共享 Skill 创建/上传；普通 User 不能发布（06 §13.3）。"
+    <SkillCreatePage
+      scope="account"
+      detailPrefix="/admin/shared-skills"
+      backHref="/admin/shared-skills"
     />
   );
 }

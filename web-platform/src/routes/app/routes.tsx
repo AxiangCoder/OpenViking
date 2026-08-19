@@ -95,6 +95,12 @@ const appSkillsIndexRoute = createRoute({
 const appSkillsPrivateRoute = createRoute({
   getParentRoute: () => appSkillsRoute,
   path: "/private",
+  component: () => <Outlet />,
+});
+
+const appSkillsPrivateIndexRoute = createRoute({
+  getParentRoute: () => appSkillsPrivateRoute,
+  path: "/",
   component: SkillsPrivatePage,
 });
 
@@ -113,6 +119,12 @@ const appSkillPrivateDetailRoute = createRoute({
 const appSkillsSharedRoute = createRoute({
   getParentRoute: () => appSkillsRoute,
   path: "/shared",
+  component: () => <Outlet />,
+});
+
+const appSkillsSharedIndexRoute = createRoute({
+  getParentRoute: () => appSkillsSharedRoute,
+  path: "/",
   component: SkillsSharedPage,
 });
 
@@ -174,8 +186,12 @@ export const appRouteTree = appLayoutRoute.addChildren([
   ]),
   appSkillsRoute.addChildren([
     appSkillsIndexRoute,
-    appSkillsPrivateRoute.addChildren([appSkillsPrivateNewRoute, appSkillPrivateDetailRoute]),
-    appSkillsSharedRoute.addChildren([appSkillSharedDetailRoute]),
+    appSkillsPrivateRoute.addChildren([
+      appSkillsPrivateIndexRoute,
+      appSkillsPrivateNewRoute,
+      appSkillPrivateDetailRoute,
+    ]),
+    appSkillsSharedRoute.addChildren([appSkillsSharedIndexRoute, appSkillSharedDetailRoute]),
   ]),
   appSessionsRoute,
   appActivityRoute,
