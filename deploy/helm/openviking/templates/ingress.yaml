@@ -5,10 +5,17 @@ metadata:
   name: {{ include "openviking.fullname" . }}
   labels:
     {{- include "openviking.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
   annotations:
+    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
+    {{- /* P5-E1（06 §16.2/§16.3）：公网低层入口 deny 第二道防线（nginx 控制器）。 */}}
+    {{- if and .Values.platform.enabled .Values.platform.ingressDeny }}
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~ ^/(studio|webdav)(/|$) { return 404; }
+      location ~ ^/api/v1/(console|snapshot|pack|debug|observer)(/|$) { return 404; }
+      location ~ ^/api/v1/admin(/|$) { return 404; }
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}

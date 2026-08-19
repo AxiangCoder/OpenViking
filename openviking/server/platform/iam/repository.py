@@ -70,6 +70,15 @@ class IamRepository(ABC):
         """按 OpenViking account_id 映射读取。"""
 
     @abstractmethod
+    async def get_account_id_for_ov_user(
+        self,
+        session: AsyncSession,
+        ov_user_id: str,
+    ) -> uuid.UUID | None:
+        """P5-E1：按 ov_user_id 反查所属 IAM Account 内部 ID（真实适配器
+        构建 OpenViking 上下文用；ov_user_id 在 Account 内唯一）。"""
+
+    @abstractmethod
     async def list_accounts(
         self,
         session: AsyncSession,

@@ -71,6 +71,47 @@ logger = get_logger(__name__)
 WORKER_WITH_BOT_ENV = "OPENVIKING_WORKER_WITH_BOT"
 WORKER_BOT_API_URL_ENV = "OPENVIKING_WORKER_BOT_API_URL"
 
+# P5-E1（14 号计划 §99.1，06 §16.2/§16.3）：低层运维 Router 白名单命名。
+# 应用层条件挂载开关（create_app 按 ServerConfig.low_level_routers_enabled
+# 按需 include）；代理层路径 deny 为第二道防线（deploy/nginx）。
+LOW_LEVEL_ROUTER_NAMES = ("debug", "observer", "snapshot", "pack", "console", "admin", "webdav")
+
+
+def _resolve_low_level_routers_enabled(config: ServerConfig) -> set[str]:
+    """低层 router 挂载集合：显式白名单优先，否则按模式默认。
+
+    - 显式配置（`server.low_level_routers_enabled`）→ 两种模式都按白名单；
+    - 平台模式缺省 → 仅 `admin`（06 §16.3 生产默认）；
+    - 非平台模式缺省 → 全部挂载（既有行为零变化）。
+    """
+    explicit = getattr(config, "low_level_routers_enabled", None)
+    if explicit is not None:
+        enabled = {name.strip() for name in explicit}
+        unknown = enabled - set(LOW_LEVEL_ROUTER_NAMES)
+        if unknown:
+            raise ValueError(
+                "Unknown low_level_routers_enabled entries: "
+                f"{sorted(unknown)} (valid: {sorted(LOW_LEVEL_ROUTER_NAMES)})"
+            )
+        return enabled
+    if getattr(config, "platform_enabled", False):
+        return {"admin"}
+    return set(LOW_LEVEL_ROUTER_NAMES)
+
+
+def _resolve_studio_enabled(config: ServerConfig) -> bool:
+    """Studio 挂载开关（06 §13.6/§16.2）。
+
+    - 显式配置（`server.studio_enabled`）→ 直接采用；
+    - 平台模式缺省 → 不挂载 /studio、不注册 /→/studio/ 重定向（生产公网
+      路由表无 /studio；bundle 存在与否无关）；
+    - 非平台模式缺省 → 保持既有 bundle 存在即挂载行为。
+    """
+    explicit = getattr(config, "studio_enabled", None)
+    if explicit is not None:
+        return explicit
+    return not getattr(config, "platform_enabled", False)
+
 
 def create_worker_app() -> FastAPI:
     """Load file config and replay parent-process Bot CLI overrides."""
@@ -580,7 +621,6 @@ def create_app(
 
     # Register routers
     app.include_router(system_router)
-    app.include_router(admin_router)
     app.include_router(resources_router)
     app.include_router(filesystem_router)
     app.include_router(content_router)
@@ -597,22 +637,32 @@ def create_app(
     app.include_router(watches_router)
     app.include_router(bot_router, prefix="/bot/v1")
 
-    # P2-E6a（08 §28.6，14 号计划 §97.6）：平台模式下运维/低层 Router
-    # （console/webdav/snapshot/pack/debug/observer）应用层不挂载 → 404；
-    # 公网路由网络边界由 P5-E1 闭合（反代层 deny 第二道防线）。
-    platform_mode = bool(getattr(config, "platform_enabled", False))
-    if platform_mode:
+    # P5-E1（14 号计划 §99.1，06 §16.2/§16.3）：低层运维 Router 应用层
+    # 条件挂载开关（debug/observer/snapshot/pack/console/admin/webdav）。
+    # 显式白名单优先；缺省按模式：非平台模式全部挂载（既有行为零变化），
+    # 平台模式仅 admin（P2-E6a 既有语义 + 生产默认）。代理层 deny 为第二道
+    # 防线（deploy/nginx，本 Epic 交付骨架）。
+    _low_level_routers = {
+        "admin": admin_router,
+        "console": console_router,
+        "snapshot": snapshot_router,
+        "pack": pack_router,
+        "debug": debug_router,
+        "observer": observer_router,
+        "webdav": webdav_router,
+    }
+    _enabled_low_level = _resolve_low_level_routers_enabled(config)
+    for _name, _router in _low_level_routers.items():
+        if _name in _enabled_low_level:
+            app.include_router(_router)
+        else:
+            logger.info("Low-level router %r not mounted (app-layer 404)", _name)
+    if _enabled_low_level != set(_low_level_routers):
         logger.info(
-            "Platform mode: ops routers (console/snapshot/pack/debug/observer/webdav) "
-            "not mounted (app-layer 404)"
+            "Low-level routers mounted: %s (not mounted: %s)",
+            sorted(_enabled_low_level),
+            sorted(set(_low_level_routers) - _enabled_low_level),
         )
-    else:
-        app.include_router(console_router)
-        app.include_router(snapshot_router)
-        app.include_router(pack_router)
-        app.include_router(debug_router)
-        app.include_router(observer_router)
-        app.include_router(webdav_router)
 
     # OAuth 2.1: when enabled, mount the official MCP SDK auth routes
     # (DCR / authorize / token / metadata) plus our authorize page + consent /
@@ -768,7 +818,11 @@ def create_app(
     else:
         _studio_dir = Path(__file__).resolve().parent.parent / "web_studio" / "dist"
 
-    if _studio_dir.is_dir() and (_studio_dir / "index.html").is_file():
+    if (
+        _resolve_studio_enabled(config)
+        and _studio_dir.is_dir()
+        and (_studio_dir / "index.html").is_file()
+    ):
         _studio_root = _studio_dir.resolve()
         _studio_index = _studio_root / "index.html"
         _studio_no_store = {"Cache-Control": "no-store"}

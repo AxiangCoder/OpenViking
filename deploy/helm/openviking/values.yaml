@@ -80,6 +80,22 @@ bot:
   # for Kubernetes by default so the chart exposes only the OpenViking API port.
   enabled: false
 
+# P5-E1: 产品化平台部署（14 号计划 §99.1）。启用后：
+#   - ov.conf server 段注入 platform_enabled=true / platform_adapter_mode=real /
+#     low_level_routers_enabled=["admin"] / studio_enabled=false（06 §16.3）；
+#   - 口令类配置从 platform.secretName 指定的 Secret 读取（06 §14.4），
+#     Secret 键：database-url / node-id-secret / source-cipher-key；
+#   - ingress 启用时叠加低层入口 deny 注解（nginx 控制器第二道防线）。
+platform:
+  enabled: false
+  adapterMode: "real"
+  lowLevelRouters: ["admin"]
+  studio: false
+  corsOrigins: []
+  publicBaseUrl: ""
+  secretName: ""
+  ingressDeny: true
+
 # OpenViking server configuration (ov.conf).
 # This is rendered into a ConfigMap and mounted at
 # ${persistence.mountPath}/ov.conf.

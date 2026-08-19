@@ -14,6 +14,10 @@ version: "3.8"
 #     OV_ACME_EMAIL=admin@your-domain.com
 #
 # See docs/en/guides/12-public-access.md for the full walkthrough.
+#
+# P5-E1（14 号计划 §99.1）：产品化平台三单元部署（reverse-proxy /
+# openviking-product-server / postgresql，web-platform 构建 + PG 配置）见
+# deploy/product/docker-compose.yml；本文件保留既有开发/直连部署形态。
 
 services:
   openviking:

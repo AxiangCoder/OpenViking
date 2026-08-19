@@ -1,0 +1,14 @@
+# OpenViking 产品化平台镜像（P5-E1）：在官方镜像构建链上叠加 web-platform
+# bundle 与产品化入口（app.py 平台挂载随主包分发，无需额外代码）。
+#
+# 复用根 Dockerfile 的完整构建（Rust CLI + 原生扩展 + web-studio/web-platform
+# bundle），运行时仅多暴露平台配置环境变量。构建产物即官方镜像语义的超集。
+
+ARG BASE_IMAGE=openviking:latest
+
+FROM ${BASE_IMAGE}
+
+# 平台化部署必需环境变量（口令不落镜像，由 compose/Secret Manager 注入）：
+#   OV_PLATFORM_DATABASE_URL / OV_NODE_ID_SECRET / OV_SOURCE_CIPHER_KEY
+#   OPENVIKING_ROOT_API_KEY / OPENVIKING_PUBLIC_BASE_URL / OV_COOKIE_SECURE
+EXPOSE 1933

@@ -53,6 +53,28 @@ spec:
               value: {{ printf "%s/ovcli.conf" .Values.persistence.mountPath | quote }}
             - name: OPENVIKING_WITH_BOT
               value: {{ ternary "1" "0" .Values.bot.enabled | quote }}
+            {{- /* P5-E1：平台化部署口令经 Secret 注入（06 §14.4）。 */}}
+            {{- if .Values.platform.enabled }}
+            - name: OV_PLATFORM_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platform.secretName | default (printf "%s-platform" (include "openviking.fullname" .)) }}
+                  key: database-url
+            - name: OV_NODE_ID_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platform.secretName | default (printf "%s-platform" (include "openviking.fullname" .)) }}
+                  key: node-id-secret
+            - name: OV_SOURCE_CIPHER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.platform.secretName | default (printf "%s-platform" (include "openviking.fullname" .)) }}
+                  key: source-cipher-key
+            - name: OV_COOKIE_SECURE
+              value: "1"
+            - name: OPENVIKING_PUBLIC_BASE_URL
+              value: {{ .Values.platform.publicBaseUrl | default "" | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

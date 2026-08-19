@@ -229,6 +229,7 @@ openviking = [
     "prompts/templates/**/*.yaml",
     "server/static/**/*",
     "web_studio/dist/**/*",
+    "web_platform/dist/**/*",
     "lib/ragfs_python*.so",
     "lib/ragfs_python*.pyd",
     "bin/ov",

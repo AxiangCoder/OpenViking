@@ -54,9 +54,10 @@ COPY openviking_cli/ openviking_cli/
 COPY src/ src/
 COPY third_party/ third_party/
 COPY web-studio/ web-studio/
+COPY web-platform/ web-platform/
 
-# Install project and dependencies (triggers setup.py build_py → web-studio
-# SPA build + build_ext → native extensions).
+# Install project and dependencies (triggers setup.py build_py → web-studio +
+# web-platform SPA build + build_ext → native extensions).
 # Default to auto-refreshing uv.lock inside the ephemeral build context when it is
 # stale, so Docker builds stay unblocked after dependency changes. Set
 # UV_LOCK_STRATEGY=locked to keep fail-fast reproducibility checks.

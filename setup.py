@@ -508,9 +508,57 @@ def _build_web_studio():
     print(f"  [OK] web-studio bundle copied to {dest}")
 
 
+def _build_web_platform():
+    """Build the web-platform SPA and copy dist into the Python package tree.
+
+    P5-E1（14 号计划 §99.1，06 §16.2）：产品前端 bundle 随镜像/包分发，
+    由 create_app 平台挂载（mount_web_platform_spa）在 `/` 提供入口与 SPA
+    深链。Skipped when OV_SKIP_PLATFORM_BUILD=1 或 bundle 已存在；npm 不可用
+    时优雅跳过（告警，不影响既有构建）。
+    """
+    if os.environ.get("OV_SKIP_PLATFORM_BUILD") == "1":
+        print("  [SKIP] web-platform build disabled by OV_SKIP_PLATFORM_BUILD=1")
+        return
+
+    dest = SETUP_DIR / "openviking" / "web_platform" / "dist"
+    if (dest / "index.html").is_file():
+        print("  [OK] web-platform bundle already present")
+        return
+
+    source = SETUP_DIR / "web-platform"
+    if not (source / "package.json").is_file():
+        print("  [SKIP] web-platform source not found; product entry pages unavailable")
+        return
+
+    npm = shutil.which("npm")
+    if not npm:
+        print("  [SKIP] npm not found; install Node.js to enable web-platform bundle")
+        return
+
+    print("Building web-platform (Vite SPA)...")
+    try:
+        subprocess.check_call([npm, "ci"], cwd=str(source))
+        subprocess.check_call([npm, "run", "build"], cwd=str(source))
+    except subprocess.CalledProcessError as exc:
+        print(f"  [WARNING] web-platform npm build failed ({exc}); bundle unavailable")
+        return
+
+    built = source / "dist"
+    if not (built / "index.html").is_file():
+        print("  [WARNING] web-platform build produced no index.html; bundle unavailable")
+        return
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(built, dest)
+    print(f"  [OK] web-platform bundle copied to {dest}")
+
+
 class OpenVikingBuildPy(build_py):
     def run(self):
         _build_web_studio()
+        _build_web_platform()
         super().run()
         package_root = Path(self.build_lib) / "vikingbot"
         for asset_name in ("workspace", "bridge"):
@@ -566,6 +614,7 @@ setup(
             "bin/ov.exe",
             "server/static/**/*",
             "web_studio/dist/**/*",
+            "web_platform/dist/**/*",
             "storage/vectordb/engine/*.abi3.so",
             "storage/vectordb/engine/*.pyd",
         ],

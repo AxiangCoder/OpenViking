@@ -2,6 +2,18 @@
 {{- if empty $config.storage.workspace }}
 {{- $_ := set $config.storage "workspace" (printf "%s/openviking_workspace" (trimSuffix "/" .Values.persistence.mountPath)) }}
 {{- end }}
+{{- /* P5-E1（14 号计划 §99.1）：平台化部署在 server 段注入平台配置。 */}}
+{{- if .Values.platform.enabled }}
+{{- $server := $config.server | default dict }}
+{{- $_ := set $server "platform_enabled" true }}
+{{- $_ := set $server "platform_adapter_mode" (.Values.platform.adapterMode | default "real") }}
+{{- $_ := set $server "low_level_routers_enabled" (.Values.platform.lowLevelRouters | default (list "admin")) }}
+{{- $_ := set $server "studio_enabled" (.Values.platform.studio | default false) }}
+{{- if .Values.platform.corsOrigins }}
+{{- $_ := set $server "cors_origins" .Values.platform.corsOrigins }}
+{{- end }}
+{{- $_ := set $config "server" $server }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
