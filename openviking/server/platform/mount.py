@@ -32,11 +32,13 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     from openviking.server.platform.provisioning.repository import ProvisioningRepository
     from openviking.server.platform.provisioning.service import ProvisioningService
     from openviking.server.platform.registry.repository import RegistryRepository
+    from openviking.server.platform.registry.service import ContentRegistryService
     from openviking.server.platform.routers import (
         admin_router,
         auth_router,
         me_router,
         platform_router,
+        resources_router,
     )
 
     repo = PostgresIamRepository()
@@ -47,6 +49,8 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     registry_store = RegistryRepository()
     deletion = DeletionService(repo, registry_store)
     aggregates = AggregateService(registry_store)
+    registry_service = ContentRegistryService(registry_store, ProvisioningRepository())
+    facade = _build_facade(rbac, registry_service, registry_store, repo, config)
 
     app.state.iam_repository = repo
     app.state.iam_rbac_service = rbac
@@ -54,11 +58,67 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.iam_admin_service = admin
     app.state.iam_provisioning_service = provisioning
     app.state.iam_registry_store = registry_store
+    app.state.iam_registry_service = registry_service
+    app.state.iam_facade_service = facade
     app.state.iam_deletion_service = deletion
     app.state.iam_aggregate_service = aggregates
     app.state.platform_config = platform_config
+    _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion)
 
     app.include_router(auth_router)
     app.include_router(me_router)
     app.include_router(admin_router)
     app.include_router(platform_router)
+    app.include_router(resources_router)
+
+
+def _build_facade(rbac, registry_service, registry_store, repo, config):
+    """ProductFacadeService 装配（05 §11.2：OVMapper + AuthorizationService）。"""
+    from openviking.server.platform.auth.uri_policy import AuthorizationService
+    from openviking.server.platform.db import session_factory
+    from openviking.server.platform.facade import ProductFacadeService
+    from openviking.server.platform.target_policy import TargetPolicy
+
+    authorization = AuthorizationService(
+        TargetPolicy(), ProductFacadeService.build_ov_mapper(repo, session_factory)
+    )
+    return ProductFacadeService(
+        authorization=authorization,
+        registry=registry_service,
+        control_plane=None,
+        registry_store=registry_store,
+    )
+
+
+def _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion) -> None:
+    """P2-E3：Resource 服务装配（app.state 注入 + Purge 处理器注册）。"""
+    from openviking.server.platform.config import platform_config
+    from openviking.server.platform.resource.execution import FakeResourceExecutionPlane
+    from openviking.server.platform.resource.purge import ResourcePurgeHandler
+    from openviking.server.platform.resource.service import ResourceService
+    from openviking.server.platform.resource.storage import MemoryTempUploadStore
+
+    execution = FakeResourceExecutionPlane()
+    uploads = MemoryTempUploadStore()
+    resource_service = ResourceService(
+        facade=facade,
+        registry=registry_service,
+        iam_repo=repo,
+        execution=execution,
+        uploads=uploads,
+        config=platform_config,
+    )
+    app.state.iam_resource_service = resource_service
+    app.state.iam_resource_execution = execution
+    app.state.iam_resource_uploads = uploads
+
+    if hasattr(app.state, "iam_purge_worker"):
+        purge_worker = app.state.iam_purge_worker
+    else:
+        from openviking.server.platform.deletion.worker import PurgeWorker
+
+        purge_worker = PurgeWorker(repo, registry_store)
+        app.state.iam_purge_worker = purge_worker
+    purge_worker.register_handler(
+        "resource", ResourcePurgeHandler(execution=execution, store=registry_store)
+    )

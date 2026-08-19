@@ -217,3 +217,54 @@ class DeletionJobError(PlatformError):
 class PurgeError(PlatformError):
     """Purge Worker 物理清理失败（04 §10.11）：`last_error` 只存脱敏错误。"""
 
+
+# ── P2-E3：Resource 产品 API（只 append，不修改既有码，09 §46.5 稳定错误码）──
+
+
+class ResourceError(PlatformError):
+    """Resource 业务动作被拒（09 §46.5）。
+
+    `reason` 为稳定对外错误码（`RESOURCE_NOT_FOUND`/`RESOURCE_BUSY` 等）；
+    `retryable` 表示该动作失败后是否可重试（错误响应可选字段，09 §46.5）。
+    """
+
+    def __init__(self, reason: str, retryable: bool = False, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+        self.retryable = retryable
+
+
+class ResourceBusyError(ResourceError):
+    """同一 Resource 已有摄取类 Operation 在途/限频（09 §43.1：RESOURCE_BUSY）。"""
+
+    def __init__(self) -> None:
+        super().__init__("RESOURCE_BUSY")
+
+
+class ResourceVersionConflictError(ResourceError):
+    """元数据乐观锁冲突（09 §42.4：RESOURCE_VERSION_CONFLICT）。"""
+
+    def __init__(self) -> None:
+        super().__init__("RESOURCE_VERSION_CONFLICT")
+
+
+class ResourceSourceBlockedError(ResourceError):
+    """远程来源安全拒绝（09 §40.6：RESOURCE_SOURCE_BLOCKED，SSRF/私网等）。"""
+
+    def __init__(self, retryable: bool = False) -> None:
+        super().__init__("RESOURCE_SOURCE_BLOCKED", retryable=retryable)
+
+
+class ResourceWatchError(ResourceError):
+    """Watch 配置/调度被拒（09 §43.2：RESOURCE_WATCH_UNAVAILABLE/CONFLICT）。"""
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+
+
+class ResourceNodeError(ResourceError):
+    """Node ID 解析/越权拒绝（09 §42.3/§48 #12，跨 Resource 引用统一拒绝）。"""
+
+    def __init__(self, reason: str = "RESOURCE_NOT_FOUND", *args: object) -> None:
+        super().__init__(reason, *args)
+
