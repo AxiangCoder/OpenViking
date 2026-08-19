@@ -523,6 +523,31 @@ button:disabled {
   color: var(--ov-text);
 }
 
+/* Subject 数据视图横幅（13 §84.2，P4-E2：固定 Actor/Subject，只读声明） */
+.subject-data-banner {
+  border: 1px solid var(--ov-border);
+  border-left: 3px solid var(--ov-accent, #4e5355);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--ov-bg-secondary, rgba(127, 127, 127, 0.06));
+}
+
+.subject-data-line {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.subject-data-line strong {
+  color: var(--ov-accent, #4e5355);
+}
+
+.subject-data-banner .admin-account-context,
+.subject-data-banner .profile-hint {
+  margin: 2px 0;
+}
+
+
 .admin-filter-bar {
   display: flex;
   gap: 10px;

@@ -170,3 +170,17 @@ export function canResetTargetPassword(
   const targetRank = roleRank(targetRole);
   return targetRank > 0 && actorMaxRoleRank(actorRoles) > targetRank;
 }
+
+/** 成员数据只读视图所需的任一读取权限（13 §84.2，P4-E2；P4-E4 平台级复用）。 */
+export const MEMBER_DATA_READ_CODES = [
+  "memory.read.account",
+  "session.read.account",
+  "resource.user_private.read.account",
+  "skill.user_private.read.account",
+] as const;
+
+/** 是否可进入成员数据只读视图（Subject 数据页入口判定，84.2）。 */
+export function canViewMemberData(me: AuthMeResult | null): boolean {
+  if (!me) return false;
+  return MEMBER_DATA_READ_CODES.some((code) => me.permissions.includes(code));
+}

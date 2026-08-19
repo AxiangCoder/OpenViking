@@ -10,6 +10,8 @@
  *   并提示「创建者可能长期知晓密码」的交接限制（06 §13.9，AC⑧）；
  * - 禁用/启用：禁用确认弹窗提示会话与 API Key 立即失效、对话与记忆不受影响
  *   （85.3，AC⑤）；启用为 PATCH status=active（05 §12.6）；
+ * - 行操作按 85.1：查看数据（Subject 视图入口，P4-E2）、API Keys 元数据入口
+ *   （P4-E2）、禁用/启用、分级重置、删除；入口按 Permission 隐藏（AC⑥）；
  * - 分级重置：仅对严格低级别目标显示按钮（actor_role_rank > target_role_rank，
  *   03 §8.3、85.4，AC④），确认弹窗提示设备退出/对话记忆保留/Key 不撤销，
  *   成功后一次性展示新密码（AC④⑧）；
@@ -21,9 +23,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import { isPlatformError } from "@/lib/platform-client";
 import { useMe } from "@/features/auth/useAuth";
-import { canPerform, canResetTargetPassword } from "@/lib/permissions";
+import { canPerform, canResetTargetPassword, canViewMemberData } from "@/lib/permissions";
 import OneTimeSecret from "@/components/ui/OneTimeSecret";
 import {
   ADMIN_USER_STATUS_LABELS,
@@ -380,6 +383,22 @@ export default function AdminUsersPage() {
                   <td>{formatIsoDateTime(user.created_at)}</td>
                   <td>
                     <div className="row-actions">
+                      {canViewMemberData(me) ? (
+                        <Link
+                          to={`/admin/users/${user.id}/data`}
+                          data-testid={`admin-user-data-${user.id}`}
+                        >
+                          查看数据
+                        </Link>
+                      ) : null}
+                      {canPerform(me, "credential.read.account") ? (
+                        <Link
+                          to={`/admin/users/${user.id}/api-keys`}
+                          data-testid={`admin-user-keys-${user.id}`}
+                        >
+                          API Keys
+                        </Link>
+                      ) : null}
                       {user.status === "active" && canPerform(me, "user.disable") ? (
                         <button
                           type="button"
