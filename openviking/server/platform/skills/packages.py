@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -35,6 +36,7 @@ MAX_ALLOWED_TOOLS = 50
 MAX_ALLOWED_TOOL_LENGTH = 128
 MAX_ZIP_ENTRIES = 200
 MAX_ZIP_ENTRY_SIZE = 4 * 1024 * 1024  # 4 MiB
+MAX_ZIP_TOTAL_SIZE = 32 * 1024 * 1024  # 解压总量上限（压缩炸弹防线，09 §47.3）
 MAX_SKILL_MD_SIZE = 512 * 1024  # 512 KiB
 
 CONTROL_FILES = {".abstract.md", ".overview.md", ".source.json"}
@@ -129,9 +131,11 @@ def parse_skill_md_text(text: str) -> ParsedSkill:
 def _is_safe_member_name(name: str) -> bool:
     """ZIP 成员名安全校验（10 §54.2）：无路径穿越、无绝对路径、无符号链接。
 
-    Windows 反斜杠路径、`.`/`..` 段、空段、盘符前缀一律拒绝。
+    Windows 反斜杠路径、`.`/`..` 段、空段、盘符前缀与控制字符一律拒绝。
     """
     if not name or "\\" in name:
+        return False
+    if any(ord(c) < 32 for c in name):
         return False
     normalized = name.replace("\\", "/")
     parts = normalized.split("/")
@@ -146,8 +150,10 @@ def parse_skill_zip(data: bytes) -> ParsedSkill:
     """解析并安全校验 ZIP Skill 包（10 §54.2）。
 
     - ZIP 根目录或唯一一级子目录中必须存在 `SKILL.md`（10 §51）；
-    - 路径穿越/绝对路径/符号链接成员 → `SKILL_INVALID_FORMAT`；
-    - 文件数量（≤200）与单文件大小（≤4 MiB）由服务端限制。
+    - 路径穿越/绝对路径/符号链接/控制字符成员 → `SKILL_INVALID_FORMAT`；
+    - 文件数量（≤200）、单文件大小（≤4 MiB）与解压总量（≤32 MiB）由
+      服务端限制（压缩炸弹防线，09 §47.3）；
+    - 加密/CRC 损坏/截断成员统一拒绝（不暴露内部异常）。
     """
     if not data:
         raise SkillInvalidFormatError("EMPTY_ZIP")
@@ -161,6 +167,7 @@ def parse_skill_zip(data: bytes) -> ParsedSkill:
             raise SkillInvalidFormatError("ZIP_ENTRY_LIMIT")
         entries: dict[str, bytes] = {}
         symlinks: list[str] = []
+        total_size = 0
         for info in infos:
             if info.is_dir():
                 continue
@@ -172,7 +179,15 @@ def parse_skill_zip(data: bytes) -> ParsedSkill:
                 raise SkillInvalidFormatError("ZIP_PATH_TRAVERSAL")
             if info.file_size > MAX_ZIP_ENTRY_SIZE:
                 raise SkillInvalidFormatError("ZIP_ENTRY_TOO_LARGE")
-            entries[name] = archive.read(info)
+            total_size += info.file_size
+            if total_size > MAX_ZIP_TOTAL_SIZE:
+                raise SkillInvalidFormatError("ZIP_TOTAL_TOO_LARGE")
+            try:
+                entries[name] = archive.read(info)
+            except (RuntimeError, zipfile.BadZipFile, zlib.error, NotImplementedError) as exc:
+                # 加密成员（RuntimeError）/CRC 损坏（BadZipFile）/截断
+                # （zlib.error）/压缩方法不支持（NotImplementedError）
+                raise SkillInvalidFormatError("ZIP_READ_FAILED") from exc
     finally:
         archive.close()
 
@@ -217,6 +232,13 @@ def _locate_skill_md(entries: dict[str, bytes]) -> str | None:
     return None
 
 
+def parse_skill_bytes(kind: str, data: bytes) -> ParsedSkill:
+    """按包类型解析字节（`zip` → ZIP 安全解析，否则单个 SKILL.md 文本）。"""
+    if kind == "zip":
+        return parse_skill_zip(data)
+    return parse_skill_md_text(data.decode("utf-8", errors="replace"))
+
+
 class SkillPackageAdapter(Protocol):
     """受控上传字节适配层（10 §61.5：消费 upload_id 后取包解析）。"""
 
@@ -225,15 +247,12 @@ class SkillPackageAdapter(Protocol):
     async def upload_kind(self, storage_ref: str) -> str:
         """`skill_md`（单个 SKILL.md）或 `zip`（ZIP 包）。"""
 
-    def parse(self, storage_ref: str) -> ParsedSkill:
-        """按 upload_kind 分发解析；格式问题统一抛 SkillInvalidFormatError。"""
-
 
 class FakeSkillPackageAdapter:
-    """开发态适配层：内存 storage_ref → 原始字节（与 P2-E1 FakeControlPlane 同模式）。
+    """开发态/单元测试适配层：内存 storage_ref → 原始字节。
 
-    真实实现读取 P2-E3 上传基础设施的临时对象存储；本 fake 只验证
-    解析/校验/名称一致性语义。`store_upload` 供测试与上传端点注册字节。
+    `store_upload` 供单元测试注册字节；解析语义与
+    `TempUploadStorePackageAdapter` 一致（`parse_skill_bytes`）。
     """
 
     def __init__(self) -> None:
@@ -258,6 +277,37 @@ class FakeSkillPackageAdapter:
         data = self._store.get(storage_ref)
         if data is None:
             raise SkillInvalidFormatError("UPLOAD_CONTENT_MISSING")
-        if kind == "zip":
-            return parse_skill_zip(data)
-        return parse_skill_md_text(data.decode("utf-8", errors="replace"))
+        return parse_skill_bytes(kind, data)
+
+
+class TempUploadStorePackageAdapter:
+    """P2-E3 `me/resource-uploads` 链路适配（10 §61.5 联合验证）。
+
+    消费 `upload_id` 后，SkillService 以 upload 记录的 `storage_ref` 从
+    P2-E3 受控临时上传存储（`TempUploadStore`）取回服务端检测的字节；
+    包类型由服务端检测的 MIME/原始文件名决定（`application/zip` 或
+    `.zip` 后缀 → ZIP，否则按单个 `SKILL.md` 文本解析，04 §10.14：
+    文件名/MIME/大小由服务端计算，不信任浏览器声明）。
+
+    开发态装配（mount.py/conftest）与生产接线统一使用本适配器；
+    `FakeSkillPackageAdapter` 保留用于不接临时存储的单元级测试。
+    """
+
+    def __init__(self, store) -> None:
+        self._store = store
+
+    async def fetch(self, storage_ref: str) -> bytes:
+        blob = await self._store.get(storage_ref)
+        if blob is None or not blob.data:
+            raise SkillInvalidFormatError("UPLOAD_CONTENT_MISSING")
+        return blob.data
+
+    async def upload_kind(self, storage_ref: str) -> str:
+        blob = await self._store.get(storage_ref)
+        if blob is None:
+            raise SkillInvalidFormatError("UPLOAD_CONTENT_MISSING")
+        name = (blob.original_filename or "").lower()
+        mime = (blob.mime_type or "").lower()
+        if mime == "application/zip" or name.endswith(".zip"):
+            return "zip"
+        return "skill_md"

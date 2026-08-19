@@ -201,7 +201,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
         FakeSkillContentAdapter,
         FakeSkillMigrationAdapter,
     )
-    from openviking.server.platform.skills.packages import FakeSkillPackageAdapter
+    from openviking.server.platform.skills.packages import TempUploadStorePackageAdapter
     from openviking.server.platform.skills.service import SkillService
     from openviking.server.platform.target_policy import TargetPolicy
 
@@ -241,7 +241,7 @@ async def platform_app(session_factory: async_sessionmaker[AsyncSession]):
         iam=repo,
         store=registry_store,
         deletion=deletion,
-        packages=FakeSkillPackageAdapter(),
+        packages=TempUploadStorePackageAdapter(uploads),
         content=content,
         migration=FakeSkillMigrationAdapter(content=content),
         configs=FakeSkillConfigsAdapter(),
