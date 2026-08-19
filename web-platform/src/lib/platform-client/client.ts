@@ -34,8 +34,13 @@ export interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   idempotencyKey?: string;
+  /** 乐观锁 If-Match（09 §42.4/§45.4：PATCH/DELETE 携带资源版本）。 */
+  ifMatch?: string;
   signal?: AbortSignal;
 }
+
+/** 写请求体：JSON 对象或 FormData（multipart 上传，P3-E4 resource-uploads）。 */
+export type RequestBody = unknown;
 
 export interface PlatformClientConfig {
   fetchImpl?: typeof fetch;
@@ -105,13 +110,15 @@ function parseRetryAfter(raw: string | null): number | null {
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? (options.body === undefined ? "GET" : "POST");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = { [REQUEST_ID_HEADER]: newRequestId() };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
   if (method !== "GET") {
     const csrf = csrfTokenProvider();
     if (csrf) headers[CSRF_HEADER] = csrf;
   }
   if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
+  if (options.ifMatch) headers["If-Match"] = options.ifMatch;
 
   let response: Response;
   try {
@@ -119,7 +126,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       method,
       headers,
       credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined
+          ? undefined
+          : isFormData
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch (error) {

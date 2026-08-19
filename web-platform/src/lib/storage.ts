@@ -14,6 +14,7 @@ export const PREFERENCE_KEYS = [
   "platform.lang",
   "platform.sidebar-collapsed",
   "platform.last-open-path",
+  "platform.resources-last-partition",
 ] as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
