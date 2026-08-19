@@ -401,3 +401,34 @@ class OAuthProtocolError(PlatformError):
     def __init__(self, reason: str, *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
+
+
+# ── P2-E6a：低层入口统一守卫与 MCP Tool 产品化（只 append，不修改既有码）──
+
+
+class LowLevelGuardError(PlatformError):
+    """低层入口 TargetPolicy 守卫拒绝（05 §11.5，14 号计划 §97.6）。
+
+    `reason` 为稳定原因码（`ACTION_NOT_MAPPED`/`PRINCIPAL_REQUIRED` 等），
+    HTTP 层映射 400/403；拒绝同时写脱敏审计（AC④）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class CrossVisibilityMoveError(LowLevelGuardError):
+    """跨可见性移动被拒（05 §11.5：不得作为普通 mv 放行）。
+
+    私有↔共享之间的移动必须走"复制/发布为新对象"业务动作；普通 mv 的
+    源与目标必须同属 `user_private` 或同属 `account_shared`。
+    """
+
+    def __init__(self, reason: str = "CROSS_VISIBILITY_MOVE", *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class MCPToolUnavailableError(LowLevelGuardError):
+    """MCP Tool 不对产品凭证发布（08 §28.5：grep/glob 仅私网 Studio）。"""

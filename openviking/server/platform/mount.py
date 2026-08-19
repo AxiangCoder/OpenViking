@@ -107,10 +107,60 @@ def mount_platform_routers(app: FastAPI, config) -> None:
     app.state.platform_config = platform_config
     _mount_resource_services(app, repo, registry_store, registry_service, facade, deletion, uploads)
 
+    # P2-E6a（05 §11.5，14 号计划 §97.6）：低层入口统一守卫装配。
+    # 平台 Session 工厂与审计写入（插件/守卫以 Key 归属者身份审计，AC④）。
+    from openviking.server.platform.db import session_factory as _platform_session_factory
+    from openviking.server.platform.lowlevel.bridge import McpPlatformBridge
+    from openviking.server.platform.lowlevel.guard import LowLevelPolicyGuard
+
+    async def _lowlevel_audit(
+        principal,
+        *,
+        action: str,
+        result: str,
+        reason: str | None,
+        target_uri: str,
+        request_id: str,
+        metadata: dict | None,
+    ) -> None:
+        async with _platform_session_factory() as audit_session:
+            await repo.append_audit_event(
+                audit_session,
+                request_id=request_id or None,
+                account_id=principal.actor_account_id,
+                actor_type="user",
+                actor_user_id=principal.actor_user_id,
+                actor_account_id=principal.actor_account_id,
+                actor_session_id=principal.session_id,
+                authentication_method=principal.authentication_method,
+                actor_credential_id=principal.credential_id,
+                subject_account_id=principal.actor_account_id,
+                action=action,
+                target_type="viking_uri",
+                target_id=target_uri,
+                target_visibility=(metadata or {}).get("visibility"),
+                scope="platform" if principal.actor_account_id is None else "account",
+                result=result,
+                reason=reason,
+                metadata=metadata,
+            )
+            await audit_session.commit()
+
+    guard = LowLevelPolicyGuard(facade.authorization, audit=_lowlevel_audit)
+    app.state.platform_enabled = True
+    app.state.platform_lowlevel_guard = guard
+    app.state.platform_session_factory = _platform_session_factory
+    app.state.platform_mcp_bridge = McpPlatformBridge(
+        guard=guard,
+        registry=registry_service,
+        registry_store=registry_store,
+        session_factory=_platform_session_factory,
+        deletion_purge_days=platform_config.deletion_purge_days,
+    )
+
     # P2-E6b：MCP OAuth PostgreSQL 存储（04 §10.13）。dev 态挂载后，
     # 产品 OAuth 端点使用 PG 存储；SDK 协议端点换存由 app.py 在
     # platform_enabled 时完成（同样指向 PG），保证单一事实来源。
-    from openviking.server.platform.db import session_factory as _platform_session_factory
     from openviking.server.platform.iam.pg_oauth_store import PostgresOAuthStore
 
     app.state.platform_oauth_store = PostgresOAuthStore(

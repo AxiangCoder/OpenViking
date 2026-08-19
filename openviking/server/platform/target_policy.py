@@ -45,6 +45,25 @@ _ACTION_MAP: dict[tuple[str, str, str], str] = {
     ("skill", "account_shared", "manage"): "skill.account_shared.manage.{scope}",
 }
 
+# P2-E6a：低层动作 → 授权动作（05 §11.5："会改变"包括 add_resource、write、
+# mkdir、mv（源与目标）、set_tags、归档、导入、恢复和批量操作；删除用
+# delete；读取用 read）。未知动作返回 None（产品策略默认拒绝）。
+LOW_LEVEL_ACTION_TO_POLICY: dict[str, str] = {
+    "add_resource": "write",
+    "add_skill": "write",
+    "write": "write",
+    "mkdir": "write",
+    "mv": "write",
+    "set_tags": "write",
+    "archive": "write",
+    "import": "write",
+    "restore": "write",
+    "batch_write": "write",
+    "rm": "delete",
+    "forget": "delete",
+    "read": "read",
+}
+
 # scope 归一：self（Actor 自己的私有对象）不需要 scope 占位。
 _SCOPE_FOR_PERMISSION = {
     "self": "self",
@@ -85,3 +104,11 @@ class TargetPolicy:
         if object_type == "skill":
             return f"viking://user/{actor_ov_user_id}/skills/"
         return f"viking://user/{actor_ov_user_id}/resources/"
+
+    def low_level_action(self, action: str) -> str | None:
+        """P2-E6a：低层动作 → TargetPolicy 动作（write/delete/read，05 §11.5）。
+
+        低层 `/api/v1` Router 与 MCP Tool 在调用 OpenVikingService 前先经
+        本映射取得授权动作；未映射动作返回 None（产品策略默认拒绝）。
+        """
+        return LOW_LEVEL_ACTION_TO_POLICY.get(action)

@@ -74,6 +74,30 @@ _request_url_ctx: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVa
     "_request_url_ctx", default=None
 )
 
+# P2-E6a：平台模式（08 §28.5）——中间件记录当前请求所属 app 与 IAM Principal，
+# MCP Tool 据此访问平台服务桥（guard/registry）并按 Key 归属者身份授权审计。
+_mcp_app_ctx: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar(
+    "_mcp_app_ctx", default=None
+)
+_mcp_principal_ctx: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar(
+    "_mcp_principal_ctx", default=None
+)
+
+
+def _mcp_bridge():
+    """平台模式服务桥（app.state.platform_mcp_bridge）或 None（legacy）。"""
+    app = _mcp_app_ctx.get()
+    if app is None:
+        return None
+    if not getattr(getattr(app, "state", None), "platform_enabled", False):
+        return None
+    return getattr(app.state, "platform_mcp_bridge", None)
+
+
+def _mcp_principal():
+    """当前 MCP 请求的 IAM Principal（平台插件解析，03 §8.4）。"""
+    return _mcp_principal_ctx.get()
+
 
 def _get_ctx() -> RequestContext:
     ctx = _mcp_ctx.get()
@@ -208,11 +232,20 @@ class _IdentityASGIMiddleware:
         }
         ctx_token = _mcp_ctx.set(ctx)
         url_token = _request_url_ctx.set(url_info)
+        app_token = _mcp_app_ctx.set(scope.get("app"))
+        # P2-E6a：平台模式（PlatformIamAuthPlugin）下把 IAM Principal 存入
+        # contextvar，MCP Tool 的 TargetPolicy 检查与审计以 Key 归属者身份
+        # 执行（AC④，08 §28.5）。
+        principal_token = _mcp_principal_ctx.set(
+            getattr(request.state, "platform_principal", None)
+        )
         try:
             return await self.app(scope, receive, send)
         finally:
             _mcp_ctx.reset(ctx_token)
             _request_url_ctx.reset(url_token)
+            _mcp_app_ctx.reset(app_token)
+            _mcp_principal_ctx.reset(principal_token)
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +618,28 @@ async def add_resource(
     service = get_service()
     ctx = _get_ctx()
 
+    # P2-E6a（08 §28.5/05 §11.5 默认目标规则）：平台模式下 add_resource
+    # 未显式指定目标（to/parent 均空）时强制 User 私有根；显式目标（可能为
+    # Account 共享）经 TargetPolicy 写守卫（普通 User 403，AC①）。
+    bridge = _mcp_bridge()
+    if bridge is not None:
+        principal = _mcp_principal()
+        if principal is None:
+            return "Error: unauthenticated product credential."
+        try:
+            explicit = to or parent
+            if explicit:
+                await bridge.guard.authorize(
+                    principal,
+                    action="add_resource",
+                    uri=explicit,
+                    object_type="resource",
+                )
+            else:
+                to = bridge.guard.default_target_uri(principal, object_type="resource")
+        except Exception as exc:
+            return f"Error: {_mcp_guard_message(exc)}"
+
     if watch_interval < 0:
         return (
             "Error: watch_interval must be >= 0. Use 0 for one-shot add (no watch); "
@@ -758,6 +813,33 @@ async def add_resource(
 # `resume`, `trigger`, `update --interval`, etc.) for those operations.
 
 
+def _mcp_guard_message(exc: Exception) -> str:
+    """守卫异常 → 脱敏 Tool 错误消息（不泄露 URI 以外细节）。"""
+    from openviking.server.platform.errors import PlatformError
+
+    if isinstance(exc, PlatformError):
+        return getattr(exc, "reason", type(exc).__name__)
+    return type(exc).__name__
+
+
+async def _mcp_guard_watch_target(to_uri: str) -> None:
+    """cancel_watch/原生 Watch Router 守卫（05 §11.5：取消需目标写权限）。"""
+    bridge = _mcp_bridge()
+    if bridge is None:
+        return
+    principal = _mcp_principal()
+    if principal is None:
+        raise UnauthenticatedError("MCP request identity not set")
+    from openviking.server.platform.lowlevel.guard import object_type_for_uri
+
+    await bridge.guard.authorize(
+        principal,
+        action="write",
+        uri=to_uri,
+        object_type=object_type_for_uri(to_uri),
+    )
+
+
 @mcp.tool()
 async def list_watches() -> str:
     """List watch tasks (auto-refresh subscriptions) visible to the current user."""
@@ -797,6 +879,11 @@ async def cancel_watch(to_uri: str) -> str:
 
     service = get_service()
     ctx = _get_ctx()
+    # P2-E6a（05 §11.5）：取消 Watch 需要目标 Resource 当前写权限
+    try:
+        await _mcp_guard_watch_target(to_uri)
+    except Exception as exc:
+        return f"Error: {_mcp_guard_message(exc)}"
     scheduler = getattr(service, "watch_scheduler", None)
     if scheduler is None or not scheduler.is_running:
         return "Error: Watch scheduler not running"
@@ -836,7 +923,13 @@ async def cancel_watch(to_uri: str) -> str:
 async def grep(
     uri: str, pattern: str | list[str], case_insensitive: bool = False, node_limit: int = 10
 ) -> str:
-    """Search content in viking:// files using regex patterns (like grep). Supports multiple patterns searched concurrently. Use this for exact text matching; use the search tool for semantic retrieval."""
+    """Search content in viking:// files using regex patterns (like grep). Use this for exact text matching; use the search tool for semantic retrieval."""
+    # P2-E6a（08 §28.5）：grep 不向产品 MCP 凭证发布，只留私网 Studio
+    if _mcp_bridge() is not None:
+        return (
+            "Error: grep is not available for product credentials "
+            "(Studio-only tool, not published in v0.1). Use 'find' or 'search' instead."
+        )
     import asyncio
 
     service = get_service()
@@ -886,6 +979,12 @@ async def grep(
 @mcp.tool()
 async def glob(pattern: str, uri: str = "viking://", node_limit: int = 100) -> str:
     """Find viking:// files matching a glob pattern (e.g. **/*.md, *.py). Use this for filename matching; use the search tool for content-based retrieval."""
+    # P2-E6a（08 §28.5）：glob 不向产品 MCP 凭证发布，只留私网 Studio
+    if _mcp_bridge() is not None:
+        return (
+            "Error: glob is not available for product credentials "
+            "(Studio-only tool, not published in v0.1). Use 'find' or 'search' instead."
+        )
     service = get_service()
     ctx = _get_ctx()
 
@@ -910,11 +1009,92 @@ async def glob(pattern: str, uri: str = "viking://", node_limit: int = 100) -> s
 
 @mcp.tool()
 async def forget(uri: str, recursive: bool = False) -> str:
-    """Permanently delete a viking:// URI from OpenViking. Irreversible — confirm with user before calling."""
+    """Delete a viking:// URI from OpenViking. Product mode: enters a 30-day soft-delete recycle window; legacy mode keeps the historical behavior."""
+    # P2-E6a（08 §28.5）：产品语义 = 30 天软删除，不能调用不可恢复的底层 rm
+    bridge = _mcp_bridge()
+    if bridge is not None:
+        return await _productized_forget(uri, recursive, bridge)
     service = get_service()
     ctx = _get_ctx()
     await service.fs.rm(uri, ctx=ctx, recursive=recursive)
     return f"Deleted: {uri}"
+
+
+async def _productized_forget(uri: str, recursive: bool, bridge) -> str:
+    """MCP forget 产品化：TargetPolicy 删除守卫 + Content Registry 30 天软删。
+
+    与产品删除一致进入 30 天回收期（05 §11.5：forget 不能调用底层 rm；
+    物理清理由 Purge Worker 执行）；幂等：已有未恢复删除任务时复用。
+    """
+    principal = _mcp_principal()
+    if principal is None:
+        return "Error: unauthenticated product credential."
+    if getattr(principal, "actor_account_id", None) is None:
+        return "Error: SUBJECT_REQUIRED"
+
+    from openviking.server.platform.auth.uri_policy import canonicalize_uri
+    from openviking.server.platform.lowlevel.guard import object_type_for_uri
+
+    try:
+        canonical = canonicalize_uri(uri)
+    except Exception as exc:
+        return f"Error: {_mcp_guard_message(exc)}"
+    object_type = object_type_for_uri(canonical)
+    if object_type is None:
+        return "Error: INVALID_URI"
+    try:
+        await bridge.guard.authorize(
+            principal, action="forget", uri=canonical, object_type=object_type
+        )
+    except Exception as exc:
+        return f"Error: {_mcp_guard_message(exc)}"
+
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    purge_after = now + timedelta(days=int(getattr(bridge, "deletion_purge_days", 30)))
+    deleted = 0
+    try:
+        async with bridge.session_factory() as session:
+            if recursive:
+                refs = await bridge.registry_store.list_refs(
+                    session, account_id=principal.actor_account_id
+                )
+                refs = [
+                    r
+                    for r in refs
+                    if r.ov_uri and (r.ov_uri == canonical or r.ov_uri.startswith(canonical))
+                ]
+            else:
+                ref = await bridge.registry_store.get_ref_by_uri(
+                    session, principal.actor_account_id, canonical
+                )
+                refs = [ref] if ref is not None else []
+            for ref in refs:
+                if ref.deleted_at is not None:
+                    continue
+                job = await bridge.registry.create_deletion_job(
+                    session,
+                    account_id=ref.account_id,
+                    resource_type=ref.object_type,
+                    resource_id=str(ref.id),
+                    deleted_by=principal.actor_user_id,
+                    now=now,
+                    ov_uri=ref.ov_uri,
+                )
+                if job is not None:
+                    ref.status = "pending_deletion"
+                    ref.deleted_at = now
+                    await bridge.registry_store.update_ref(session, ref)
+                    deleted += 1
+            await session.commit()
+    except Exception as exc:
+        return f"Error: {_mcp_guard_message(exc)}"
+    if deleted == 0:
+        return f"Error: no product-managed object found at {uri}"
+    return (
+        f"Deleted: {uri} (30-day soft delete; purge after {purge_after.date().isoformat()})"
+    )
 
 
 # -- health ----------------------------------------------------------------
@@ -923,6 +1103,14 @@ async def forget(uri: str, recursive: bool = False) -> str:
 @mcp.tool()
 async def health() -> str:
     """Check whether the OpenViking server is healthy."""
+    # P2-E6a（08 §28.5）：产品模式脱敏——不返回 Queue、模型、路径、异常细节
+    # 或租户数据（AC③）。
+    if _mcp_bridge() is not None:
+        try:
+            get_service()
+            return "OpenViking is healthy."
+        except Exception:
+            return "OpenViking is unhealthy."
     try:
         service = get_service()
         return f"OpenViking is healthy (service initialized, storage: {type(service.viking_fs).__name__})"

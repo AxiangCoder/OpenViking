@@ -4,7 +4,7 @@
 
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query, Request
 from pydantic import BaseModel
 
 from openviking.core.namespace import NamespaceShapeError, canonicalize_uri, context_type_for_uri
@@ -15,6 +15,11 @@ from openviking.server.dependencies import get_service
 from openviking.server.error_mapping import map_exception
 from openviking.server.identity import RequestContext
 from openviking.server.models import Response
+from openviking.server.platform.lowlevel.guard import (
+    guard_move_request,
+    guard_request,
+    object_type_for_uri,
+)
 from openviking.server.routers.content import SetTagsRequest
 from openviking.server.routers.content import set_tags as content_set_tags
 from openviking.storage.vikingdb_manager import VikingDBManagerProxy
@@ -206,10 +211,11 @@ async def attrs(
 @router.post("/attrs/set_tags")
 async def attrs_set_tags(
     request: SetTagsRequest = Body(...),
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Set explicit k=v retrieval tags metadata for a file or directory."""
-    return await content_set_tags(request, _ctx)
+    return await content_set_tags(request, http_request, _ctx)
 
 
 class MkdirRequest(BaseModel):
@@ -222,9 +228,17 @@ class MkdirRequest(BaseModel):
 @router.post("/mkdir")
 async def mkdir(
     request: MkdirRequest,
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Create directory."""
+    # P2-E6a（05 §11.5）：mkdir 是"会改变"动作，经 TargetPolicy 写守卫
+    await guard_request(
+        http_request,
+        action="mkdir",
+        uri=request.uri,
+        object_type=object_type_for_uri(request.uri),
+    )
     service = get_service()
     # Resolve path variables
     uri = resolve_path_variables(request.uri)
@@ -244,9 +258,17 @@ async def rm(
     recursive: bool = Query(False, description="Remove recursively"),
     wait: bool = Query(False, description="Wait for semantic refresh to complete"),
     timeout: Optional[float] = Query(None, description="Wait timeout in seconds"),
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Remove resource."""
+    # P2-E6a（05 §11.5）：删除动作经 TargetPolicy delete 守卫
+    await guard_request(
+        http_request,
+        action="rm",
+        uri=uri,
+        object_type=object_type_for_uri(uri),
+    )
     service = get_service()
     # Resolve path variables
     uri = resolve_path_variables(uri)
@@ -289,6 +311,7 @@ class MvRequest(BaseModel):
 @router.post("/mv")
 async def mv(
     request: MvRequest,
+    http_request: Request = None,  # type: ignore[assignment]  # FastAPI 注入
     _ctx: RequestContext = Depends(get_request_context),
 ):
     """Move resource."""
@@ -296,6 +319,14 @@ async def mv(
     # Resolve path variables
     from_uri = resolve_path_variables(request.from_uri)
     to_uri = resolve_path_variables(request.to_uri)
+    # P2-E6a（05 §11.5，AC②）：mv 的源与目标都经 TargetPolicy；
+    # 跨可见性移动拒绝（必须走"复制/发布为新对象"业务动作）
+    await guard_move_request(
+        http_request,
+        from_uri=from_uri,
+        to_uri=to_uri,
+        object_type=object_type_for_uri(from_uri),
+    )
     try:
         await service.fs.mv(from_uri, to_uri, ctx=_ctx)
     except AGFSNotFoundError:
