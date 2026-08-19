@@ -1,9 +1,11 @@
 """P1-E1 迁移验收（AC ① ② ③ ⑤）+ P1-E2 新增表（iam_permission_schema，04 §10.5）
-+ P2-E1 新增表（iam_outbox，04 §10.9）。
++ P2-E1 新增表（iam_outbox，04 §10.9）+ P2-E2 新增表（iam_deletion_jobs，04 §10.11）。
 
-- ① 全新库执行迁移后 11 张 iam_* 表创建成功，upgrade/downgrade 可重复
+- ① 全新库执行迁移后全部 iam_* 表创建成功，upgrade/downgrade 可重复
   （P1-E2 新增 iam_permission_schema，见 versions/b2c3d4e5f6a7；
-   P2-E1 新增 iam_outbox，见 versions/c3d4e5f6a7b8）
+   P2-E1 新增 iam_outbox，见 versions/c3d4e5f6a7b8；
+   P2-E2 新增 iam_deletion_jobs，见 versions/d4e5f6a7b8c9；
+   platform_content_refs/platform_operation_refs/platform_uploads 见 test_content_registry.py）
 - ② normalized_email、(account_id, ov_user_id)、(account_id, normalized_username)、
      public_id/key_hash、token_hash、account code/ov_account_id 唯一生效
 - ③ iam_roles.rank 列存在（"ranks 3/2/1" 数据断言由 P1-E2 种子测试承载）
@@ -42,6 +44,7 @@ EXPECTED_TABLES = {
     "iam_audit_events",
     "iam_permission_schema",
     "iam_outbox",
+    "iam_deletion_jobs",
 }
 
 
@@ -60,7 +63,7 @@ async def _count_iam_tables(session: AsyncSession) -> int:
 
 
 async def test_fresh_upgrade_creates_all_iam_tables(session: AsyncSession) -> None:
-    """AC ①：全新库执行迁移后全部 iam_* 表创建成功（P1-E1 9 张 + P1-E2 1 张 + P2-E1 1 张）。"""
+    """AC ①：全新库执行迁移后全部 iam_* 表创建成功（P1-E1 9 张 + P1-E2 1 张 + P2-E1 1 张 + P2-E2 1 张）。"""
     assert await _iam_tables(session) == EXPECTED_TABLES
 
 

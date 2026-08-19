@@ -234,3 +234,54 @@ async def resolve_principal(
     if api_key:
         return await resolve_api_key_principal(session, repo, rbac, api_key)
     raise AuthenticationError(INVALID_CREDENTIAL)
+
+
+# ── P2-E2：OAuth Token → Principal（05 §11.1 `mcp_oauth_principal`，14 号计划 §97.2）──
+
+
+async def resolve_oauth_token_principal(
+    session: AsyncSession,
+    repo: IamRepository,
+    rbac: RbacService,
+    oauth_store,
+    token_plain: str,
+) -> AuthenticatedUserPrincipal:
+    """MCP OAuth Access Token → Principal（05 §11.1/§11.4，04 §10.13）。
+
+    与 Session/API Key 产出**同一结构、同权限集**，仅 `authentication_method=
+    "oauth"` 与 `credential_id`（Token ID）不同（AC①）。
+
+    - 每次调用都重新加载 User/Account/角色/Permission/Grant/Token 状态
+      （04 §10.13：不缓存授权结果，权限变更下一次请求立即生效）；
+    - Token 未知/撤销/过期/Grant 撤销统一 `INVALID_CREDENTIAL`（不泄露存在性）；
+    - 用户不存在/已删除/非 active → `USER_DISABLED`（禁用/删除期立即拒绝）。
+    """
+    if not token_plain:
+        raise AuthenticationError(INVALID_CREDENTIAL)
+    record = await oauth_store.get_active_access_token(session, sha256_hex(token_plain))
+    if record is None:
+        raise AuthenticationError(INVALID_CREDENTIAL)
+    if (
+        record.status != "active"
+        or record.revoked_at is not None
+        or (record.expires_at is not None and record.expires_at < datetime.now(timezone.utc))
+        or record.grant_status != "active"
+        or record.grant_revoked_at is not None
+    ):
+        raise AuthenticationError(INVALID_CREDENTIAL)
+
+    user = await repo.get_user(session, record.user_id)
+    if user is None or user.deleted_at is not None:
+        raise AuthenticationError(USER_DISABLED)
+    account = await repo.get_account(session, record.account_id) if record.account_id is not None else None
+    _ensure_product_usable(user, account)
+
+    return await _build_user_principal(
+        session,
+        repo,
+        rbac,
+        user=user,
+        account_id=record.account_id,
+        authentication_method="oauth",
+        credential_id=record.token_id,
+    )

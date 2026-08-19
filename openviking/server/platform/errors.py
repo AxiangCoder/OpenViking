@@ -142,3 +142,78 @@ class ProvisioningNotRetryableError(PlatformError):
         super().__init__(reason, *args)
         self.reason = reason
 
+
+# ── P2-E2：身份上下文/URI Policy/Content Registry/删除回收（只 append，不修改既有码）──
+
+
+class AccessDeniedError(PlatformError):
+    """数据访问授权被拒（02 §7.2/§7.5 统一授权门）。
+
+    `reason` 为稳定原因码（`CROSS_ACCOUNT_ACCESS`/`SUBJECT_MISMATCH` 等，
+    API 层映射 403/404）；拒绝审计由调用方在抛出前按 P1-E2 语义写入。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class InvalidTargetError(PlatformError):
+    """目标 URI 规范化/分类失败（02 §7.5）：非 `viking://` URI、不可解析段等。
+
+    `reason` 为稳定原因码（`INVALID_URI`/`INTERNAL_TARGET_DENIED` 等）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class CanonicalUriMismatchError(PlatformError):
+    """canonical URI 与 visibility/Subject 一致性校验失败（02 §7.2/§7.5，AC④）。
+
+    客户端提交的 visibility/account_id/user_id 不能单独作为授权依据；
+    服务端构造的 canonical URI 不一致即拒（不区分失败原因，防枚举）。
+    """
+
+
+class TagValidationError(PlatformError):
+    """产品 tags 校验失败（04 §10.10：≤20 项、每项 ≤40 字符、`key=value`、
+    key/value 非空、整体小写并去重；AC 由 05 §12.5 统一强制）。
+
+    `reason` 为稳定原因码（`TAG_LIMIT_EXCEEDED`/`TAG_INVALID_FORMAT` 等）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class UploadNotConsumableError(PlatformError):
+    """Upload 不可消费（04 §10.14）：跨 User/Account/Visibility/Object Type
+    消费、过期、已消费、重放统一拒绝。
+
+    `reason` 为稳定原因码（`UPLOAD_NOT_FOUND`/`UPLOAD_EXPIRED`/`UPLOAD_CONSUMED`/
+    `UPLOAD_SCOPE_MISMATCH`）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class DeletionJobError(PlatformError):
+    """删除任务/恢复被拒（04 §10.11，05 §12.6 注）。
+
+    `reason` 为稳定原因码（`RESTORE_WINDOW_EXPIRED`/`ALREADY_RESTORED`/
+    `NOT_RESTORABLE`/`NOT_RESTORABLE_ALREADY_PURGED`），API 层映射 409/403。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+
+
+class PurgeError(PlatformError):
+    """Purge Worker 物理清理失败（04 §10.11）：`last_error` 只存脱敏错误。"""
+
