@@ -123,7 +123,16 @@ async def _initialize_auth_plugin(
         )
         raise RuntimeError(f"Unknown auth_mode: {effective_auth_mode}")
 
-    plugin = plugin_cls()
+    # P2-E6a（07 §20 少量修改项，14 号计划 §97.6）：平台模式（platform_enabled）
+    # 下低层 `/api/v1` 与 `/mcp` 认证切换为 IAM Principal（Session/API Key/
+    # OAuth 三凭证统一解析，05 §11.4），不再读取旧 User Key registry。
+    if getattr(config, "platform_enabled", False):
+        from openviking.server.platform.lowlevel.plugin import PlatformIamAuthPlugin
+
+        plugin = PlatformIamAuthPlugin()
+        logger.info("Auth plugin initialized: platform_iam (platform_enabled)")
+    else:
+        plugin = plugin_cls()
     app.state.auth_plugin = plugin
     await plugin.initialize(app, service, config)
     logger.info("Auth plugin initialized: %s", effective_auth_mode)
@@ -575,24 +584,35 @@ def create_app(
     app.include_router(resources_router)
     app.include_router(filesystem_router)
     app.include_router(content_router)
-    app.include_router(console_router)
     app.include_router(search_router)
     app.include_router(relations_router)
     app.include_router(privacy_configs_router)
     app.include_router(skills_router)
     app.include_router(sessions_router)
-    app.include_router(snapshot_router)
     app.include_router(stats_router)
-    app.include_router(pack_router)
-    app.include_router(debug_router)
-    app.include_router(observer_router)
     app.include_router(openviking_assets_router)
     app.include_router(metrics_router)
     app.include_router(tasks_router)
     app.include_router(user_settings_router)
     app.include_router(watches_router)
-    app.include_router(webdav_router)
     app.include_router(bot_router, prefix="/bot/v1")
+
+    # P2-E6a（08 §28.6，14 号计划 §97.6）：平台模式下运维/低层 Router
+    # （console/webdav/snapshot/pack/debug/observer）应用层不挂载 → 404；
+    # 公网路由网络边界由 P5-E1 闭合（反代层 deny 第二道防线）。
+    platform_mode = bool(getattr(config, "platform_enabled", False))
+    if platform_mode:
+        logger.info(
+            "Platform mode: ops routers (console/snapshot/pack/debug/observer/webdav) "
+            "not mounted (app-layer 404)"
+        )
+    else:
+        app.include_router(console_router)
+        app.include_router(snapshot_router)
+        app.include_router(pack_router)
+        app.include_router(debug_router)
+        app.include_router(observer_router)
+        app.include_router(webdav_router)
 
     # OAuth 2.1: when enabled, mount the official MCP SDK auth routes
     # (DCR / authorize / token / metadata) plus our authorize page + consent /
