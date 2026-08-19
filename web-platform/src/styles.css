@@ -648,3 +648,157 @@ button:disabled {
 .admin-settings-list .profile-row dd {
   color: var(--ov-text);
 }
+
+/* ── Skill 产品页面（10 号文档，P3-E5）── */
+
+.skill-page {
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skill-form {
+  max-width: 640px;
+}
+
+.skill-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  font: inherit;
+  color: var(--ov-text);
+  min-height: 120px;
+  resize: vertical;
+}
+
+.skill-form textarea:focus {
+  outline: none;
+  border-color: var(--ov-primary);
+}
+
+.skill-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ov-text-secondary);
+}
+
+.skill-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--ov-border);
+}
+
+.skill-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--ov-text-secondary);
+  cursor: pointer;
+}
+
+.skill-tabs button[aria-selected="true"] {
+  color: var(--ov-text);
+  border-bottom-color: var(--ov-primary);
+  font-weight: 600;
+}
+
+.skill-description {
+  max-width: 260px;
+  color: var(--ov-text-secondary);
+  font-size: 13px;
+}
+
+.skill-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.skill-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--ov-border);
+  font-size: 12px;
+  color: var(--ov-text-secondary);
+  white-space: nowrap;
+}
+
+.skill-file-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  font-size: 12px;
+  color: #166534;
+  white-space: nowrap;
+}
+
+.row-link {
+  color: var(--ov-primary);
+  font-size: 13px;
+}
+
+.skill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skill-detail .card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.skill-markdown {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ov-text);
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 12px;
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.skill-config-mask {
+  color: var(--ov-text-secondary);
+  letter-spacing: 2px;
+}
+
+.skill-config-versions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.skill-version-chip {
+  border: 1px solid var(--ov-border);
+  border-radius: 999px;
+  background: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--ov-primary);
+  cursor: pointer;
+}
+
+.skill-version-chip:disabled {
+  color: var(--ov-text-secondary);
+  cursor: default;
+}
+
+.skill-config-form {
+  max-width: 560px;
+}
