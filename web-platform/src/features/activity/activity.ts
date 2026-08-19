@@ -56,6 +56,60 @@ export async function cancelActivity(operationId: string): Promise<CancelResult>
   });
 }
 
+// ── /admin 挂载点（05 §12.6：`task.read.account_shared`，仅当前 Account 共享对象任务）──
+
+interface AdminActivityRow {
+  id: string;
+  operation_type: string;
+  status: OperationStatus;
+  stage: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  target_visibility: string | null;
+  generation: number;
+  cancellable: boolean;
+  initiated_by: "user" | "system";
+  error_code: string | null;
+  error_summary: string | null;
+  retryable: boolean;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+/** 服务端 admin 聚合 DTO 为扁平 error_code/error_summary，规整为共享组件期望的嵌套 error。 */
+function toActivityItem(row: AdminActivityRow): ActivityItem {
+  return {
+    id: row.id,
+    operation_type: row.operation_type,
+    status: row.status,
+    stage: row.stage,
+    initiated_by: row.initiated_by,
+    created_at: row.created_at,
+    completed_at: row.completed_at,
+    cancellable: row.cancellable,
+    error:
+      row.error_code != null
+        ? { code: row.error_code, summary: row.error_summary, retryable: row.retryable }
+        : null,
+    generation: row.generation,
+  };
+}
+
+/** 仅当前 Account 共享对象任务（P4-E3 AC③；共享组件只按摘要渲染，无 Task ID/堆栈/Worker 路径）。 */
+export async function fetchAdminActivity(): Promise<ActivityListResult> {
+  const page = await request<{ items: AdminActivityRow[]; next_cursor: string | null }>(
+    "/api/platform/v1/admin/activity",
+  );
+  return { items: page.items.map(toActivityItem), next_cursor: page.next_cursor };
+}
+
+/** 取消 Account 共享对象任务（`task.cancel.account_shared` + 目标对象写权限由后端校验）。 */
+export async function cancelAdminActivity(operationId: string): Promise<CancelResult> {
+  return request<CancelResult>(`/api/platform/v1/admin/activity/${operationId}/cancel`, {
+    method: "POST",
+  });
+}
+
 /** 任务类型 → 产品文案（09 §43.3：类型稳定，新增类型走兜底）。 */
 const OPERATION_TYPE_LABELS: Record<string, string> = {
   resource_import: "导入 Resource",

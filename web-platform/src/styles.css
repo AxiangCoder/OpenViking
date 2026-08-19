@@ -721,6 +721,12 @@ button:disabled {
   text-decoration: none;
 }
 
+.monitoring-big {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
 .search-form {
   display: flex;
   flex-direction: column;
