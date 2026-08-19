@@ -648,3 +648,308 @@ button:disabled {
 .admin-settings-list .profile-row dd {
   color: var(--ov-text);
 }
+
+/* ── P3-E3：首页 / 检索 / Sessions / Activity / 回收站 ── */
+
+.page-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.home-page,
+.search-page,
+.activity-page,
+.recycle-bin-page,
+.sessions-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.home-page h3,
+.sessions-page h3,
+.sessions-detail-head h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.home-count-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.home-count-grid dt {
+  color: var(--ov-text-secondary);
+  font-size: 12px;
+}
+
+.home-count-grid dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.recent-session-link {
+  color: var(--ov-primary);
+  text-decoration: none;
+}
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.search-mode-row,
+.search-time-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.search-inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ov-text-secondary);
+  font-size: 13px;
+}
+
+.search-inline-field select,
+.search-inline-field input {
+  padding: 6px 8px;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  font: inherit;
+  background: var(--ov-surface);
+  color: var(--ov-text);
+}
+
+.search-session-field select {
+  min-width: 260px;
+}
+
+.search-more-filters summary {
+  cursor: pointer;
+  color: var(--ov-text-secondary);
+  font-size: 13px;
+}
+
+.search-more-filters-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+}
+
+.search-results-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.search-results-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.search-hit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-hit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+}
+
+.memory-drawer {
+  margin-top: 12px;
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 12px 14px;
+  background: var(--ov-bg);
+}
+
+.memory-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-drawer-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.memory-drawer-body {
+  margin: 8px 0;
+}
+
+.sessions-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.sessions-sidebar h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.session-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.session-list-item.selected {
+  border-color: var(--ov-primary);
+  color: var(--ov-primary);
+}
+
+.sessions-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sessions-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-meta {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.sessions-meta dd {
+  font-size: 14px;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.session-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.session-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.role-user {
+  color: var(--ov-primary);
+}
+
+.session-message-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--ov-bg);
+  border: 1px solid var(--ov-border);
+  border-radius: var(--ov-radius);
+  padding: 10px 12px;
+}
+
+.memory-impact {
+  max-width: 720px;
+}
+
+.memory-impact h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.memory-impact-totals {
+  display: flex;
+  gap: 24px;
+  margin: 0 0 10px;
+}
+
+.memory-impact-totals dt {
+  color: var(--ov-text-secondary);
+  font-size: 12px;
+}
+
+.memory-impact-totals dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.memory-impact-commit {
+  border-top: 1px solid var(--ov-border);
+  padding: 8px 0;
+}
+
+.memory-impact-commit-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.memory-impact-detail {
+  margin-top: 8px;
+}
+
+.impact-selected {
+  border-color: var(--ov-primary);
+  color: var(--ov-primary);
+}
+
+.recycle-group-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
