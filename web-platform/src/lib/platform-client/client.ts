@@ -1,0 +1,156 @@
+/**
+ * Platform API 客户端（05 §12.2–12.3，P3-E1 冻结点）。
+ *
+ * - 登录状态来自 HttpOnly Cookie（`__Host-ov_session`），`credentials: "include"`；
+ * - 每个请求携带客户端生成的 `X-Request-ID`（服务端原样回显，错误页展示）；
+ * - 写请求携带内存态 CSRF Token（03 §8.2，Token 仅内存持有、绝不落存储）；
+ * - 统一解析 `{status, result, error}` envelope，稳定错误码映射为 PlatformError；
+ * - 401/403 触发全局 auth-challenge 事件（auth 状态层刷新 /auth/me，AC③）。
+ */
+
+import { PlatformError, isPlatformError } from "./errors";
+
+export const API_PREFIX = "/api/platform/v1";
+
+export const AUTH_CHALLENGE_EVENT = "platform:auth-challenge";
+
+const REQUEST_ID_HEADER = "X-Request-ID";
+const CSRF_HEADER = "X-CSRF-Token";
+const IDEMPOTENCY_HEADER = "Idempotency-Key";
+
+interface EnvelopeOk {
+  status: "ok";
+  result: unknown;
+}
+
+interface EnvelopeErrorBody {
+  status?: string;
+  result?: unknown;
+  error?: { code?: string; message?: string };
+  detail?: { code?: string; message?: string } | string;
+}
+
+export interface RequestOptions {
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  body?: unknown;
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+}
+
+export interface PlatformClientConfig {
+  fetchImpl?: typeof fetch;
+  csrfTokenProvider?: () => string | null;
+}
+
+let fetchImpl: typeof fetch = (...args) => globalThis.fetch(...args);
+let csrfTokenProvider: () => string | null = () => null;
+
+/** 测试注入点（jsdom 下也可用，默认使用全局 fetch）。 */
+export function configurePlatformClient(config: PlatformClientConfig): void {
+  if (config.fetchImpl) fetchImpl = config.fetchImpl;
+  if (config.csrfTokenProvider) csrfTokenProvider = config.csrfTokenProvider;
+}
+
+function newRequestId(): string {
+  const cryptoObj = globalThis.crypto as Crypto | undefined;
+  if (cryptoObj && typeof cryptoObj.randomUUID === "function") {
+    return cryptoObj.randomUUID();
+  }
+  return `f${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function emitAuthChallenge(): void {
+  globalThis.dispatchEvent(new CustomEvent(AUTH_CHALLENGE_EVENT));
+}
+
+function isJson(contentType: string | null): boolean {
+  return contentType != null && /application\/json/i.test(contentType);
+}
+
+async function parseErrorBody(response: Response, raw: unknown): Promise<PlatformError> {
+  const body = (typeof raw === "object" && raw !== null ? raw : {}) as EnvelopeErrorBody;
+  const errorEnvelope = body.error;
+  const detail = body.detail;
+  let code: string | undefined;
+  if (typeof errorEnvelope?.code === "string" && errorEnvelope.code) {
+    code = errorEnvelope.code;
+  } else if (typeof detail === "object" && detail !== null && typeof detail.code === "string") {
+    code = detail.code;
+  }
+  let message = errorEnvelope?.message ?? "";
+  if (typeof detail === "string") message = detail;
+  if (!code) {
+    code = response.status === 401 ? "UNAUTHENTICATED" : response.status === 403 ? "PERMISSION_DENIED" : response.status === 404 ? "NOT_FOUND" : response.status >= 500 ? "INTERNAL" : "UNKNOWN";
+  }
+  return new PlatformError({
+    code,
+    status: response.status,
+    message: message || undefined,
+    requestId: response.headers.get(REQUEST_ID_HEADER),
+  });
+}
+
+/**
+ * 统一请求入口：返回 envelope 的 `result`。
+ * 成功：`{status:"ok", result}`；失败：抛 PlatformError（status/code/requestId 稳定）。
+ */
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
+  const headers: Record<string, string> = { [REQUEST_ID_HEADER]: newRequestId() };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (method !== "GET") {
+    const csrf = csrfTokenProvider();
+    if (csrf) headers[CSRF_HEADER] = csrf;
+  }
+  if (options.idempotencyKey) headers[IDEMPOTENCY_HEADER] = options.idempotencyKey;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(path, {
+      method,
+      headers,
+      credentials: "include",
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: options.signal,
+    });
+  } catch (error) {
+    throw new PlatformError({
+      code: "UNAVAILABLE",
+      status: 0,
+      message: error instanceof Error ? error.message : "network error",
+    });
+  }
+
+  let raw: unknown = null;
+  try {
+    raw = isJson(response.headers.get("content-type")) ? await response.json() : null;
+  } catch {
+    raw = null;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    emitAuthChallenge();
+    throw await parseErrorBody(response, raw);
+  }
+
+  if (!response.ok) {
+    throw await parseErrorBody(response, raw);
+  }
+
+  const body = (typeof raw === "object" && raw !== null ? raw : {}) as EnvelopeOk;
+  if (body.status === "ok") {
+    return body.result as T;
+  }
+  throw new PlatformError({
+    code: "UNKNOWN",
+    status: response.status,
+    message: "响应信封格式非法",
+    requestId: response.headers.get(REQUEST_ID_HEADER),
+  });
+}
+
+export function requestIdHeaderValue(): string {
+  return REQUEST_ID_HEADER;
+}
+
+export { isPlatformError };
