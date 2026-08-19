@@ -139,3 +139,34 @@ export function canManageSharedContent(me: AuthMeResult | null): boolean {
   if (!me) return false;
   return ACCOUNT_SHARED_MANAGE_CODES.some((code) => me.permissions.includes(code));
 }
+
+/**
+ * 内置角色等级（03 §9.3：platform_super_admin > account_admin > user，P4-E1）。
+ * 分级密码重置仅允许对严格低级别目标操作（85.4：`actor_role_rank > target_role_rank`）。
+ * 前端隐藏按钮不是安全边界，后端仍强制校验（03 §8.3）。
+ */
+export const ROLE_RANKS: Record<RoleCode, number> = {
+  [ROLES.PLATFORM_SUPER_ADMIN]: 3,
+  [ROLES.ACCOUNT_ADMIN]: 2,
+  [ROLES.USER]: 1,
+};
+
+export function roleRank(role: string | undefined): number {
+  if (!role) return 0;
+  return ROLE_RANKS[role as RoleCode] ?? 0;
+}
+
+/** Actor 有效角色中的最高等级（多角色取最大 rank）。 */
+export function actorMaxRoleRank(roles: readonly string[] | undefined): number {
+  if (!roles) return 0;
+  return roles.reduce((max, role) => Math.max(max, roleRank(role)), 0);
+}
+
+/** 分级密码重置判定：仅严格低级别且角色等级已知的目标（03 §8.3、13 §85.4，P4-E1）。 */
+export function canResetTargetPassword(
+  actorRoles: readonly string[] | undefined,
+  targetRole: string | undefined,
+): boolean {
+  const targetRank = roleRank(targetRole);
+  return targetRank > 0 && actorMaxRoleRank(actorRoles) > targetRank;
+}
