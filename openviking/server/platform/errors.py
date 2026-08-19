@@ -217,3 +217,63 @@ class DeletionJobError(PlatformError):
 class PurgeError(PlatformError):
     """Purge Worker 物理清理失败（04 §10.11）：`last_error` 只存脱敏错误。"""
 
+
+# ── P2-E5：Session 与 Search 产品 API（只 append，不修改既有码）──
+# 稳定错误码见 11 §75.2：SESSION_NOT_FOUND / SESSION_DELETED /
+# SESSION_WRITE_CONFLICT / SESSION_SYNC_FAILED / SESSION_COMMIT_FAILED /
+# SEARCH_UNAVAILABLE / INVALID_SEARCH_FILTER。
+
+
+class SessionNotFoundError(PlatformError):
+    """Session 不存在、已删除或不可见（11 §75.2 `SESSION_NOT_FOUND`）。
+
+    跨 User/Account IDOR 请求统一返回不可见语义，不说明目标是否真实存在
+    （11 §75.2；AC⑧）。
+    """
+
+
+class SessionDeletedError(PlatformError):
+    """Session 处于回收期，写入被拒（11 §72 / §75.2 `SESSION_DELETED`）。
+
+    软删立即从正常列表隐藏；回收期内禁止继续 Commit/追加消息；
+    重复删除幂等返回当前删除状态。
+    """
+
+
+class SessionWriteConflictError(PlatformError):
+    """同一 Session 的序列号或幂等键冲突（11 §75.2 `SESSION_WRITE_CONFLICT`）。
+
+    幂等键已存在但内容不一致 → 冲突（AC④：重复请求返回原写入结果，不重复
+    追加；不一致属于客户端续传错误）。
+    """
+
+
+class SessionSyncFailedError(PlatformError):
+    """集成客户端写入或续传失败（11 §75.2 `SESSION_SYNC_FAILED`）。
+
+    失败详情不包含 API Key、完整 Tool Output 或内部路径（11 §70.7）。
+    """
+
+
+class SessionCommitFailedError(PlatformError):
+    """Commit 或异步 Memory 提取失败（11 §75.2 `SESSION_COMMIT_FAILED`）。"""
+
+
+class SearchUnavailableError(PlatformError):
+    """检索引擎不可用（11 §75.2 `SEARCH_UNAVAILABLE`）。
+
+    不降级为跨权限文件遍历（11 §69.5）。
+    """
+
+
+class InvalidSearchFilterError(PlatformError):
+    """标签、时间或类型筛选不合法（11 §75.2 `INVALID_SEARCH_FILTER`）。
+
+    `reason` 为稳定原因码（`TAG_LIMIT_EXCEEDED`/`TAG_INVALID_FORMAT`/
+    `INVALID_TIME_RANGE` 等）。
+    """
+
+    def __init__(self, reason: str, *args: object) -> None:
+        super().__init__(reason, *args)
+        self.reason = reason
+

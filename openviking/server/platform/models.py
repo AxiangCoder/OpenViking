@@ -482,7 +482,6 @@ class PlatformOperationRef(Base):
 
 class PlatformUpload(Base):
     """04 §10.14 `platform_uploads`：Product Upload ID 授权元数据。
-
     上传字节存临时对象存储/受控 Temp Upload Store，不写入 PostgreSQL。
 
     - `expires_at` 默认创建后 15 分钟（可由 Capabilities 配置）；
@@ -515,3 +514,130 @@ class PlatformUpload(Base):
     consumed_by_operation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformSessionRef(Base):
+    """`platform_session_refs`（11 §70/§72，04 §10.11 同族软删除语义，P2-E5）。
+
+    OpenViking Session 的产品授权映射：PostgreSQL 保存归属、幂等键、同步
+    状态与软删除；消息正文/归档/内存提取结果由受控 Session Backend 保存
+    （真实 OpenViking 接线属 P5-E1，本表是可见性/归属/审计的事实来源）。
+
+    约束与语义：
+    - Session 永远 User 私有（11 §68：Memory/Session 无 Account 共享）；
+    - `(account_id, ov_session_id)` 唯一；幂等键部分唯一
+      `(account_id, owner_user_id, idempotency_key)`（Idempotency-Key 事务）；
+    - `sync_status` 按 11 §75.1：active → commit_pending → committing →
+      active（或 commit_failed → retrying）；删除期不参与该状态机；
+    - 软删写 `deleted_at/purge_after`（30 天），由 iam_deletion_jobs 跟踪
+      （resource_type='session'），期满 Purge Worker 幂等物理删除。
+    """
+
+    __tablename__ = "platform_session_refs"
+    __table_args__ = (
+        UniqueConstraint("account_id", "ov_session_id", name="uq_sessions_account_ov"),
+        Index(
+            "uq_sessions_idempotency",
+            "account_id",
+            "owner_user_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("ix_sessions_owner_status", "owner_user_id", "status", "updated_at"),
+        Index("ix_sessions_purge_status", "purge_after", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_accounts.id"))
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("iam_users.id"))
+    ov_session_id: Mapped[str] = mapped_column(String(128))
+    ov_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    client_name: Mapped[str] = mapped_column(String(64))
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(16), default="active")
+    commit_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    message_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_actor_user_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="active")
+    version: Mapped[int] = mapped_column(BigInteger, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    purge_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("iam_users.id"), nullable=True)
+
+
+class PlatformSessionMessage(Base):
+    """`platform_session_messages`：追加消息的产品账本（11 §70.6/§70.8）。
+
+    服务端按消息账本发号 `seq`（顺序稳定）并以 `idempotency_key` 去重
+    （AC④：同一 Session 追加按服务端序列号或幂等键去重并保持顺序；重复
+    请求返回原写入结果）。消息正文同时交给 Session Backend 保存（归档/
+    Memory 提取事实源）；本表是幂等与顺序的产品事实来源，不复制 Archive。
+    """
+
+    __tablename__ = "platform_session_messages"
+    __table_args__ = (
+        UniqueConstraint("session_id", "seq", name="uq_session_messages_seq"),
+        Index(
+            "uq_session_messages_idempotency",
+            "session_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("ix_session_messages_session_seq", "session_id", "seq"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_session_refs.id"))
+    seq: Mapped[int] = mapped_column(BigInteger)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    role: Mapped[str] = mapped_column(String(24))
+    content: Mapped[str] = mapped_column(Text)
+    turn_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    client_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlatformSessionCommit(Base):
+    """`platform_session_commits`：Commit 产品记录（11 §71，P2-E5）。
+
+    Commit Phase 1 同步归档并返回 Task；Phase 2 异步生成摘要/Memory 提取
+    与 `memory_diff`。本表保存每个 Commit 的产品标识、Phase 2 状态
+    （pending/running/completed/failed，11 §71.3）与脱敏 Memory Diff
+    （不含 Archive URI 与 Memory URI，AC⑥）。
+
+    真实 OpenViking 是 Archive/Memory 的事实源；本表是产品视图/状态机
+    的事实源，diff 内容由受控 Backend 提供并在写入前脱敏。
+    """
+
+    __tablename__ = "platform_session_commits"
+    __table_args__ = (
+        UniqueConstraint("session_id", "commit_number", name="uq_session_commits_number"),
+        Index(
+            "uq_session_commits_idempotency",
+            "session_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("ix_session_commits_status", "phase2_status"),
+        Index("ix_session_commits_session", "session_id", "commit_number"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_session_refs.id"))
+    commit_number: Mapped[int] = mapped_column(BigInteger)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ov_task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    phase2_status: Mapped[str] = mapped_column(String(16), default="pending")
+    phase2_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    diff_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    message_count_at_commit: Mapped[int] = mapped_column(BigInteger, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
