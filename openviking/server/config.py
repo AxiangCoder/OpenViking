@@ -280,6 +280,26 @@ class ServerConfig(BaseModel):
     # routers (/api/platform/v1/*) into create_app(). Dev-mode switch only;
     # production routing/public boundary is closed by P5-E1.
     platform_enabled: bool = False
+    # P5-E1 (14-plan §99.1, 06 §16.2/§16.3): low-level ops router whitelist
+    # (debug/observer/snapshot/pack/console/admin/webdav). None = mode
+    # default: non-platform mode mounts all (legacy behavior unchanged),
+    # platform mode keeps only `admin` (production default; proxy-layer
+    # deny is the second line of defense). Explicit lists are honored in
+    # both modes.
+    low_level_routers_enabled: Optional[List[str]] = None
+    # P5-E1 (06 §13.6/§16.2): Studio mount switch. None = mode default:
+    # non-platform mode keeps the legacy bundle-present mount of /studio and
+    # the / -> /studio/ redirect; platform mode does not mount /studio and
+    # does not register the root redirect (production public route table has
+    # no /studio). Explicit true allows a private ops entry to mount it.
+    studio_enabled: Optional[bool] = None
+    # P5-E1 (14-plan §99.1): real adapter wiring switch. "fake" (default)
+    # keeps the controlled fake adapters used throughout Phases 1-4 (dev/test
+    # behavior unchanged); "real" wires the OpenViking runtime adapters
+    # (namespace init / privacy configs / search / session / skill content /
+    # migration / purge) resolved lazily at call time. Staging/production
+    # config templates set this to "real".
+    platform_adapter_mode: str = "fake"
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     usage_reporter: UsageReporterConfig = Field(default_factory=UsageReporterConfig)
     # Public-facing base URL emitted in MCP-issued upload instructions. See
