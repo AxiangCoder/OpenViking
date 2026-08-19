@@ -67,7 +67,7 @@ BOB = "bob@acme.com"
 
 REPORT = (
     Path(__file__).resolve().parents[2]
-    / "docs/design/product-platform/v0.1/p5-e4-go-no-go.md"
+    / "docs/ovp/v0.1/p5-e4-go-no-go.md"
 )
 
 

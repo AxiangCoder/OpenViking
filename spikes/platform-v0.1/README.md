@@ -1,6 +1,6 @@
 # OpenViking 产品平台 v0.1 技术验证（Spike）结论
 
-> 日期：2026-08-18 ｜ 基线：OpenViking v0.4.12 ｜ 设计：`docs/design/product-platform/v0.1`（Design Frozen，`design-v0.1.0`）
+> 日期：2026-08-18 ｜ 基线：OpenViking v0.4.12 ｜ 设计：`docs/ovp/v0.1`（Design Frozen，`design-v0.1.0`）
 > 本 Spike 是**可丢弃验证代码**（disposable），正式开发按设计文档重新实现，不直接演进本目录。
 
 ## 1. 验证目标与范围

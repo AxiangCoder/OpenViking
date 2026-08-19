@@ -7,7 +7,7 @@
 - ⑦ 三角色经 Session/API Key/OAuth 三凭证获得一致权限与数据范围
   （06 §15.2 步骤 8，`ov platform verify` 落地）；
 - 15.2 八步初始化第 1–2、8 步的可重复执行路径（runbook 见
-  docs/design/product-platform/v0.1/p5-e2-init-runbook.md）。
+  docs/ovp/v0.1/p5-e2-init-runbook.md）。
 """
 
 from __future__ import annotations
