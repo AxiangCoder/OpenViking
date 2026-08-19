@@ -251,9 +251,7 @@ describe("/admin/users/{id}/skills/{skillId} 成员 Skill 详情与发布（AC�
     expect(screen.queryByTestId("member-skill-publish-open")).not.toBeInTheDocument();
     expect(screen.queryByTestId("member-skill-publish-section")).not.toBeInTheDocument();
     await waitFor(() => {
-      const calls = fetchMock.mock.calls.filter(([url, init]) =>
-        String(url).endsWith("/publish"),
-      );
+      const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/publish"));
       expect(calls).toHaveLength(0);
     });
   });
