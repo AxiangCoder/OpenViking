@@ -46,6 +46,11 @@ services:
     build:
       context: ../..
       dockerfile: deploy/product/Dockerfile.product
+    # 版本回滚（06 §15.4）：生产构建时以 OVP_PRODUCT_IMAGE 指向 registry 镜像 tag，
+    # 回滚 = 换回上次已知良好 tag（配合 deploy/product/VERSION 记录的版本）；本 Epic
+    # 演练在本地以 VERSION 标记 + migration down/up 验证 + PG 凭证校验执行（见
+    # p5-e3-runbook.md §4）。
+    image: ${OVP_PRODUCT_IMAGE:-ovp-product-server:local}
     container_name: ovp-product-server
     restart: unless-stopped
     environment:

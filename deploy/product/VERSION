@@ -1,0 +1,7 @@
+# OpenViking Product v0.1 部署版本标记
+
+- 当前部署版本：`v0.4.12+p5e3`（基 = origin/dev `50d14d5a`，Phase 1-4 + P5-E1/E2）
+- 用途：发布前记录版本，回滚时以本文件 + 镜像 tag（OVP_PRODUCT_IMAGE）切换上次
+  已知良好版本（06 §15.4 步骤 3）。
+- 每次发布必须：更新本文件 → 构建/推送 OVP_PRODUCT_IMAGE tag → 发布前备份
+  （backup-encrypt.sh backup + backup-volume，见 p5-e3-runbook.md §3）。
