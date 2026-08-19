@@ -37,6 +37,7 @@ from openviking.server.platform.errors import (
     EntityNotFoundError,
     InvalidCursorError,
     PasswordResetForbiddenError,
+    ProvisioningNotRetryableError,
 )
 from openviking.server.platform.iam.permissions import ACCOUNT_ADMIN
 from openviking.server.platform.routers.admin import (
@@ -65,6 +66,10 @@ def _request_id(request: Request) -> str | None:
 
 def _admin(request: Request) -> AdminService:
     return request.app.state.iam_admin_service
+
+
+def _provisioning(request: Request):
+    return request.app.state.iam_provisioning_service
 
 
 def account_dto(account) -> dict:
@@ -284,4 +289,46 @@ async def list_platform_audit_events(
     return {
         "status": "ok",
         "result": {"items": [audit_dto(e) for e in rows], "next_cursor": next_cursor},
+    }
+
+
+# ── P2-E1：Provisioning 重试（05 §12.6 平台表，14 号计划 §97.1 AC⑤）──
+
+
+@router.post(
+    "/accounts/{account_id}/provisioning/retry",
+    dependencies=[Depends(verify_csrf), Depends(require_permission("account.manage.platform"))],
+)
+async def retry_provisioning(
+    request: Request,
+    account_id: uuid.UUID,
+    principal=Depends(get_current_principal),
+    provisioning=Depends(_provisioning),
+    session: AsyncSession = Depends(get_session),
+):
+    """重试失败的 Account/首位 Account Admin Provisioning（05 §12.6）。
+
+    幂等，仅 `provisioning/failed` 状态可重试：未完成事件重置 pending，
+    failed 目标回退 provisioning；active 且无未完成事件 → 409
+    `PROVISIONING_NOT_RETRYABLE`（spike verify.py ==12）。
+    """
+    try:
+        result = await provisioning.retry_account(
+            session,
+            actor=principal,
+            account_id=account_id,
+            request_id=_request_id(request),
+        )
+    except ProvisioningNotRetryableError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": exc.reason}) from exc
+    except EntityNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": NOT_FOUND}) from exc
+    await session.commit()
+    return {
+        "status": "ok",
+        "result": {
+            "account_id": str(result.account_id),
+            "status": result.status,
+            "retried_events": result.retried_events,
+        },
     }

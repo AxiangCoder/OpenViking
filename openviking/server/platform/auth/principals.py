@@ -33,6 +33,35 @@ from openviking.server.platform.models import IamUser
 SESSION_EXPIRED = "SESSION_EXPIRED"
 USER_DISABLED = "USER_DISABLED"
 INVALID_CREDENTIAL = "INVALID_CREDENTIAL"
+ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED"
+PROVISIONING_PENDING = "PROVISIONING_PENDING"
+PROVISIONING_FAILED = "PROVISIONING_FAILED"
+
+
+def _ensure_product_usable(user: IamUser, account) -> None:
+    """产品请求门禁（05 §11.3：只允许 active 状态，14 号计划 §97.1 AC④）。
+
+    - 用户/Account `provisioning` → PROVISIONING_PENDING；
+    - 用户/Account `failed` → PROVISIONING_FAILED；
+    - `disabled`/`pending_deletion`/`deleted`/`suspended` → USER_DISABLED/
+      ACCOUNT_SUSPENDED（保持 P1-E3/P1-E4 既有语义）。
+    """
+    user_status = user.status if user.deleted_at is None else "deleted"
+    if user_status == "provisioning":
+        raise AuthenticationError(PROVISIONING_PENDING)
+    if user_status == "failed":
+        raise AuthenticationError(PROVISIONING_FAILED)
+    if user_status != "active":
+        raise AuthenticationError(USER_DISABLED)
+    if account is not None and account.deleted_at is None:
+        if account.status == "provisioning":
+            raise AuthenticationError(PROVISIONING_PENDING)
+        if account.status == "failed":
+            raise AuthenticationError(PROVISIONING_FAILED)
+        if account.status == "suspended":
+            raise AuthenticationError(ACCOUNT_SUSPENDED)
+        if account.status != "active":
+            raise AuthenticationError(USER_DISABLED)
 
 
 @dataclass(frozen=True)
@@ -117,8 +146,10 @@ async def resolve_session_principal(
         raise AuthenticationError(SESSION_EXPIRED)
 
     user = await repo.get_user(session, row.user_id)
-    if user is None or user.deleted_at is not None or user.status != "active":
+    if user is None or user.deleted_at is not None:
         raise AuthenticationError(USER_DISABLED)
+    account = await repo.get_account(session, user.account_id) if user.account_id is not None else None
+    _ensure_product_usable(user, account)
 
     return await _build_user_principal(
         session,
@@ -164,8 +195,10 @@ async def resolve_api_key_principal(
         raise AuthenticationError(INVALID_CREDENTIAL)
 
     user = await repo.get_user(session, cred.user_id)
-    if user is None or user.deleted_at is not None or user.status != "active":
+    if user is None or user.deleted_at is not None:
         raise AuthenticationError(USER_DISABLED)
+    account = await repo.get_account(session, cred.account_id) if cred.account_id is not None else None
+    _ensure_product_usable(user, account)
 
     return await _build_user_principal(
         session,
