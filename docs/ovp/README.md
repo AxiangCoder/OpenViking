@@ -4,11 +4,11 @@
 
 | 设计版本 | 上游源码基线 | 状态 | 入口 |
 | --- | --- | --- | --- |
-| Design v0.1 | OpenViking v0.4.12 / `c1d38eb47ff2ebf9ff4cee46756728893fd8caf3` | 风格定稿（Aceternity，2026-08-20） | [v0.1](v0.1/README.md) |
+| Design v0.1 | OpenViking v0.4.12 / `c1d38eb47ff2ebf9ff4cee46756728893fd8caf3` | 风格定稿（浅色玻璃拟态，2026-08-20） | [v0.1](v0.1/README.md) |
 
 ## 顶层文档
 
-- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) — UI 设计系统总纲（颜色变量、字体阶梯、间距圆角、14 类核心组件规范、状态色、5 状态徽标、对话框、表格、空状态等）。**v0.1.3 起风格定稿为 Aceternity**：主色 `#7c3aed` 紫罗兰 + 紫→蓝渐变 + 4 柔光斑背景 + 玻璃感卡片 + 渐变文字；字体 Geist / Geist Mono + 中文回退系统字体；界面文案统一为中文。
+- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) — UI 设计系统总纲（颜色变量、字体阶梯、间距圆角、14 类核心组件规范、状态色、5 状态徽标、对话框、表格、空状态等）。**v0.1.3 起风格定稿为浅色玻璃拟态（Aceternity 语系）**：主色 `#7c3aed` 紫罗兰 + 紫→蓝渐变 + 4 柔光斑背景 + 玻璃感卡片 + 渐变文字；字体 Geist / Geist Mono + 中文回退系统字体；界面文案统一为中文。
 
 ## 设计稿资源
 

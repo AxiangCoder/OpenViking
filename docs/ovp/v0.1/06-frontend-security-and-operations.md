@@ -177,7 +177,7 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 
 ### 13.5a 视觉风格与字体栈（2026-08-20 风格定稿）
 
-v0.1 视觉风格统一为 **Aceternity**（深色化 + 紫→蓝渐变 + 玻璃感卡片 + 4 个柔光斑背景 + 渐变文字）。详细规范见 [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md)；实现要点摘录如下：
+v0.1 视觉风格统一为 **浅色玻璃拟态**（Light Glassmorphism / Aceternity 语系：紫→蓝渐变 + 玻璃感卡片 + 4 个柔光斑背景 + 渐变文字）。详细规范见 [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md)；实现要点摘录如下：
 
 - **主色**：`#7c3aed`（紫罗兰），与副色 `#2563eb`（蓝）组成 90° 线性渐变；用于主按钮、链接、标题强调、Account Avatar 底。
 - **背景**：浅色画板 `#fafafa` + 4 个柔光斑（紫左上 / 青中左 / 蓝右下 / 粉右上），由 SVG `radial gradient` + alpha 0.35-0.5 渲染而成，不使用图片资源。
@@ -199,7 +199,7 @@ v0.1 视觉风格统一为 **Aceternity**（深色化 + 紫→蓝渐变 + 玻璃
 
 - 仍沿用 Spike 脚手架选型：React 19 + TypeScript + Vite + TanStack Router/Query + shadcn/ui 组件基线（DESIGN-SYSTEM §3.1 变量表与 shadcn 对齐）。
 - 不要在 `web-platform` 内**各 Epic 自造一套 UI 组件**（14 号 P3-E1 已冻结 UI 基线）；新增视觉变化需先在 DESIGN-SYSTEM 增补规范，再落到组件库。
-- Aceternity 风格所需「装饰光斑 / 渐变文字 / 玻璃感卡片」用 SVG + Tailwind 工具类实现，不引入新 UI 框架。
+- 浅色玻璃拟态所需「装饰光斑 / 渐变文字 / 玻璃感卡片」用 SVG + Tailwind 工具类实现，不引入新 UI 框架。
 
 ### 13.6 Studio 处理
 

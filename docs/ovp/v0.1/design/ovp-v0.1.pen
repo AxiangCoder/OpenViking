@@ -68,7 +68,7 @@
           "y": 80,
           "name": "Demo Title",
           "width": 600,
-          "height": 120,
+          "height": 72,
           "layout": "vertical",
           "gap": 8,
           "children": [
@@ -372,7 +372,7 @@
       "name": "L2-02 · Page Header",
       "reusable": true,
       "width": 1400,
-      "height": 120,
+      "height": 72,
       "fill": "#ffffffd9",
       "cornerRadius": 16,
       "gap": 16,
@@ -397,7 +397,7 @@
               "fill": "#0a0a0a",
               "content": "账户管理 / Accounts",
               "fontFamily": "Inter",
-              "fontSize": 28,
+              "fontSize": 24,
               "fontWeight": "700"
             },
             {
@@ -407,7 +407,7 @@
               "fill": "#737373",
               "content": "管理所有 Account，含创建、暂停、删除与 30 天恢复窗口",
               "fontFamily": "Inter",
-              "fontSize": 14,
+              "fontSize": 13,
               "fontWeight": "normal"
             }
           ]
@@ -446,13 +446,13 @@
       "y": 1800,
       "name": "L2-03 · Filter Bar",
       "width": 1400,
-      "height": 72,
+      "height": 44,
       "fill": "#ffffffd9",
-      "cornerRadius": 16,
+      "cornerRadius": 10,
       "gap": 12,
       "padding": [
-        16,
-        24
+        6,
+        16
       ],
       "alignItems": "center",
       "children": [
@@ -461,7 +461,7 @@
           "id": "dQgIS",
           "name": "Search Input",
           "width": 280,
-          "fill": "#fafafa",
+          "fill": "#ffffffd9",
           "cornerRadius": 8,
           "gap": 8,
           "padding": [
@@ -486,7 +486,7 @@
           "type": "frame",
           "id": "D3fVtn",
           "name": "Type Select",
-          "fill": "#fafafa",
+          "fill": "#ffffffd9",
           "cornerRadius": 8,
           "gap": 6,
           "padding": [
@@ -1366,7 +1366,7 @@
                   "ref": "a5wyb",
                   "name": "Page Header Instance",
                   "width": "fill_container",
-                  "height": 120
+                  "height": 72
                 },
                 {
                   "id": "YxIEK",
