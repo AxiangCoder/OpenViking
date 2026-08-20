@@ -772,7 +772,7 @@
           "id": "MYGWi",
           "name": "SubLabel",
           "fill": "#737373",
-          "content": "AppShell · Topbar + Sidebar × 3 + 完整帧 × 3",
+          "content": "AppShell · Header + Sider + 完整帧",
           "fontFamily": "Inter",
           "fontSize": 14,
           "fontWeight": "normal"

@@ -501,25 +501,25 @@ v0.1 设计稿**未使用任何阴影**，全靠边框分层。后续如需可�
 
 | 层 | 名称 | 尺寸 | 引用 |
 |---|---|---|---|
-| 1 | Sidebar | 240 × 全高 | `n34`、`n233` |
-| 2 | Topbar | 全宽 - 240 × 56 | `n57`、`n256` |
-| 3 | Content | 1680 × 1024 | `n67`、`n266` |
+| 1 | Sider | 240 × 全高 | `z7EPl` |
+| 2 | Header | 1656 × 56 | `ELalX` |
+| 3 | Main | 1656 × 1000 | `XIIvp` |
 
-### 8.2 Sidebar
+### 8.2 Sider
 
-- 品牌区：高度 64，水平 padding 20，图标 28 + 文字 OpenViking 16px 700
-- 导航区：垂直 padding 14，水平 padding 10
-- 分区标签：11px 600 `#9ca3af`（如 `PLATFORM`）
-- 导航项：见 §7.10
-- 底部版本：v0.1.0，padding 20，文字 12px 400 `#9ca3af`
-- 引用：`n34`-`n56`、`n233`-`n255`
+- 外壳：240 × 1080，`#ffffffd9`，16px 圆角，`layout:vertical`，`gap:4`，padding `[16,12]`
+- 导航项：7 个入口，统一 16px 图标 + 14px 文字，选中态使用 `#7c3aed1a`
+- 底部：Spacer 将 Footer User 推到底部，顶部导航与底部信息之间保留弹性空隙
+- Footer User：216 宽，`#f5f5f5` 背景，8px 圆角，头像 28×28，姓名 13px 600，角色 11px 400
+- 引用：`z7EPl`
 
-### 8.3 Topbar
+### 8.3 Header
 
-- 高度 56，水平 padding 24，分割线 `#e3e6ea` 1px
-- 左侧：区名（`/platform` 14px 600）
-- 右侧：角色徽标 + 头像 + 用户名/邮箱（垂直布局）
-- 引用：`n57`-`n66`、`n256`-`n265`
+- 高度 56，水平 padding 32，`gap:24`，`#ffffffd9` 背景，16px 圆角
+- 左侧：Brand 组，32×32 紫底 O 标记 + 18px 700 `OpenViking` + 14px `Platform`
+- 中间：Spacer 占满剩余宽度，将 Brand 与 User Menu 分隔开
+- 右侧：User Menu，28×28 头像 + 13px 600 姓名 + 11px 400 角色信息
+- 引用：`ELalX`
 
 ### 8.4 页面头
 
@@ -670,7 +670,7 @@ v0.1 设计稿**未使用任何阴影**，全靠边框分层。后续如需可�
 | 2026-08-19 | v0.1.0 | 初版：基于 login.op + platform-accounts.op 6 帧归纳 | — |
 | 2026-08-19 | v0.1.1 | 补 §5.3 内容元素间距（图标+文字 8、按钮+按钮 12、label↔输入框 6、空状态 icon↔标题 20 等 14 项微场景） | — |
 | 2026-08-19 | v0.1.2 | 应用规范修复两个页面：login n15/n18/n27/n30 字号与错误位置、n12 装饰椭圆透明度；accounts n266 空状态间距（用 8px spacer frame 插入 icon↔title / subtitle↔CTA 间隙）、n71 副描述 13→14 | — |
-| 2026-08-20 | v0.1.3 | 风格定稿为 Aceternity（深色化 + 紫→蓝渐变 + 4 柔光斑 + 玻璃感卡片 + 渐变文字）；主色从 `#2563eb` 改为 `#7c3aed`；字体栈前缀 Geist / Geist Mono；Sidebar 形态从「圆点+文字」改为「图标+文字」；角色徽标改紫色；文件命名从 `.op` 改为 `.pen`；删除 4 个变体对话框帧；界面文案统一改为中文（DESIGN-SYSTEM §10.1）；同步 docs/ovp/README.md §12 与 v0.1/README.md 与 06 §13.5 与 13 §89.2。 | — |
+| 2026-08-20 | v0.1.3 | 风格定稿为 Aceternity（深色化 + 紫→蓝渐变 + 4 柔光斑 + 玻璃感卡片 + 渐变文字）；主色从 `#2563eb` 改为 `#7c3aed`；字体栈前缀 Geist / Geist Mono；Sider 形态从「圆点+文字」改为「图标+文字」；角色徽标改紫色；文件命名从 `.op` 改为 `.pen`；删除 4 个变体对话框帧；界面文案统一改为中文（DESIGN-SYSTEM §10.1）；同步 docs/ovp/README.md §12 与 v0.1/README.md 与 06 §13.5 与 13 §89.2。 | — |
 
 ---
 
