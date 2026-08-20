@@ -2,9 +2,12 @@
 
 > Design v0.1 · 文档路径：`docs/ovp/DESIGN-SYSTEM.md`
 > 受众：产品 / 设计 / 前端 全角色
-> 范围：仅 OpenViking 产品化平台 6 帧设计稿中已用到的元素
-> 形式：表格 + 状态示意 + `.op` 文件 / 节点 ID 引用
+> 范围：OpenViking 产品化平台 `/login` 与 `/platform/accounts` 设计稿中已用到的元素
+> 形式：表格 + 状态示意 + `.pen` 文件 / 节点 ID 引用
 > 不含：未使用组件（Pagination、Tooltip、Tabs、Drawer 等后续页面用到再补）
+>
+> 风格定稿：2026-08-20 选用 **Aceternity 风格**（深色化 + 渐变光斑 + 玻璃感卡片 + 渐变文字），并把界面文案统一改为中文。
+> 字体：拉丁字符 Geist / Geist Mono；中文回退到系统字体栈（PingFang SC / Microsoft YaHei / Noto Sans CJK SC）。
 
 ---
 
@@ -33,6 +36,16 @@
 - 路由、权限、API 边界以 `06-frontend-security-and-operations.md` §13 为准
 - 本文档仅约束「视觉与交互」
 
+### 1.4 风格定稿与背景
+
+- 颜色：主色由单一 `#2563eb` 改为 **紫 → 蓝渐变**（`#7c3aed` → `#2563eb`），用于主按钮、标题、强调、链接
+- 背景：浅色画板（`#fafafa`）+ 4 个柔光斑（紫 / 蓝 / 青 / 粉），模拟 Aceternity 的 aurora 背景
+- 字体：拉丁字符 Geist / Geist Mono；中文回退到系统字体栈
+- 卡片：玻璃感（半透明白 + 1px 边框 + 大圆角 12-16px）
+- 状态徽标：保留 OpenViking 5 状态色（绿 / 橙 / 红 / 灰），但加 1px 同色描边让徽标"发光"
+- 表格：行高 72px，Account Avatar 36×36 圆角 10 + 紫色字母；hover 高亮紫底 8% 透明度
+- 详情：见 §12 设计稿索引
+
 ---
 
 ## §2 品牌
@@ -41,18 +54,25 @@
 
 | 名称 | HEX | 用途 |
 |---|---|---|
-| **OpenViking 蓝（主）** | `#2563eb` | 主按钮、链接、品牌标识、强调元素 |
+| **品牌主色** | `#7c3aed`（紫罗兰） | 主按钮底、链接、强调、Account Avatar 底 |
+| 品牌副色 | `#2563eb`（蓝） | 渐变终点、focus ring、信息色 |
+| 品牌渐变 | `#7c3aed` → `#2563eb` | 页面大标题文字、Avatar 渐变、装饰光斑 |
+| 辅助色-青 | `#06b6d4` | 装饰光斑 |
+| 辅助色-粉 | `#ec4899` | 装饰光斑、Avatar 渐变终点 |
 | 主色-深（hover） | `#1d4ed8` | 主按钮 hover |
 | 主色-光（背景） | `#eff6ff` | 角色徽标 / 选中态背景 |
+| 主色-紫光（背景） | `#7c3aed1a` (10% alpha) | 紫色 hover 底、激活态背景 |
 | 主色-环（focus） | `#93c5fd` | 输入框 / 按钮 focus ring |
 | 主色-淡（装饰） | `#dbeafe` | 登录页背景装饰椭圆 |
+
+> 说明：v0.1 之前用单一 `#2563eb` 作为主色。2026-08-20 调整为以紫色 `#7c3aed` 为主，蓝色降为副色，两者组合成渐变，与 Aceternity 风格一致。
 
 ### 2.2 品牌标识
 
 - 形态：文字 logo「OpenViking」+ 副标题「Platform · 记忆与上下文管理平台」
 - 字号：28px / 700（logo），14px / 400（副标题）
 - 不使用图标徽章（v0.1 范围内不设计字母徽章）
-- 引用：`login.op` → `n14` 品牌区
+- 引用：`login.pen` → `n14` 品牌区
 
 ---
 
@@ -62,8 +82,9 @@
 
 | 变量 | HEX | 语义 |
 |---|---|---|
-| `--primary` | `#2563eb` | 主色（已对齐 OpenViking 蓝） |
+| `--primary` | `#7c3aed` | 主色（紫罗兰，2026-08-20 调整） |
 | `--primary-foreground` | `#ffffff` | 主色按钮文字 |
+| `--secondary-primary` | `#2563eb` | 副色（蓝，与 primary 组成渐变） |
 | `--ring` | `#93c5fd` | focus 环 |
 | `--background` | `#fafafa` | 全局背景（与 `--sidebar` 同步） |
 | `--foreground` | `#0a0a0a` | 主文字 |
@@ -77,15 +98,17 @@
 | `--muted-foreground` | `#737373` | 弱化文字 |
 | `--accent` | `#f5f5f5` | 强调背景 |
 | `--accent-foreground` | `#171717` | 强调文字 |
+| `--accent-violet` | `#7c3aed1a` | 紫色激活态 / hover 背景（10% alpha） |
+| `--accent-violet-border` | `#7c3aed40` | 紫色描边（25% alpha） |
 | `--destructive` | `#e7000b` | 危险 |
 | `--border` | `#e5e5e5` | 默认边框 |
 | `--input` | `#e5e5e5` | 输入框边框 |
-| `--sidebar` | `#fafafa` | 侧边栏底 |
+| `--sidebar` | `#ffffffe5` | 侧边栏底（90% alpha 玻璃感） |
 | `--sidebar-foreground` | `#09090b` | 侧边栏文字 |
 | `--sidebar-accent` | `#f4f4f4` | 侧边栏弱化 |
 | `--sidebar-accent-foreground` | `#18181b` | 侧边栏弱化文字 |
 | `--sidebar-border` | `#e4e4e7` | 侧边栏边框 |
-| `--sidebar-primary` | `#2563eb` | 侧边栏选中底（=主色） |
+| `--sidebar-primary` | `#7c3aed` | 侧边栏选中底（=主色紫） |
 | `--sidebar-primary-foreground` | `#fafafa` | 侧边栏选中文字 |
 | `--sidebar-ring` | `#71717a` | 侧边栏 focus |
 | `--white` | `#ffffff` | 纯白 |
@@ -95,19 +118,21 @@
 
 | 用途 | 变量 / HEX |
 |---|---|
-| 画板背景 | `#f7f8fa`（产品用色，未走 `--background`） |
-| 卡片 / 对话框底 | `#ffffff` |
-| 表头底 | `#f8fafc` |
+| 画板背景 | `#fafafa` + 4 个柔光斑（紫 / 蓝 / 青 / 粉，opacity 0.35-0.5） |
+| 卡片 / 对话框底 | `#ffffffd9`（85% alpha 玻璃感） |
+| 表头底 | `#fafafacc`（80% alpha） |
 | 输入框底 | `#ffffff` |
 | 按钮次级底 | `#ffffff` |
 | 主文字 | `#0a0a0a` |
 | 次文字 | `#334155` / `#475569` |
-| 弱文字 | `#64748b` / `#9ca3af` |
-| 链接 / 操作 | `#2563eb` |
-| 默认边框 | `#e3e6ea` / `#e5e5e5` |
+| 弱文字 | `#64748b` / `#a1a1aa` |
+| 链接 / 操作 | `#7c3aed` |
+| 默认边框 | `#e4e4e7` |
 | 输入框边框 | `#d0d5dd` |
+| 渐变文字 | `#7c3aed` → `#2563eb`（紫→蓝 90°） |
+| Account Avatar 底 | `#7c3aed` 纯色，或 `#7c3aed` → `#ec4899` 渐变（45°） |
 
-> **说明**：产品画板使用 `#f7f8fa`（与现有 web-platform 的 `--ov-bg` 一致），未对齐 shadcn 默认的 `#fafafa`。保留差异以保持产品视觉延续性。
+> **说明**：v0.1 Aceternity 风格下画板采用浅色 `#fafafa` + 4 个柔光斑装饰，与上一版 `#f7f8fa` 纯色画板不同。卡片、表头、对话框统一加 alpha 让光斑透出，形成玻璃感。
 
 ### 3.3 状态色（参考 §9 详细规范）
 
@@ -125,15 +150,21 @@
 
 ### 4.1 字体族
 
+Aceternity 风格下拉丁字符使用 Geist / Geist Mono（与 shadcn new-york 风格一致），中文回退到系统字体栈：
+
 ```css
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-             "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI",
+             "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+             "Noto Sans CJK SC", sans-serif;
+
+font-family-mono: "Geist Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas,
+                  "Microsoft YaHei", "Noto Sans CJK SC", monospace;
 ```
 
-- 主栈：系统字体优先
-- 中文：`PingFang SC`（macOS） → `Hiragino Sans GB` → `Microsoft YaHei`
-- 英文：`-apple-system` → `Segoe UI`
-- 不引入 Web 字体
+- 拉丁字符：`Geist` / `Geist Mono`（Vercel 开源，Pencil 直接可用）
+- 中文：`PingFang SC`（macOS） → `Hiragino Sans GB` → `Microsoft YaHei` → `Noto Sans CJK SC`
+- 数字、code、ID：`Geist Mono`
+- 不引入 Web 字体（Geist 通过系统 / 浏览器内置字体回落加载）
 
 ### 4.2 字号阶梯
 
@@ -254,6 +285,45 @@ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
 - **紧凑**（表格行 / 列表项）：行高 60-72，垂直 gap 0-8
 - **标准**（表单 / 卡片）：字段 gap 16，section gap 24
 - **宽松**（登录 / 一次性密码）：垂直 gap 20-40，section 间距 60+
+
+### 5.4 AppShell 布局（2026-08-20 增）
+
+AppShell Template 是 `/app`、`/admin`、`/platform` 三个区域共用的唯一外壳，固定为 1920×1080 画布。结构按**左 / 右**划分：
+
+```
+┌────────────────┬──────────────────────────────────┐
+│                │  Header (毛玻璃)              │ ← top-right
+│   Sider        ├──────────────────────────────────┤
+│   (毛玻璃)     │                                  │
+│   左 240px     │  Main (毛玻璃)                 │ ← bottom-right
+│                │                                  │
+│                │                                  │
+└────────────────┴──────────────────────────────────┘
+Aurora Background（4 柔光斑）垫在最底层
+```
+
+| 区块 | x | y | width | height | 圆角 | 填充 | 备注 |
+|---|---|---|---|---|---|---|---|
+| AppShell Template | 0 | 0 | 1920 | 1080 | — | `#fafafa` | `layout:none`，子锚点定位 |
+| Aurora Background | 0 | 0 | 1920 | 1080 | — | `#fafafa` + 4 柔光斑 | 紫/蓝/青/粉，opacity 0.30-0.40 |
+| Sider Instance | 0 | 0 | 240 | 1080 | **2xl (16)** | `#ffffffd9` | ref → `z7EPl`，Footer User 用 Spacer 落底 |
+| Right Column | **264** | 0 | **1656** | 1080 | — | — | layout:vertical，**gap:24** |
+| Header Instance | 0 | 0 | 1656 | 56 | **2xl (16)** | `#ffffffd9` | ref → `ELalX` |
+| Main | 0 | 80 | 1656 | 1000 | **2xl (16)** | `#ffffffd9` | padding [24,32], gap 24 |
+
+**关键约束**：
+
+1. **Sider / Right Column 间距 = 24px**（§5.1 内容区 padding 步进），让 Aurora 光斑从间隙透出，强化玻璃感
+2. **Header / Main 间距 = 24px**（Right Column 的 `gap:24` 同步落地），Header 在 `y:0, h:56`，Main 在 `y:80, h:1000`，中间 24px 让 Header 底边阴影与 Main 上沿毛玻璃视觉解耦
+3. **Sider 圆角 2xl = 16**：与 §5.2 表中「2xl 16 登录大卡片」一致；Header / Main 同样 16，三块玻璃组件视觉锚定同一圆角语言
+4. **Footer User 落底**：Sider 内用 `Spacer (height:"fill_container")` 把 Footer User 推到 240×1080 容器底部，与 nav 项之间留出弹性空间
+5. **layout:none 而非 layout:horizontal**：绝对坐标便于像素级精确控制 Aurora 光斑透出的 24px 间隙，flex 布局无法表达
+
+### 5.5 画板与组件实例化约定
+
+- 1920×1080 是桌面 Web 全高清画板；组件库展示页也按此尺寸铺陈
+- 每个组件在文档库中是一**独立 frame**（独立节点 ID、名称清晰、可单独选中截图）
+- AppShell Template 是**唯一**外壳 frame，不再有 `/app /admin /platform` 三套；三个区域的差异通过 ref descendants override 表达（nav 项名称 / 标题文案 / Footer User 信息）
 
 ---
 
@@ -391,18 +461,22 @@ v0.1 设计稿**未使用任何阴影**，全靠边框分层。后续如需可�
 
 ### 7.10 列表项 / 导航项
 
-- 高度 36，水平 padding 12，水平 gap 10
-- 默认：透明底 + 圆点 `#d0d5dd` 16px + 文字 13px 500 `#475569`
-- 选中：底 `#2563eb` + 圆点 `#ffffff` 16px + 文字 13px 600 `#ffffff`
-- 圆角 8
-- 引用：`n40` 选中态、`n43`/`n46`/`n49`/`n52` 默认态
+- 高度 40，水平 padding 12，水平 gap 10
+- 默认：透明底 + lucide 图标 18px `#71717a` + 文字 14px 500 `#52525b`
+- 选中：底 `#7c3aed1a`（10% alpha 紫）+ 左侧 3px 紫色高亮条（圆角 2，height 20）+ 图标 `#7c3aed` + 文字 14px 600 `#7c3aed`
+- 圆角 10
+- 引用：`vUbq7` 选中态、`g1t8L` / `TgyeG` / `gRE2B` 默认态
+
+> 2026-08-20 调整：从 v0.1 之前的「圆点 + 文字」改为「图标 + 文字」，与 Aceternity 风格一致；高度从 36 提到 40（容纳 lucide 18px 图标）。
 
 ### 7.11 角色徽标
 
 - 形状：胶囊（圆点 6 + 文字 + 圆角 999）
-- 底 `#eff6ff`、圆点 `#2563eb`、文字 12px 600 `#1d4ed8`
-- 高度 26
-- 引用：`n60`、`n259`
+- 底 `#7c3aed1a`（10% alpha 紫）、描边 `#7c3aed40`（25% alpha 紫）、圆点 `#7c3aed`、文字 12px 600 `#7c3aed`
+- 高度 24-26
+- 引用：`n60`、`n259`（v0.1 之前）/ `BC8uT`（Aceternity 帧）
+
+> 2026-08-20 调整：从蓝底 `#eff6ff` / 蓝点 `#2563eb` 改为紫底 `#7c3aed1a` / 紫点 `#7c3aed`，与主色紫对齐。
 
 ### 7.12 空状态
 
@@ -540,45 +614,52 @@ v0.1 设计稿**未使用任何阴影**，全靠边框分层。后续如需可�
 
 ## §12 设计稿索引
 
-### 12.1 .op 文件
+### 12.1 .pen 文件
 
 | 文件 | 内容 | 帧数 | 尺寸 |
 |---|---|---|---|
-| `login.op` | `/login` 登录页 | 1 | 1920×1080 |
-| `platform-accounts.op` | `/platform/accounts` 5 帧 | 5 | 1920×1080 |
+| `ovp-v0.1.pen` | OVP v0.1 组件库（Aurora 背景 + Layer 2 容器与布局 + Layer 3 AppShell 三层） | 多帧（独立 frame 分层） | 1920×1080 |
+
+> 注：旧版 `login.op` / `platform-accounts.op`（OpenPencil 旧格式）于 2026-08-20 切换到 `.pen` 格式并收敛到 Aceternity 风格，随后组件库进一步收敛为单一 `ovp-v0.1.pen`（mega 文件，每组件独立 top-level frame）。下述 §12.2–§12.4 的历史节点 ID 引用旧文件，仅作追溯参考。
 
 ### 12.2 帧清单
 
-| 帧 | 文件 | 节点 ID | 状态 |
-|---|---|---|---|
-| Login / 登录页 | `login.op` | n10 | ✅ |
-| Accounts / 主列表 | `platform-accounts.op` | n33 | ✅ |
-| 变体-创建 Account 对话框 | `platform-accounts.op` | n155 | ✅ |
-| 变体-删除确认 | `platform-accounts.op` | n189 | ✅ |
-| 变体-一次性密码 | `platform-accounts.op` | n212 | ✅ |
-| 变体-空状态 | `platform-accounts.op` | n232 | ✅ |
+| 帧 | 文件 | 节点 ID | 状态 | 节点名 |
+|---|---|---|---|---|
+| Aurora 背景 | `ovp-v0.1.pen` | `lyloZ` | ✅ | 00 · Aurora Background Demo |
+| Glass Card | `ovp-v0.1.pen` | `XqIgA` | ✅ | L2-01 · Glass Card |
+| Page Header | `ovp-v0.1.pen` | `a5wyb` | ✅ | L2-02 · Page Header |
+| Filter Bar | `ovp-v0.1.pen` | `dS5rq` | ✅ | L2-03 · Filter Bar |
+| Empty State | `ovp-v0.1.pen` | `dgsNg` | ✅ | L2-04 · Empty State |
+| Loading State | `ovp-v0.1.pen` | `I6yCk` | ✅ | L2-05 · Loading State |
+| Header | `ovp-v0.1.pen` | `ELalX` | ✅ | Header（reusable） |
+| Sider | `ovp-v0.1.pen` | `z7EPl` | ✅ | Sider（reusable） |
+| AppShell Template | `ovp-v0.1.pen` | `us5di` | ✅ | AppShell Template（唯一外壳） |
 
-### 12.3 组件引用索引
+### 12.3 组件引用索引（Aceternity 帧）
 
-| 组件 | 主要引用节点 |
+| 组件 | 节点 ID 范围 |
 |---|---|
-| 主按钮 | n72、n187、n230、n271 |
-| 副按钮 | n185、n208、n228 |
-| 危险按钮 | n210 |
-| 描边按钮 | n126 |
-| 输入框 | n22、n25、n165、n169、n174、n178、n182 |
-| 选择器 | n76 |
-| 状态徽标 | n93、n106、n119、n134、n147 |
-| 角色徽标 | n60、n259 |
-| Notice 条 | n16、n223 |
-| 一次性密码卡 | n220 |
-| 登录卡片 | n13 |
-| 表格卡 | n80 |
-| 筛选栏 | n74 |
-| 创建对话框 | n157 |
-| 删除对话框 | n191 |
-| 一次性密码对话框 | n214 |
-| 空状态图标 | n267（+ n273「+」文本） |
+| 主按钮（紫色玻璃） | `QuFcM` |
+| 副按钮（紫色描边 View） | `rV8RL` / `UDcMr` / `Va79v` |
+| 危险按钮（红色描边 Retry） | `ufvZS` |
+| More 按钮 | `aTnDc` / `pGj9G` / `NoDq6` / `FBb5U` / `Kqd2c` |
+| 搜索框 | `T5Gts1` |
+| 状态徽标（5 种） | `YU6qq` / `Bwbbr` / `Oafq0` / `jxPXu` / `KW7LC` |
+| 角色徽标（紫色） | `RC8uT` |
+| Account Avatar | `QPNCg` / `Q2O0B` / `nkkqk` / `j3QwR` / `w1ptoo` |
+| Code 胶囊 | `o3PpX` / `z2bDi` / `JBAv0` / `Sswzc` / `KgfnX` |
+| 表格卡（玻璃感） | `S8Qw4a` |
+| 筛选栏 | `m2bwh` |
+| 装饰光斑（紫 / 蓝 / 青 / 粉） | `RO1iZ` / `ZTPju` / `P4U64` / `izxR4` |
+| 登录卡片（保留） | `ncC3W`（login.pen） |
+
+### 12.4 备份 / 对照组
+
+| 帧 | 节点 ID | 状态 | 用途 |
+|---|---|---|---|
+| OVP / platform-accounts / A · shadcn Default | `PYiia` | 已隐藏（`enabled: false`） | 仅留作风格对照，不导出 |
+| OVP / platform-accounts / B · shadcn New York | `EUX8k` | 已隐藏（`enabled: false`） | 仅留作风格对照，不导出 |
 
 ---
 
@@ -589,6 +670,7 @@ v0.1 设计稿**未使用任何阴影**，全靠边框分层。后续如需可�
 | 2026-08-19 | v0.1.0 | 初版：基于 login.op + platform-accounts.op 6 帧归纳 | — |
 | 2026-08-19 | v0.1.1 | 补 §5.3 内容元素间距（图标+文字 8、按钮+按钮 12、label↔输入框 6、空状态 icon↔标题 20 等 14 项微场景） | — |
 | 2026-08-19 | v0.1.2 | 应用规范修复两个页面：login n15/n18/n27/n30 字号与错误位置、n12 装饰椭圆透明度；accounts n266 空状态间距（用 8px spacer frame 插入 icon↔title / subtitle↔CTA 间隙）、n71 副描述 13→14 | — |
+| 2026-08-20 | v0.1.3 | 风格定稿为 Aceternity（深色化 + 紫→蓝渐变 + 4 柔光斑 + 玻璃感卡片 + 渐变文字）；主色从 `#2563eb` 改为 `#7c3aed`；字体栈前缀 Geist / Geist Mono；Sidebar 形态从「圆点+文字」改为「图标+文字」；角色徽标改紫色；文件命名从 `.op` 改为 `.pen`；删除 4 个变体对话框帧；界面文案统一改为中文（DESIGN-SYSTEM §10.1）；同步 docs/ovp/README.md §12 与 v0.1/README.md 与 06 §13.5 与 13 §89.2。 | — |
 
 ---
 

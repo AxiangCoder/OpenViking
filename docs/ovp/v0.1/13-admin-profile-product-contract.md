@@ -399,6 +399,32 @@
 - 页面不提供创建或重置另一个 Platform Super Admin 的入口（03 §9.2）。
 - 删除确认弹窗展示影响范围（成员数、共享内容、30 天恢复截止时间）。
 
+#### 89.2.1 视觉实现层（Aceternity 风格，2026-08-20 定稿）
+
+本节补充设计实现层规则，**不改变 89.2 的字段契约与权限边界**。具体像素与组件 ID 见 [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md) §7.9（表格规范）、§12.2（节点 ID）。
+
+- **名称列**：左侧 36×36 圆角 10px Account Avatar（紫色 `#7c3aed` 底 + 白色 14px 字母，2 个字母缩写），右侧两行：主名 14px 600 + `acct_xxx` ID 11px Geist Mono 灰；视觉权重比 ID 徽标高 6 倍。
+- **code 列**：灰底 `#f5f5f5` 圆角 6px 胶囊 + 12px Geist Mono 500 `#3f3f46`；账号 code 创建后不可修改（04 §10.1 约束），胶囊视觉强调「只读」。
+- **状态列**：5 状态徽标（DESIGN-SYSTEM §7.6），胶囊 24-28px 高 + 1px 同色描边让徽标"发光"；5 状态背景：绿 `provisioning/active`、橙 `provisioning`、红 `failed`、中性灰 `pending_deletion` / `suspended`。
+- **成员数列**：14px Geist Mono 500；如 `iam_users` 计数尚未同步（`provisioning` 状态）显示 `—`。
+- **创建时间列**：12px Geist Mono `#71717a`，24h 制 `YYYY-MM-DD HH:MM`；后端返回 RFC 3339 UTC，前端按用户时区展示（DESIGN-SYSTEM §10.2）。
+- **操作列**：主操作按钮 + More 按钮组（详见下条）。
+- **排序**：表头 4 列（名称 / 状态 / 成员数 / 创建时间）显示 `chevrons-up-down` 排序图标；后端按 query 参数 `sort_by` + `order` 处理（05 §12.2）。v0.1 不强制要求前端实现，但必须保留视觉锚点。
+- **行交互**：hover 高亮紫色 `#7c3aed08`（10% alpha 紫）+ 紫色描边 `#7c3aed40`（25% alpha 紫，1px 边框）；非响应式行（rowId 不可点击进入详情）。
+- **操作按钮**：
+  - 默认行：紫色描边「View」按钮（图标 `eye` + 文字 12px 600 `#7c3aed`），点击进入 `/platform/accounts/{accountId}` 详情（13 §89.3）；右侧 28×28 More 按钮（lucide `ellipsis` 图标）下拉菜单（查看 / 删除 / 复制 code）。
+  - `failed` 失败行：替换「View」为红色描边「Retry」按钮（图标 `refresh-cw` + 文字 12px 600 `#dc2626`），点击调用 `POST /api/platform/v1/platform/accounts/{account_id}/provisioning/retry`（13 §89.2 / 05 §12.6），请求中按钮变 loading 态。
+- **筛选栏**：48px 高 + 12px 圆角 + 半透明白底（`#ffffffd9`）；左侧「Status」label + 自定义 Select 下拉选项（全部 / provisioning / active / failed / pending_deletion / suspended / 需关注）；右侧 hint 文字说明 suspended 无操作端点。
+- **5 状态文案映射**（DESIGN-SYSTEM §10.2）：
+  - `active` → 「正常」
+  - `provisioning` → 「开通中」
+  - `failed` → 「开通失败」
+  - `pending_deletion` → 「删除中」
+  - `suspended` → 「已暂停」
+- **Page Header 副标题**「以 Platform Super Admin 身份管理平台；选择目标 Account 是管理浏览，不改变登录者身份」+ 跟随当前筛选状态计数（如「5 个Account · 1 个失败」紫色徽标）。
+- **Create Account 按钮**：紫色主按钮，hover 加深至 `#6d28d9`；点击进入新建表单（13 §89.2 + 06 §13.9 校验）。
+- **空状态**（v0.1.x 增量补帧）：DESIGN-SYSTEM §7.12，居中 72×72 紫色 `+` 胶囊 + 标题「还没有任何 Account」+ 副标题「创建第一个 Account 以开始使用 OpenViking 平台」+ 主按钮。
+
 ### 89.3 `/platform/accounts/{accountId}/users`
 
 | 动作 | API | 权限 |

@@ -175,6 +175,32 @@ Skill 使用不同的发布语义：同一 Account 内所有未删除 Skill 名�
 
 `/app/profile/api-keys` 允许用户显式创建个人 API Key。创建成功后通过专用一次性结果页展示完整 Key，并明确提示立即复制；离开页面后不能再次查看。前端只在当前内存状态中短暂持有明文，不写入任何 Web Storage、URL、错误上报、埋点或剪贴板历史管理逻辑。
 
+### 13.5a 视觉风格与字体栈（2026-08-20 风格定稿）
+
+v0.1 视觉风格统一为 **Aceternity**（深色化 + 紫→蓝渐变 + 玻璃感卡片 + 4 个柔光斑背景 + 渐变文字）。详细规范见 [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md)；实现要点摘录如下：
+
+- **主色**：`#7c3aed`（紫罗兰），与副色 `#2563eb`（蓝）组成 90° 线性渐变；用于主按钮、链接、标题强调、Account Avatar 底。
+- **背景**：浅色画板 `#fafafa` + 4 个柔光斑（紫左上 / 青中左 / 蓝右下 / 粉右上），由 SVG `radial gradient` + alpha 0.35-0.5 渲染而成，不使用图片资源。
+- **卡片**：半透明白底（`#ffffffd9`，85% alpha）+ 1px `#e4e4e7` 边框 + 12-16px 圆角，形成玻璃感。
+- **字体栈**：
+  ```css
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI",
+               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+               "Noto Sans CJK SC", sans-serif;
+  font-family-mono: "Geist Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas,
+                    "Microsoft YaHei", "Noto Sans CJK SC", monospace;
+  ```
+  - 拉丁字符走 Geist / Geist Mono（Vercel 开源，**不引入 Web 字体**，浏览器内置 / 系统字体回落加载）；
+  - 中文走系统字体栈（PingFang SC / Microsoft YaHei 等），确保 macOS / Windows / Linux 渲染一致。
+- **界面文案**：中文优先（导航、表单、提示、状态文案）；专有名词保留英文（Account、code、Resource、Skill、Session、Activity、Platform Super Admin、v0.1.0 等）；时间格式 `YYYY-MM-DD HH:MM` 24 小时制。
+- **设计稿**：见 `v0.1/design/ovp-v0.1.pen`（组件库：Aurora 背景 + Layer 2 容器与布局 + Layer 3 AppShell 三层；旧 `login.pen` / `platform-accounts.pen` 已收敛为单一组件库文件）。
+
+### 13.5b 组件库与基线（约束）
+
+- 仍沿用 Spike 脚手架选型：React 19 + TypeScript + Vite + TanStack Router/Query + shadcn/ui 组件基线（DESIGN-SYSTEM §3.1 变量表与 shadcn 对齐）。
+- 不要在 `web-platform` 内**各 Epic 自造一套 UI 组件**（14 号 P3-E1 已冻结 UI 基线）；新增视觉变化需先在 DESIGN-SYSTEM 增补规范，再落到组件库。
+- Aceternity 风格所需「装饰光斑 / 渐变文字 / 玻璃感卡片」用 SVG + Tailwind 工具类实现，不引入新 UI 框架。
+
 ### 13.6 Studio 处理
 
 - 保留现有 `web-studio` bundle，便于本地开发、底层排障和上游能力对照，但正式产品不依赖它。
